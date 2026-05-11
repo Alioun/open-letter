@@ -1,12 +1,54 @@
 import { useState, useEffect, useMemo, useRef, useCallback } from "react";
 
 const KREISVERBAENDE = [
-  "Berlin-Mitte","Berlin-Neukölln","Berlin-Friedrichshain-Kreuzberg","Hamburg-Altona","Hamburg-Mitte",
-  "Leipzig","Dresden","Köln","Düsseldorf","Frankfurt am Main","München","Stuttgart","Bremen",
-  "Hannover","Nürnberg","Rostock","Erfurt","Magdeburg","Kiel","Saarbrücken","Mainz","Potsdam",
-  "Aachen","Bonn","Karlsruhe","Freiburg","Heidelberg","Halle (Saale)","Jena","Chemnitz","Bielefeld",
-  "Dortmund","Essen","Duisburg","Wuppertal","Münster","Oldenburg","Göttingen","Kassel","Marburg",
-  "Tübingen","Konstanz","Regensburg","Augsburg","Würzburg","Lübeck","Flensburg","Osnabrück",
+  "Berlin-Mitte",
+  "Berlin-Neukölln",
+  "Berlin-Friedrichshain-Kreuzberg",
+  "Hamburg-Altona",
+  "Hamburg-Mitte",
+  "Leipzig",
+  "Dresden",
+  "Köln",
+  "Düsseldorf",
+  "Frankfurt am Main",
+  "München",
+  "Stuttgart",
+  "Bremen",
+  "Hannover",
+  "Nürnberg",
+  "Rostock",
+  "Erfurt",
+  "Magdeburg",
+  "Kiel",
+  "Saarbrücken",
+  "Mainz",
+  "Potsdam",
+  "Aachen",
+  "Bonn",
+  "Karlsruhe",
+  "Freiburg",
+  "Heidelberg",
+  "Halle (Saale)",
+  "Jena",
+  "Chemnitz",
+  "Bielefeld",
+  "Dortmund",
+  "Essen",
+  "Duisburg",
+  "Wuppertal",
+  "Münster",
+  "Oldenburg",
+  "Göttingen",
+  "Kassel",
+  "Marburg",
+  "Tübingen",
+  "Konstanz",
+  "Regensburg",
+  "Augsburg",
+  "Würzburg",
+  "Lübeck",
+  "Flensburg",
+  "Osnabrück",
 ];
 
 const ZIEL = 5000;
@@ -40,7 +82,7 @@ function useFocusTrap(active) {
     if (!active || !ref.current) return;
     const el = ref.current;
     const focusable = el.querySelectorAll(
-      'a[href], button:not([disabled]), input:not([disabled]), textarea:not([disabled]), select:not([disabled]), [tabindex]:not([tabindex="-1"])'
+      'a[href], button:not([disabled]), input:not([disabled]), textarea:not([disabled]), select:not([disabled]), [tabindex]:not([tabindex="-1"])',
     );
     const first = focusable[0];
     const last = focusable[focusable.length - 1];
@@ -50,9 +92,15 @@ function useFocusTrap(active) {
     function trap(e) {
       if (e.key !== "Tab") return;
       if (e.shiftKey) {
-        if (document.activeElement === first) { e.preventDefault(); last?.focus(); }
+        if (document.activeElement === first) {
+          e.preventDefault();
+          last?.focus();
+        }
       } else {
-        if (document.activeElement === last) { e.preventDefault(); first?.focus(); }
+        if (document.activeElement === last) {
+          e.preventDefault();
+          first?.focus();
+        }
       }
     }
 
@@ -65,7 +113,12 @@ function useFocusTrap(active) {
 
 export default function App() {
   const [signers, setSigners] = useState([]);
-  const [stats, setStats] = useState({ total: 0, today: 0, week: 0, kvCount: 0 });
+  const [stats, setStats] = useState({
+    total: 0,
+    today: 0,
+    week: 0,
+    kvCount: 0,
+  });
   const [signersTotal, setSignersTotal] = useState(0);
   const [filter, setFilter] = useState("alle");
   const [search, setSearch] = useState("");
@@ -90,11 +143,18 @@ export default function App() {
   const fetchSigners = useCallback(async (f, s, o, append) => {
     try {
       if (!append) setLoading(true);
-      const params = new URLSearchParams({ filter: f, search: s, limit: "18", offset: String(o) });
+      const params = new URLSearchParams({
+        filter: f,
+        search: s,
+        limit: "18",
+        offset: String(o),
+      });
       const res = await fetch(`/api/signers?${params}`);
       if (!res.ok) throw new Error();
       const data = await res.json();
-      setSigners(prev => append ? [...prev, ...data.signers] : data.signers);
+      setSigners((prev) =>
+        append ? [...prev, ...data.signers] : data.signers,
+      );
       setSignersTotal(data.total);
       setError(null);
     } catch {
@@ -122,7 +182,9 @@ export default function App() {
       fetchSigners(filter, search, 0, false);
       window.history.replaceState({}, "", window.location.pathname);
     } else if (params.get("error") === "token-expired") {
-      setSubmitError("Der Bestätigungslink ist abgelaufen. Bitte unterschreibe erneut.");
+      setSubmitError(
+        "Der Bestätigungslink ist abgelaufen. Bitte unterschreibe erneut.",
+      );
       window.history.replaceState({}, "", window.location.pathname);
     }
   }, []);
@@ -181,28 +243,74 @@ export default function App() {
 
   return (
     <>
-      <a href="#main" className="skip-link">Zum Inhalt springen</a>
+      <a href="#main" className="skip-link">
+        Zum Inhalt springen
+      </a>
 
       <div className="topbar" role="banner">
-        <div className="wordmark"><span className="dot"></span> Diätendeckel jetzt.</div>
+        <div className="wordmark">
+          <span className="dot"></span> Diätendeckel jetzt.
+        </div>
         <nav aria-label="Hauptnavigation">
-          <a href="#brief" onClick={e => { e.preventDefault(); scrollTo("brief"); }}>Brief</a>
-          <a href="#forderungen" onClick={e => { e.preventDefault(); scrollTo("forderungen"); }}>Forderungen</a>
-          <a href="#unterzeichnen" onClick={e => { e.preventDefault(); scrollTo("unterzeichnen"); }}>Unterzeichnen</a>
-          <a href="#liste" onClick={e => { e.preventDefault(); scrollTo("liste"); }}>Unterstützer:innen</a>
+          <a
+            href="#brief"
+            onClick={(e) => {
+              e.preventDefault();
+              scrollTo("brief");
+            }}
+          >
+            Brief
+          </a>
+          <a
+            href="#forderungen"
+            onClick={(e) => {
+              e.preventDefault();
+              scrollTo("forderungen");
+            }}
+          >
+            Forderungen
+          </a>
+          <a
+            href="#unterzeichnen"
+            onClick={(e) => {
+              e.preventDefault();
+              scrollTo("unterzeichnen");
+            }}
+          >
+            Unterzeichnen
+          </a>
+          <a
+            href="#liste"
+            onClick={(e) => {
+              e.preventDefault();
+              scrollTo("liste");
+            }}
+          >
+            Unterstützer:innen
+          </a>
         </nav>
-        <button className="cta" onClick={() => scrollTo("unterzeichnen")}>Mitzeichnen →</button>
+        <button className="cta" onClick={() => scrollTo("unterzeichnen")}>
+          Mitzeichnen →
+        </button>
       </div>
 
       <main id="main">
-        <section className="hero" aria-label="Titelbild und Unterschriftenzähler">
+        <section
+          className="hero"
+          aria-label="Titelbild und Unterschriftenzähler"
+        >
           <div className="keil"></div>
           <div className="hero-inner">
-            <div className="eyebrow"><span className="pulse"></span> Offener Brief der Basis · seit 12. März 2026</div>
+            <div className="eyebrow">
+              <span className="pulse"></span> Offener Brief der Basis · seit 12.
+              März 2026
+            </div>
 
             <h1 className="headline">
-              <span className="banner">Diäten</span><br />
-              <span className="banner">deckeln.</span><br />
+              <span className="banner">Diäten</span>
+              <br />
+              <span className="banner">deckeln.</span>
+              <br />
               <span className="light">Jetzt.</span>
             </h1>
 
@@ -212,27 +320,63 @@ export default function App() {
             </p>
 
             <div className="hero-row">
-              <div className="counter-card" aria-label={`${total.toLocaleString("de-DE")} von ${ZIEL.toLocaleString("de-DE")} Unterschriften`}>
+              <div
+                className="counter-card"
+                aria-label={`${total.toLocaleString("de-DE")} von ${ZIEL.toLocaleString("de-DE")} Unterschriften`}
+              >
                 <div className="label">Unterschriften</div>
                 <div className="num">
                   {total.toLocaleString("de-DE")}
                   <span className="unit">/ {ZIEL.toLocaleString("de-DE")}</span>
                 </div>
-                <div className="meta">Ziel: {ZIEL.toLocaleString("de-DE")} verifizierte Mitzeichner:innen</div>
-                <div className="goal-bar" role="progressbar" aria-valuenow={pct} aria-valuemin={0} aria-valuemax={100}>
+                <div className="meta">
+                  Ziel: {ZIEL.toLocaleString("de-DE")} verifizierte
+                  Mitzeichner:innen
+                </div>
+                <div
+                  className="goal-bar"
+                  role="progressbar"
+                  aria-valuenow={pct}
+                  aria-valuemin={0}
+                  aria-valuemax={100}
+                >
                   <div style={{ width: pct + "%" }}></div>
                 </div>
                 <div className="goal-meta">
                   <span>{pct}% erreicht</span>
-                  <span>Aktualisiert {new Date().toLocaleTimeString("de-DE", { hour: "2-digit", minute: "2-digit" })}</span>
+                  <span>
+                    Aktualisiert{" "}
+                    {new Date().toLocaleTimeString("de-DE", {
+                      hour: "2-digit",
+                      minute: "2-digit",
+                    })}
+                  </span>
                 </div>
               </div>
 
-              <div style={{ display: "flex", flexDirection: "column", gap: 14, alignItems: "flex-start" }}>
-                <button className="scrollcta" onClick={() => scrollTo("unterzeichnen")}>
+              <div
+                style={{
+                  display: "flex",
+                  flexDirection: "column",
+                  gap: 14,
+                  alignItems: "flex-start",
+                }}
+              >
+                <button
+                  className="scrollcta"
+                  onClick={() => scrollTo("unterzeichnen")}
+                >
                   Jetzt mitzeichnen <span>→</span>
                 </button>
-                <button className="scrollcta" onClick={() => scrollTo("brief")} style={{ background: "transparent", color: "#fff", borderColor: "#fff" }}>
+                <button
+                  className="scrollcta"
+                  onClick={() => scrollTo("brief")}
+                  style={{
+                    background: "transparent",
+                    color: "#fff",
+                    borderColor: "#fff",
+                  }}
+                >
                   Brief lesen
                 </button>
               </div>
@@ -240,7 +384,11 @@ export default function App() {
 
             <div className="stoerer" aria-hidden="true">
               <div>
-                Genossen,<br />setzt euch<br />ein Limit!
+                Genossen,
+                <br />
+                setzt euch
+                <br />
+                ein Limit!
                 <small>Basis-Initiative</small>
               </div>
             </div>
@@ -251,20 +399,35 @@ export default function App() {
           <div className="section-inner">
             <div className="section-head">
               <span className="num">01 / Der Brief</span>
-              <h2>Was wir<br />fordern.</h2>
+              <h2>
+                Was wir
+                <br />
+                fordern.
+              </h2>
             </div>
 
             <div className="brief-wrap">
               <div>
                 <dl className="brief-meta">
                   <dt>An</dt>
-                  <dd>Parteivorstand DIE LINKE<br />Mitglieder der Bundestagsfraktion</dd>
+                  <dd>
+                    Parteivorstand DIE LINKE
+                    <br />
+                    Mitglieder der Bundestagsfraktion
+                  </dd>
                   <dt>Cc</dt>
-                  <dd>Landesvorstände<br />Bundesausschuss</dd>
+                  <dd>
+                    Landesvorstände
+                    <br />
+                    Bundesausschuss
+                  </dd>
                   <dt>Datum</dt>
                   <dd>12. März 2026</dd>
                   <dt>Initiative</dt>
-                  <dd>Offene Sammlung aus den Kreisverbänden, ohne Mandat des Vorstandes.</dd>
+                  <dd>
+                    Offene Sammlung aus den Kreisverbänden, ohne Mandat des
+                    Vorstandes.
+                  </dd>
                   <dt>Kontakt</dt>
                   <dd>kontakt@diaetendeckel-initiative.de</dd>
                 </dl>
@@ -274,66 +437,147 @@ export default function App() {
                 <h3>Offener Brief der Basis</h3>
                 <p className="anrede">Liebe Genossinnen und Genossen,</p>
 
-                <p className="lead">Lorem ipsum dolor sit amet, consetetur sadipscing elitr, sed diam nonumy eirmod tempor invidunt ut labore et dolore magna aliquyam erat, sed diam voluptua. At vero eos et accusam et justo duo dolores et ea rebum. Stet clita kasd gubergren, no sea takimata sanctus est Lorem ipsum dolor sit amet.</p>
+                <p className="lead">
+                  Lorem ipsum dolor sit amet, consetetur sadipscing elitr, sed
+                  diam nonumy eirmod tempor invidunt ut labore et dolore magna
+                  aliquyam erat, sed diam voluptua. At vero eos et accusam et
+                  justo duo dolores et ea rebum. Stet clita kasd gubergren, no
+                  sea takimata sanctus est Lorem ipsum dolor sit amet.
+                </p>
 
-                <p>Duis autem vel eum iriure dolor in hendrerit in vulputate velit esse molestie consequat, vel illum dolore eu feugiat nulla facilisis at vero eros et accumsan et iusto odio dignissim qui blandit praesent luptatum zzril delenit augue duis dolore te feugait nulla facilisi.</p>
+                <p>
+                  Duis autem vel eum iriure dolor in hendrerit in vulputate
+                  velit esse molestie consequat, vel illum dolore eu feugiat
+                  nulla facilisis at vero eros et accumsan et iusto odio
+                  dignissim qui blandit praesent luptatum zzril delenit augue
+                  duis dolore te feugait nulla facilisi.
+                </p>
 
                 <div className="pullquote">
-                  „Wer für gerechte Löhne kämpft, muss bei sich selbst anfangen."
+                  „Wer für gerechte Löhne kämpft, muss bei sich selbst
+                  anfangen."
                 </div>
 
-                <p>Nam liber tempor cum soluta nobis eleifend option congue nihil imperdiet doming id quod mazim placerat facer possim assum. Lorem ipsum dolor sit amet, consectetuer adipiscing elit, sed diam nonummy nibh euismod tincidunt ut laoreet dolore magna aliquam erat volutpat.</p>
+                <p>
+                  Nam liber tempor cum soluta nobis eleifend option congue nihil
+                  imperdiet doming id quod mazim placerat facer possim assum.
+                  Lorem ipsum dolor sit amet, consectetuer adipiscing elit, sed
+                  diam nonummy nibh euismod tincidunt ut laoreet dolore magna
+                  aliquam erat volutpat.
+                </p>
 
-                <p><strong>Wir fordern daher konkret:</strong> Ut wisi enim ad minim veniam, quis nostrud exerci tation ullamcorper suscipit lobortis nisl ut aliquip ex ea commodo consequat. Duis autem vel eum iriure dolor in hendrerit in vulputate velit esse molestie consequat.</p>
+                <p>
+                  <strong>Wir fordern daher konkret:</strong> Ut wisi enim ad
+                  minim veniam, quis nostrud exerci tation ullamcorper suscipit
+                  lobortis nisl ut aliquip ex ea commodo consequat. Duis autem
+                  vel eum iriure dolor in hendrerit in vulputate velit esse
+                  molestie consequat.
+                </p>
 
-                <p>Et harum quidem rerum facilis est et expedita distinctio. Nam libero tempore, cum soluta nobis est eligendi optio cumque nihil impedit quo minus id quod maxime placeat facere possimus.</p>
+                <p>
+                  Et harum quidem rerum facilis est et expedita distinctio. Nam
+                  libero tempore, cum soluta nobis est eligendi optio cumque
+                  nihil impedit quo minus id quod maxime placeat facere
+                  possimus.
+                </p>
 
                 <p className="grusss">Mit solidarischen Grüßen,</p>
-                <p className="signers-line">{total.toLocaleString("de-DE")} Mitglieder und Sympathisant:innen der Partei DIE LINKE</p>
+                <p className="signers-line">
+                  {total.toLocaleString("de-DE")} Mitglieder und
+                  Sympathisant:innen der Partei DIE LINKE
+                </p>
               </article>
             </div>
           </div>
         </section>
 
-        <section className="demands" id="forderungen" aria-label="Unsere drei Forderungen">
+        <section
+          className="demands"
+          id="forderungen"
+          aria-label="Unsere drei Forderungen"
+        >
           <div className="demands-inner">
-            <h2>Drei Punkte.<br /><em>Keine Ausreden.</em></h2>
+            <h2>
+              Drei Punkte.
+              <br />
+              <em>Keine Ausreden.</em>
+            </h2>
             <div className="demands-grid">
               <div className="demand">
                 <span className="n">01</span>
                 <h4>Kopplung an den Mindestlohn</h4>
-                <p>Diäten der Abgeordneten dürfen das Sechsfache des gesetzlichen Mindestlohns (Vollzeit) nicht überschreiten — automatisch indexiert, jährlich überprüft.</p>
+                <p>
+                  Diäten der Abgeordneten dürfen das Sechsfache des gesetzlichen
+                  Mindestlohns (Vollzeit) nicht überschreiten — automatisch
+                  indexiert, jährlich überprüft.
+                </p>
               </div>
               <div className="demand">
                 <span className="n">02</span>
                 <h4>Transparente Nebeneinkünfte</h4>
-                <p>Volle Offenlegung aller Nebeneinkünfte auf Euro und Cent. Schluss mit Stufenmodellen und Pauschalen, die das Gegenteil von Transparenz schaffen.</p>
+                <p>
+                  Volle Offenlegung aller Nebeneinkünfte auf Euro und Cent.
+                  Schluss mit Stufenmodellen und Pauschalen, die das Gegenteil
+                  von Transparenz schaffen.
+                </p>
               </div>
               <div className="demand">
                 <span className="n">03</span>
                 <h4>Rückführung an die Partei</h4>
-                <p>Mandatsträger:innen führen Einkünfte oberhalb des Deckel vollständig an Partei und solidarische Strukturen ab. Keine Almosen, sondern Selbstverständnis.</p>
+                <p>
+                  Mandatsträger:innen führen Einkünfte oberhalb des Deckel
+                  vollständig an Partei und solidarische Strukturen ab. Keine
+                  Almosen, sondern Selbstverständnis.
+                </p>
               </div>
             </div>
           </div>
         </section>
 
-        <section className="section sign-section" id="unterzeichnen" aria-label="Unterschriftenformular">
+        <section
+          className="section sign-section"
+          id="unterzeichnen"
+          aria-label="Unterschriftenformular"
+        >
           <div className="section-inner">
             <div className="sign-grid">
               <div className="sign-intro">
-                <span className="num work" style={{ fontWeight: 900, fontSize: 14, color: "var(--rot)", letterSpacing: ".05em", display: "block", marginBottom: 12 }}>02 / Mitzeichnen</span>
-                <h2>Setz deinen<br />Namen <span className="rot">drunter.</span></h2>
-                <p className="lead">Wir sind die Partei. Wenn unsere Abgeordneten nicht von selbst handeln, müssen wir sie erinnern.</p>
+                <span
+                  className="num work"
+                  style={{
+                    fontWeight: 900,
+                    fontSize: 14,
+                    color: "var(--rot)",
+                    letterSpacing: ".05em",
+                    display: "block",
+                    marginBottom: 12,
+                  }}
+                >
+                  02 / Mitzeichnen
+                </span>
+                <h2>
+                  Setz deinen
+                  <br />
+                  Namen <span className="rot">drunter.</span>
+                </h2>
+                <p className="lead">
+                  Wir sind die Partei. Wenn unsere Abgeordneten nicht von selbst
+                  handeln, müssen wir sie erinnern.
+                </p>
                 <ul>
-                  <li>Du bist Mitglied oder Sympathisant:in der Partei DIE LINKE.</li>
+                  <li>
+                    Du bist Mitglied oder Sympathisant:in der Partei DIE LINKE.
+                  </li>
                   <li>Du stehst hinter den drei Forderungen dieses Briefes.</li>
-                  <li>Du bist einverstanden, dass dein Name veröffentlicht wird.</li>
+                  <li>
+                    Du bist einverstanden, dass dein Name veröffentlicht wird.
+                  </li>
                 </ul>
                 <p className="privacy">
-                  Deine E-Mail-Adresse wird ausschließlich zur Verifizierung deiner Unterschrift verwendet und nicht öffentlich gezeigt.
-                  Eine Unterschrift wird erst nach Bestätigung per E-Mail gezählt.
-                  Du kannst deine Zustimmung jederzeit zurückziehen.
+                  Deine E-Mail-Adresse wird ausschließlich zur Verifizierung
+                  deiner Unterschrift verwendet und nicht öffentlich gezeigt.
+                  Eine Unterschrift wird erst nach Bestätigung per E-Mail
+                  gezählt. Du kannst deine Zustimmung jederzeit zurückziehen.
                 </p>
               </div>
 
@@ -342,49 +586,122 @@ export default function App() {
           </div>
         </section>
 
-        <section className="section signers-section" id="liste" aria-label="Liste der Unterstützer:innen">
+        <section
+          className="section signers-section"
+          id="liste"
+          aria-label="Liste der Unterstützer:innen"
+        >
           <div className="section-inner">
             <div className="signers-head">
               <div>
-                <span className="num work" style={{ fontWeight: 900, fontSize: 14, color: "var(--rot)", letterSpacing: ".05em", display: "block", marginBottom: 8 }}>03 / Schon dabei</span>
-                <h2>{total.toLocaleString("de-DE")} Genoss:innen<br />haben unterzeichnet.</h2>
+                <span
+                  className="num work"
+                  style={{
+                    fontWeight: 900,
+                    fontSize: 14,
+                    color: "var(--rot)",
+                    letterSpacing: ".05em",
+                    display: "block",
+                    marginBottom: 8,
+                  }}
+                >
+                  03 / Schon dabei
+                </span>
+                <h2>
+                  {total.toLocaleString("de-DE")} Genoss:innen
+                  <br />
+                  haben unterzeichnet.
+                </h2>
               </div>
-              <div className="total"><b>+{stats.today}</b> in den letzten 24 Stunden</div>
+              <div className="total">
+                <b>+{stats.today}</b> in den letzten 24 Stunden
+              </div>
             </div>
 
             <div className="stats-row">
-              <div className="stat"><div className="v">{total.toLocaleString("de-DE")}</div><div className="k">Gesamt verifiziert</div></div>
-              <div className="stat"><div className="v">+{stats.today}</div><div className="k">Heute</div></div>
-              <div className="stat"><div className="v">+{stats.week}</div><div className="k">Diese Woche</div></div>
-              <div className="stat"><div className="v">{stats.kvCount}</div><div className="k">Kreisverbände</div></div>
+              <div className="stat">
+                <div className="v">{total.toLocaleString("de-DE")}</div>
+                <div className="k">Gesamt verifiziert</div>
+              </div>
+              <div className="stat">
+                <div className="v">+{stats.today}</div>
+                <div className="k">Heute</div>
+              </div>
+              <div className="stat">
+                <div className="v">+{stats.week}</div>
+                <div className="k">Diese Woche</div>
+              </div>
+              <div className="stat">
+                <div className="v">{stats.kvCount}</div>
+                <div className="k">Kreisverbände</div>
+              </div>
             </div>
 
             <div className="filters">
-              <button className={"filter-chip " + (filter === "alle" ? "active" : "")} onClick={() => setFilter("alle")}>Alle</button>
-              <button className={"filter-chip " + (filter === "heute" ? "active" : "")} onClick={() => setFilter("heute")}>Heute</button>
-              <button className={"filter-chip " + (filter === "kv" ? "active" : "")} onClick={() => setFilter("kv")}>Mit Kreisverband</button>
+              <button
+                className={"filter-chip " + (filter === "alle" ? "active" : "")}
+                onClick={() => setFilter("alle")}
+              >
+                Alle
+              </button>
+              <button
+                className={
+                  "filter-chip " + (filter === "heute" ? "active" : "")
+                }
+                onClick={() => setFilter("heute")}
+              >
+                Heute
+              </button>
+              <button
+                className={"filter-chip " + (filter === "kv" ? "active" : "")}
+                onClick={() => setFilter("kv")}
+              >
+                Mit Kreisverband
+              </button>
               <input
                 className="search"
                 placeholder="Suchen nach Name oder Kreisverband…"
                 value={search}
-                onChange={e => setSearch(e.target.value)}
+                onChange={(e) => setSearch(e.target.value)}
                 aria-label="Suche nach Name oder Kreisverband"
               />
             </div>
 
-            {error && <p style={{ color: "var(--rot)", textAlign: "center", padding: 20 }}>{error}</p>}
+            {error && (
+              <p
+                style={{
+                  color: "var(--rot)",
+                  textAlign: "center",
+                  padding: 20,
+                }}
+              >
+                {error}
+              </p>
+            )}
 
             {loading && signers.length === 0 ? (
-              <div style={{ textAlign: "center", padding: 40, color: "var(--grau)" }}>Lade Unterschriften…</div>
+              <div
+                style={{
+                  textAlign: "center",
+                  padding: 40,
+                  color: "var(--grau)",
+                }}
+              >
+                Lade Unterschriften…
+              </div>
             ) : (
               <>
                 <div className="signers-grid">
-                  {signers.map(s => (
+                  {signers.map((s) => (
                     <div key={s.id} className="signer">
                       <div className="avatar">{initials(s.name)}</div>
                       <div className="info">
                         <div className="name">{s.name}</div>
-                        <div className="kv">{s.kreisverband ? "KV " + s.kreisverband : "Ohne Kreisverband"}</div>
+                        <div className="kv">
+                          {s.kreisverband
+                            ? "KV " + s.kreisverband
+                            : "Ohne Kreisverband"}
+                        </div>
                       </div>
                       <div className="time">vor {relTime(s.created_at)}</div>
                     </div>
@@ -392,7 +709,10 @@ export default function App() {
                 </div>
 
                 <div className="signers-foot">
-                  <span>{signers.length} von {signersTotal.toLocaleString("de-DE")} angezeigt</span>
+                  <span>
+                    {signers.length} von {signersTotal.toLocaleString("de-DE")}{" "}
+                    angezeigt
+                  </span>
                   {signers.length < signersTotal && (
                     <button onClick={handleLoadMore}>Weitere laden</button>
                   )}
@@ -408,15 +728,21 @@ export default function App() {
           <div className="footer-top">
             <div>
               <h4>Diätendeckel jetzt.</h4>
-              <p>Eine offene Initiative aus den Kreisverbänden. Kein offizielles Schreiben des Parteivorstandes oder der Bundestagsfraktion.</p>
+              <p>
+                Eine offene Initiative aus den Kreisverbänden. Kein offizielles
+                Schreiben des Parteivorstandes oder der Bundestagsfraktion.
+              </p>
               <div className="footer-disclaimer">
                 Diese Seite wurde nicht von der Partei DIE LINKE herausgegeben.
-                Es handelt sich um eine Initiative von Parteimitgliedern an der Basis (Lorem-Ipsum-Platzhaltertext bis Brieffassung final).
+                Es handelt sich um eine Initiative von Parteimitgliedern an der
+                Basis (Lorem-Ipsum-Platzhaltertext bis Brieffassung final).
               </div>
             </div>
             <div>
               <h4>Kontakt</h4>
-              <a href="mailto:kontakt@diaetendeckel-initiative.de">kontakt@diaetendeckel-initiative.de</a>
+              <a href="mailto:kontakt@diaetendeckel.jetzt">
+                kontakt@diaetendeckel.jetzt
+              </a>
               <a href="#">Pressekontakt</a>
               <a href="#">Mitmachen im Kreisverband</a>
             </div>
@@ -424,12 +750,10 @@ export default function App() {
               <h4>Rechtliches</h4>
               <a href="#">Impressum</a>
               <a href="#">Datenschutz</a>
-              <a href="#">V.i.S.d.P.</a>
             </div>
           </div>
           <div className="footer-bottom">
-            <span>© 2026 Initiative Diätendeckel · Basis-AG</span>
-            <span>Design inspiriert vom Designsystem „Lissi" (Die Linke) — ohne offizielle Logos.</span>
+            <span>© 2026 Initiative Diätendeckel</span>
           </div>
         </div>
       </footer>
@@ -441,18 +765,29 @@ export default function App() {
             role="dialog"
             aria-modal="true"
             aria-labelledby="email-modal-title"
-            onClick={e => e.stopPropagation()}
+            onClick={(e) => e.stopPropagation()}
             ref={emailTrapRef}
           >
             <div className="modal-head">
               <h3 id="email-modal-title">Bitte E-Mail bestätigen</h3>
-              <button onClick={closeModal} aria-label="Schließen">×</button>
+              <button onClick={closeModal} aria-label="Schließen">
+                ×
+              </button>
             </div>
             <div className="modal-body">
-              <p>Danke, <strong>{emailModal.name}</strong>. Wir haben dir einen Bestätigungslink geschickt an:</p>
+              <p>
+                Danke, <strong>{emailModal.name}</strong>. Wir haben dir einen
+                Bestätigungslink geschickt an:
+              </p>
               <div className="email-pill">{emailModal.email}</div>
-              <p>Erst nach dem Klick auf den Link in dieser E-Mail wird deine Unterschrift gezählt und öffentlich gelistet.</p>
-              <p style={{ color: "var(--grau)", fontSize: 13 }}>Keine E-Mail erhalten? Schau in den Spam-Ordner oder fordere den Link neu an.</p>
+              <p>
+                Erst nach dem Klick auf den Link in dieser E-Mail wird deine
+                Unterschrift gezählt und öffentlich gelistet.
+              </p>
+              <p style={{ color: "var(--grau)", fontSize: 13 }}>
+                Keine E-Mail erhalten? Schau in den Spam-Ordner oder fordere den
+                Link neu an.
+              </p>
               <button className="confirm-btn" onClick={closeModal}>
                 Verstanden
               </button>
@@ -462,28 +797,62 @@ export default function App() {
       )}
 
       {showSuccess && (
-        <div className="modal-overlay" onClick={closeSuccess} role="presentation">
+        <div
+          className="modal-overlay"
+          onClick={closeSuccess}
+          role="presentation"
+        >
           <div
             className="modal success"
             role="dialog"
             aria-modal="true"
             aria-labelledby="success-modal-title"
-            onClick={e => e.stopPropagation()}
+            onClick={(e) => e.stopPropagation()}
             ref={successTrapRef}
           >
             <div className="modal-head">
               <h3 id="success-modal-title">Unterschrift gezählt</h3>
-              <button onClick={closeSuccess} aria-label="Schließen">×</button>
+              <button onClick={closeSuccess} aria-label="Schließen">
+                ×
+              </button>
             </div>
             <div className="modal-body">
               <div className="check-anim">
-                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3.5" strokeLinecap="round" strokeLinejoin="round">
+                <svg
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  stroke="currentColor"
+                  strokeWidth="3.5"
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                >
                   <polyline points="20 6 9 17 4 12"></polyline>
                 </svg>
               </div>
-              <p style={{ fontFamily: "Work Sans", fontWeight: 900, fontSize: 22, margin: "0 0 8px", letterSpacing: "-0.01em" }}>Solidarisch dabei.</p>
-              <p>Deine Unterschrift ist jetzt Teil des offenen Briefes. Teile ihn mit deinem Kreisverband — wir wollen vor dem nächsten Parteitag bei 5.000 stehen.</p>
-              <button className="confirm-btn" style={{ background: "var(--rot)", borderColor: "var(--rot)" }} onClick={() => { closeSuccess(); scrollTo("liste"); }}>
+              <p
+                style={{
+                  fontFamily: "Work Sans",
+                  fontWeight: 900,
+                  fontSize: 22,
+                  margin: "0 0 8px",
+                  letterSpacing: "-0.01em",
+                }}
+              >
+                Solidarisch dabei.
+              </p>
+              <p>
+                Deine Unterschrift ist jetzt Teil des offenen Briefes. Teile ihn
+                mit deinem Kreisverband — wir wollen vor dem nächsten Parteitag
+                bei 5.000 stehen.
+              </p>
+              <button
+                className="confirm-btn"
+                style={{ background: "var(--rot)", borderColor: "var(--rot)" }}
+                onClick={() => {
+                  closeSuccess();
+                  scrollTo("liste");
+                }}
+              >
                 Mich in der Liste zeigen →
               </button>
             </div>
@@ -507,14 +876,20 @@ function SignForm({ onSubmit, serverError }) {
   const kvMatches = useMemo(() => {
     if (!kv) return [];
     const q = kv.toLowerCase();
-    return KREISVERBAENDE.filter(k => k.toLowerCase().includes(q)).slice(0, 6);
+    return KREISVERBAENDE.filter((k) => k.toLowerCase().includes(q)).slice(
+      0,
+      6,
+    );
   }, [kv]);
 
   function validate() {
     const e = {};
-    if (name.trim().length < 2) e.name = "Bitte gib deinen vollständigen Namen an.";
-    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) e.email = "Bitte gib eine gültige E-Mail-Adresse an.";
-    if (!agree) e.agree = "Bitte stimme zu, dass dein Name veröffentlicht wird.";
+    if (name.trim().length < 2)
+      e.name = "Bitte gib deinen vollständigen Namen an.";
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email))
+      e.email = "Bitte gib eine gültige E-Mail-Adresse an.";
+    if (!agree)
+      e.agree = "Bitte stimme zu, dass dein Name veröffentlicht wird.";
     setErrors(e);
     return Object.keys(e).length === 0;
   }
@@ -523,58 +898,92 @@ function SignForm({ onSubmit, serverError }) {
     e.preventDefault();
     if (!validate()) return;
     setSubmitting(true);
-    await onSubmit({ name: name.trim(), email: email.trim(), kv: kv.trim(), newsletter });
+    await onSubmit({
+      name: name.trim(),
+      email: email.trim(),
+      kv: kv.trim(),
+      newsletter,
+    });
     setSubmitting(false);
-    setName(""); setEmail(""); setKv(""); setAgree(false); setNewsletter(false); setErrors({});
+    setName("");
+    setEmail("");
+    setKv("");
+    setAgree(false);
+    setNewsletter(false);
+    setErrors({});
   }
 
   return (
     <form className="form-card" onSubmit={submit} noValidate>
       <span className="badge">Mitzeichnen</span>
       <h3>Unterschreiben in 30 Sekunden</h3>
-      <div className="sub2">Drei Felder, eine Bestätigung per E-Mail — fertig.</div>
+      <div className="sub2">
+        Drei Felder, eine Bestätigung per E-Mail — fertig.
+      </div>
 
-      {serverError && <div className="err" style={{ marginBottom: 16 }} role="alert">{serverError}</div>}
+      {serverError && (
+        <div className="err" style={{ marginBottom: 16 }} role="alert">
+          {serverError}
+        </div>
+      )}
 
       <div className="field">
-        <label htmlFor="sign-name">Name <span className="opt">— wird öffentlich gezeigt</span></label>
+        <label htmlFor="sign-name">
+          Name <span className="opt">— wird öffentlich gezeigt</span>
+        </label>
         <input
           id="sign-name"
           type="text"
           value={name}
-          onChange={e => setName(e.target.value)}
+          onChange={(e) => setName(e.target.value)}
           placeholder="z. B. Anna Berger"
           className={errors.name ? "invalid" : ""}
           aria-invalid={!!errors.name}
           aria-describedby={errors.name ? "err-name" : undefined}
           autoComplete="name"
         />
-        {errors.name && <div className="err" id="err-name">{errors.name}</div>}
+        {errors.name && (
+          <div className="err" id="err-name">
+            {errors.name}
+          </div>
+        )}
       </div>
 
       <div className="field">
-        <label htmlFor="sign-email">E-Mail <span className="opt">— nur zur Verifizierung, nicht öffentlich</span></label>
+        <label htmlFor="sign-email">
+          E-Mail{" "}
+          <span className="opt">— nur zur Verifizierung, nicht öffentlich</span>
+        </label>
         <input
           id="sign-email"
           type="email"
           value={email}
-          onChange={e => setEmail(e.target.value)}
+          onChange={(e) => setEmail(e.target.value)}
           placeholder="anna@example.org"
           className={errors.email ? "invalid" : ""}
           aria-invalid={!!errors.email}
           aria-describedby={errors.email ? "err-email" : undefined}
           autoComplete="email"
         />
-        {errors.email && <div className="err" id="err-email">{errors.email}</div>}
+        {errors.email && (
+          <div className="err" id="err-email">
+            {errors.email}
+          </div>
+        )}
       </div>
 
       <div className="field" style={{ position: "relative" }}>
-        <label htmlFor="sign-kv">Kreisverband <span className="opt">— optional</span></label>
+        <label htmlFor="sign-kv">
+          Kreisverband <span className="opt">— optional</span>
+        </label>
         <input
           id="sign-kv"
           type="text"
           value={kv}
-          onChange={e => { setKv(e.target.value); setShowSuggest(true); }}
+          onChange={(e) => {
+            setKv(e.target.value);
+            setShowSuggest(true);
+          }}
           onFocus={() => setShowSuggest(true)}
           onBlur={() => setTimeout(() => setShowSuggest(false), 150)}
           placeholder="z. B. Berlin-Neukölln"
@@ -586,11 +995,14 @@ function SignForm({ onSubmit, serverError }) {
         />
         {showSuggest && kv && kvMatches.length > 0 && (
           <div id="kv-listbox" role="listbox" className="autocomplete-dropdown">
-            {kvMatches.map(k => (
+            {kvMatches.map((k) => (
               <div
                 key={k}
                 role="option"
-                onMouseDown={() => { setKv(k); setShowSuggest(false); }}
+                onMouseDown={() => {
+                  setKv(k);
+                  setShowSuggest(false);
+                }}
                 className="autocomplete-option"
               >
                 {k}
@@ -602,21 +1014,50 @@ function SignForm({ onSubmit, serverError }) {
 
       <div className="checks">
         <label className="check">
-          <input type="checkbox" checked={agree} onChange={e => setAgree(e.target.checked)} />
-          <span>Ich stimme zu, dass mein <strong>Name (und ggf. Kreisverband)</strong> öffentlich auf dieser Seite angezeigt wird.</span>
+          <input
+            type="checkbox"
+            checked={agree}
+            onChange={(e) => setAgree(e.target.checked)}
+          />
+          <span>
+            Ich stimme zu, dass mein{" "}
+            <strong>Name (und ggf. Kreisverband)</strong> öffentlich auf dieser
+            Seite angezeigt wird.
+          </span>
         </label>
         <label className="check">
-          <input type="checkbox" checked={newsletter} onChange={e => setNewsletter(e.target.checked)} />
-          <span>Haltet mich zur Initiative auf dem Laufenden (gelegentliche E-Mails, jederzeit abbestellbar).</span>
+          <input
+            type="checkbox"
+            checked={newsletter}
+            onChange={(e) => setNewsletter(e.target.checked)}
+          />
+          <span>
+            Haltet mich zur Initiative auf dem Laufenden (gelegentliche E-Mails,
+            jederzeit abbestellbar).
+          </span>
         </label>
-        {errors.agree && <div className="err" style={{ marginLeft: 32 }} role="alert">{errors.agree}</div>}
+        {errors.agree && (
+          <div className="err" style={{ marginLeft: 32 }} role="alert">
+            {errors.agree}
+          </div>
+        )}
       </div>
 
       <button type="submit" className="submit" disabled={submitting}>
-        {submitting ? "Wird gesendet…" : "Jetzt mitzeichnen"} <span className="arrow">→</span>
+        {submitting ? "Wird gesendet…" : "Jetzt mitzeichnen"}{" "}
+        <span className="arrow">→</span>
       </button>
-      <p style={{ fontSize: 12, color: "var(--grau)", marginTop: 14, lineHeight: 1.5, textAlign: "center" }}>
-        Mit Klick auf „Mitzeichnen" schicken wir dir einen Bestätigungslink an deine E-Mail. Erst danach zählt deine Unterschrift.
+      <p
+        style={{
+          fontSize: 12,
+          color: "var(--grau)",
+          marginTop: 14,
+          lineHeight: 1.5,
+          textAlign: "center",
+        }}
+      >
+        Mit Klick auf „Mitzeichnen" schicken wir dir einen Bestätigungslink an
+        deine E-Mail. Erst danach zählt deine Unterschrift.
       </p>
     </form>
   );
