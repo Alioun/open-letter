@@ -125,6 +125,7 @@ export default function App() {
   const [offset, setOffset] = useState(0);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
+  const knownIdsRef = useRef(new Set());
 
   const [emailModal, setEmailModal] = useState(null);
   const [showSuccess, setShowSuccess] = useState(false);
@@ -152,6 +153,7 @@ export default function App() {
       const res = await fetch(`/api/signers?${params}`);
       if (!res.ok) throw new Error();
       const data = await res.json();
+      data.signers.forEach((s) => knownIdsRef.current.add(s.id));
       setSigners((prev) =>
         append ? [...prev, ...data.signers] : data.signers,
       );
@@ -170,9 +172,35 @@ export default function App() {
   }, [fetchStats, fetchSigners]);
 
   useEffect(() => {
-    const interval = setInterval(fetchStats, 30000);
+    const interval = setInterval(async () => {
+      fetchStats();
+      try {
+        const params = new URLSearchParams({
+          filter,
+          search,
+          limit: "18",
+          offset: "0",
+        });
+        const res = await fetch(`/api/signers?${params}`);
+        if (!res.ok) return;
+        const data = await res.json();
+        setSignersTotal(data.total);
+        const newOnes = data.signers
+          .filter((s) => !knownIdsRef.current.has(s.id))
+          .map((s) => ({ ...s, _isNew: true }));
+        if (newOnes.length > 0) {
+          newOnes.forEach((s) => knownIdsRef.current.add(s.id));
+          setSigners((prev) => [...newOnes, ...prev]);
+          setTimeout(() => {
+            setSigners((prev) =>
+              prev.map((s) => (s._isNew ? { ...s, _isNew: false } : s)),
+            );
+          }, 2000);
+        }
+      } catch {}
+    }, 10000);
     return () => clearInterval(interval);
-  }, [fetchStats]);
+  }, [filter, search, fetchStats]);
 
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
@@ -191,6 +219,7 @@ export default function App() {
 
   useEffect(() => {
     setOffset(0);
+    knownIdsRef.current.clear();
     fetchSigners(filter, search, 0, false);
   }, [filter, search, fetchSigners]);
 
@@ -693,7 +722,7 @@ export default function App() {
               <>
                 <div className="signers-grid">
                   {signers.map((s) => (
-                    <div key={s.id} className="signer">
+                    <div key={s.id} className={"signer" + (s._isNew ? " new" : "")}>
                       <div className="avatar">{initials(s.name)}</div>
                       <div className="info">
                         <div className="name">{s.name}</div>

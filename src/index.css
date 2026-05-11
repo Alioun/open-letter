@@ -104,6 +104,11 @@ button { font-family: inherit }
 
 .topbar .cta:hover { background: var(--rot) }
 
+@media (max-width: 780px) {
+  .topbar nav { display: none }
+  .topbar .cta { font-size: 13px; padding: 8px 14px }
+}
+
 /* ---------- Hero ---------- */
 .hero {
   position: relative;
@@ -344,19 +349,7 @@ h1.headline .banner {
 }
 
 @media (max-width: 900px) {
-  .stoerer {
-    width: 130px;
-    height: 130px;
-    font-size: 15px;
-    top: auto;
-    bottom: -20px;
-    right: 12px;
-    padding: 12px;
-  }
-  .stoerer small {
-    font-size: 9px;
-    margin-top: 4px;
-  }
+  .stoerer { display: none }
 }
 
 /* ---------- Brief ---------- */
