@@ -398,7 +398,7 @@ export default function App() {
 
             <div className="stoerer" aria-hidden="true">
               <div>
-                Genossen,
+                Genoss:innen,
                 <br />
                 setzt euch
                 <br />
