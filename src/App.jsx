@@ -278,7 +278,7 @@ export default function App() {
 
       <div className="topbar" role="banner">
         <div className="wordmark">
-          <span className="dot"></span> Diätendeckel jetzt.
+          <span className="dot"></span> Gehaltsdeckel jetzt.
         </div>
         <nav aria-label="Hauptnavigation">
           <a
@@ -289,15 +289,6 @@ export default function App() {
             }}
           >
             Brief
-          </a>
-          <a
-            href="#forderungen"
-            onClick={(e) => {
-              e.preventDefault();
-              scrollTo("forderungen");
-            }}
-          >
-            Forderungen
           </a>
           <a
             href="#unterzeichnen"
@@ -328,7 +319,6 @@ export default function App() {
           className="hero"
           aria-label="Titelbild und Unterschriftenzähler"
         >
-          <div className="keil"></div>
           <div className="hero-inner">
             <div className="eyebrow">
               <span className="pulse"></span> Offener Brief der Basis · seit 12.
@@ -336,17 +326,12 @@ export default function App() {
             </div>
 
             <h1 className="headline">
-              <span className="banner">Diäten</span>
+              <span className="banner">Gehalt</span>
               <br />
               <span className="banner">deckeln.</span>
               <br />
               <span className="light">Jetzt.</span>
             </h1>
-
-            <p className="sub">
-              Ein offener Brief der Basis an Vorstand und Bundestagsfraktion.
-              Für eine Partei, die misst, was sie predigt.
-            </p>
 
             <div className="hero-row">
               <div
@@ -516,49 +501,6 @@ export default function App() {
                   Sympathisant:innen der Partei DIE LINKE
                 </p>
               </article>
-            </div>
-          </div>
-        </section>
-
-        <section
-          className="demands"
-          id="forderungen"
-          aria-label="Unsere drei Forderungen"
-        >
-          <div className="demands-inner">
-            <h2>
-              Drei Punkte.
-              <br />
-              <em>Keine Ausreden.</em>
-            </h2>
-            <div className="demands-grid">
-              <div className="demand">
-                <span className="n">01</span>
-                <h4>Kopplung an den Mindestlohn</h4>
-                <p>
-                  Diäten der Abgeordneten dürfen das Sechsfache des gesetzlichen
-                  Mindestlohns (Vollzeit) nicht überschreiten — automatisch
-                  indexiert, jährlich überprüft.
-                </p>
-              </div>
-              <div className="demand">
-                <span className="n">02</span>
-                <h4>Transparente Nebeneinkünfte</h4>
-                <p>
-                  Volle Offenlegung aller Nebeneinkünfte auf Euro und Cent.
-                  Schluss mit Stufenmodellen und Pauschalen, die das Gegenteil
-                  von Transparenz schaffen.
-                </p>
-              </div>
-              <div className="demand">
-                <span className="n">03</span>
-                <h4>Rückführung an die Partei</h4>
-                <p>
-                  Mandatsträger:innen führen Einkünfte oberhalb des Deckel
-                  vollständig an Partei und solidarische Strukturen ab. Keine
-                  Almosen, sondern Selbstverständnis.
-                </p>
-              </div>
             </div>
           </div>
         </section>
@@ -756,7 +698,7 @@ export default function App() {
         <div className="footer-inner">
           <div className="footer-top">
             <div>
-              <h4>Diätendeckel jetzt.</h4>
+              <h4>Gehaltsdeckel jetzt.</h4>
               <p>
                 Eine offene Initiative aus den Kreisverbänden. Kein offizielles
                 Schreiben des Parteivorstandes oder der Bundestagsfraktion.
@@ -782,7 +724,7 @@ export default function App() {
             </div>
           </div>
           <div className="footer-bottom">
-            <span>© 2026 Initiative Diätendeckel</span>
+            <span>© 2026 Initiative Gehaltsdeckel</span>
           </div>
         </div>
       </footer>

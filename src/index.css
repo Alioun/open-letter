@@ -112,7 +112,7 @@ button { font-family: inherit }
 /* ---------- Hero ---------- */
 .hero {
   position: relative;
-  background: var(--weiss);
+  background: var(--fond);
   padding: 64px 28px 72px;
   overflow: hidden;
   border-bottom: 1px solid #000;
@@ -1140,9 +1140,10 @@ h1.headline .banner {
 
 /* ---------- Footer ---------- */
 footer {
-  background: #000;
-  color: #fff;
+  background: #fff;
+  color: var(--schwarz);
   padding: 64px 28px 32px;
+  border-top: 1px solid #000;
 }
 
 .footer-inner {
@@ -1173,33 +1174,33 @@ footer {
 .footer-top a {
   font-size: 13.5px;
   line-height: 1.6;
-  color: #bbb;
+  color: var(--grau);
   text-decoration: none;
   display: block;
   margin-bottom: 6px;
 }
 
-.footer-top a:hover { color: #fff }
+.footer-top a:hover { color: var(--schwarz) }
 
 .footer-disclaimer {
-  background: #1a1a1a;
+  background: var(--fond);
   border-left: 4px solid var(--rot);
   padding: 18px 22px;
   font-size: 13px;
-  color: #ccc;
+  color: var(--grau);
   line-height: 1.6;
   margin-top: 24px;
 }
 
 .footer-bottom {
-  border-top: 1px solid #333;
+  border-top: 1px solid var(--grau-hell);
   padding-top: 24px;
   display: flex;
   justify-content: space-between;
   flex-wrap: wrap;
   gap: 12px;
   font-size: 12px;
-  color: #888;
+  color: var(--grau);
 }
 
 /* "you" highlight */
