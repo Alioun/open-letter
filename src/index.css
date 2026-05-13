@@ -55,7 +55,7 @@ button { font-family: inherit }
   top: 0;
   z-index: 30;
   background: var(--weiss);
-  border-bottom: 1px solid #000;
+  border-bottom: 1px solid #6F003C;
   display: flex;
   align-items: center;
   justify-content: space-between;
@@ -96,7 +96,7 @@ button { font-family: inherit }
 .topbar nav a:hover { opacity: 1 }
 
 .topbar .cta {
-  background: #000;
+  background: #6F003C;
   color: #fff;
   border: none;
   padding: 10px 18px;
@@ -121,7 +121,7 @@ button { font-family: inherit }
   background: var(--fond);
   padding: 64px 28px 72px;
   overflow: hidden;
-  border-bottom: 1px solid #000;
+  border-bottom: 1px solid #6F003C;
 }
 
 .hero-inner {
@@ -181,7 +181,7 @@ h1.headline {
   line-height: 0.92;
   letter-spacing: -0.025em;
   margin: 0 0 24px;
-  color: #000;
+  color: #6F003C;
   max-width: 14ch;
   position: relative;
   z-index: 3;
@@ -204,13 +204,13 @@ h1.headline .banner {
   line-height: 1.25;
   max-width: 38ch;
   margin: 0 0 32px;
-  color: #000;
+  color: #6F003C;
   position: relative;
   z-index: 3;
   background: #fff;
   display: inline-block;
   padding: 18px 24px;
-  border: 1.5px solid #000;
+  border: 1.5px solid #6F003C;
   box-shadow: 10px 10px 0 var(--rot);
 }
 
@@ -229,13 +229,13 @@ h1.headline .banner {
 }
 
 .counter-card {
-  background: #000;
+  background: #6F003C;
   color: #fff;
   padding: 28px 30px 24px;
   display: flex;
   flex-direction: column;
   gap: 6px;
-  border: 1px solid #000;
+  border: 1px solid #6F003C;
   box-shadow: 10px 10px 0 var(--rot);
 }
 
@@ -298,9 +298,9 @@ h1.headline .banner {
   font-family: "Work Sans";
   font-weight: 700;
   font-size: 14px;
-  color: #000;
+  color: #6F003C;
   background: #fff;
-  border: 1.5px solid #000;
+  border: 1.5px solid #6F003C;
   padding: 14px 20px;
   cursor: pointer;
   transition: transform 0.15s ease, background 0.15s ease, color 0.15s ease;
@@ -308,60 +308,17 @@ h1.headline .banner {
 }
 
 .scrollcta:hover {
-  background: #000;
+  background: #6F003C;
   color: #fff;
   transform: translate(-2px, -2px);
   box-shadow: 4px 4px 0 var(--rot);
 }
 
-/* Stoerer */
-.stoerer {
-  position: absolute;
-  top: 32px;
-  right: -30px;
-  width: 180px;
-  height: 180px;
-  background: var(--rot);
-  color: #fff;
-  border-radius: 50%;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  transform: rotate(8deg);
-  font-family: "Work Sans";
-  font-weight: 900;
-  font-size: 20px;
-  line-height: 0.95;
-  text-align: center;
-  padding: 18px;
-  letter-spacing: -0.01em;
-  z-index: 5;
-  animation: wobble 5s ease-in-out infinite;
-  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.22);
-}
-
-.stoerer small {
-  display: block;
-  font-weight: 400;
-  font-size: 11px;
-  margin-top: 6px;
-  letter-spacing: 0.05em;
-  text-transform: uppercase;
-}
-
-@keyframes wobble {
-  0%, 100% { transform: rotate(8deg) }
-  50% { transform: rotate(12deg) scale(1.03) }
-}
-
-@media (max-width: 900px) {
-  .stoerer { display: none }
-}
 
 /* ---------- Brief ---------- */
 .section {
   padding: 96px 28px;
-  border-bottom: 1px solid #000;
+  border-bottom: 1px solid #6F003C;
 }
 
 .section-inner {
@@ -428,8 +385,8 @@ h1.headline .banner {
 .brief-paper {
   background: var(--fond);
   padding: 56px 64px;
-  border: 1px solid #000;
-  box-shadow: 12px 12px 0 #000;
+  border: 1px solid #6F003C;
+  box-shadow: 12px 12px 0 #6F003C;
   position: relative;
 }
 
@@ -511,10 +468,10 @@ h1.headline .banner {
 
 /* ---------- Forderungen Strip ---------- */
 .demands {
-  background: #000;
+  background: #6F003C;
   color: #fff;
   padding: 72px 28px;
-  border-bottom: 1px solid #000;
+  border-bottom: 1px solid #6F003C;
 }
 
 .demands-inner {
@@ -549,7 +506,7 @@ h1.headline .banner {
 }
 
 .demand {
-  background: #000;
+  background: #6F003C;
   padding: 32px;
   display: flex;
   flex-direction: column;
@@ -642,14 +599,14 @@ h1.headline .banner {
   font-size: 13px;
   color: var(--grau);
   line-height: 1.55;
-  border-top: 1px solid #000;
+  border-top: 1px solid #6F003C;
   padding-top: 18px;
   margin-top: 22px;
 }
 
 .form-card {
   background: var(--fond);
-  border: 1px solid #000;
+  border: 1px solid #6F003C;
   padding: 36px;
   box-shadow: 14px 14px 0 var(--rot);
   position: relative;
@@ -663,7 +620,7 @@ h1.headline .banner {
   position: absolute;
   top: -14px;
   left: 24px;
-  background: #000;
+  background: #6F003C;
   color: #fff;
   font-family: "Work Sans";
   font-weight: 700;
@@ -716,7 +673,7 @@ h1.headline .banner {
   font-size: 15px;
   font-family: "Inter", sans-serif;
   background: #fff;
-  border: 1.5px solid #000;
+  border: 1.5px solid #6F003C;
   outline: none;
   transition: box-shadow 0.1s ease, transform 0.1s ease;
 }
@@ -755,7 +712,7 @@ h1.headline .banner {
   appearance: none;
   width: 20px;
   height: 20px;
-  border: 1.5px solid #000;
+  border: 1.5px solid #6F003C;
   background: #fff;
   flex-shrink: 0;
   margin-top: 1px;
@@ -782,9 +739,9 @@ h1.headline .banner {
 
 .submit {
   width: 100%;
-  background: #000;
+  background: #6F003C;
   color: #fff;
-  border: 1.5px solid #000;
+  border: 1.5px solid #6F003C;
   padding: 18px;
   font-family: "Work Sans";
   font-weight: 900;
@@ -801,7 +758,7 @@ h1.headline .banner {
 .submit:hover:not(:disabled) {
   background: var(--rot);
   transform: translate(-2px, -2px);
-  box-shadow: 6px 6px 0 #000;
+  box-shadow: 6px 6px 0 #6F003C;
 }
 
 .submit:disabled {
@@ -832,7 +789,7 @@ h1.headline .banner {
 
 .modal {
   background: #fff;
-  border: 1px solid #000;
+  border: 1px solid #6F003C;
   max-width: 520px;
   width: 100%;
   box-shadow: 16px 16px 0 var(--rot);
@@ -884,7 +841,7 @@ h1.headline .banner {
 
 .modal-body .email-pill {
   display: inline-block;
-  background: #000;
+  background: #6F003C;
   color: #fff;
   font-family: ui-monospace, monospace;
   font-size: 13px;
@@ -896,9 +853,9 @@ h1.headline .banner {
   width: 100%;
   margin-top: 18px;
   padding: 16px;
-  background: #000;
+  background: #6F003C;
   color: #fff;
-  border: 1.5px solid #000;
+  border: 1.5px solid #6F003C;
   font-family: "Work Sans";
   font-weight: 900;
   font-size: 16px;
@@ -937,7 +894,7 @@ h1.headline .banner {
 /* ---------- Unterzeichner Section ---------- */
 .signers-section {
   background: var(--fond);
-  border-bottom: 1px solid #000;
+  border-bottom: 1px solid #6F003C;
 }
 
 .signers-head {
@@ -966,7 +923,7 @@ h1.headline .banner {
 }
 
 .signers-head .total b {
-  color: #000;
+  color: #6F003C;
   font-weight: 900;
   font-size: 30px;
 }
@@ -975,8 +932,8 @@ h1.headline .banner {
   display: grid;
   grid-template-columns: repeat(4, 1fr);
   gap: 1px;
-  background: #000;
-  border: 1px solid #000;
+  background: #6F003C;
+  border: 1px solid #6F003C;
   margin-bottom: 48px;
 }
 
@@ -1015,7 +972,7 @@ h1.headline .banner {
 }
 
 .filter-chip {
-  border: 1.5px solid #000;
+  border: 1.5px solid #6F003C;
   background: transparent;
   padding: 8px 14px;
   min-height: 44px;
@@ -1027,12 +984,12 @@ h1.headline .banner {
 }
 
 .filter-chip:hover {
-  background: #000;
+  background: #6F003C;
   color: #fff;
 }
 
 .filter-chip.active {
-  background: #000;
+  background: #6F003C;
   color: #fff;
 }
 
@@ -1040,7 +997,7 @@ h1.headline .banner {
   flex: 1;
   min-width: 200px;
   padding: 8px 14px;
-  border: 1.5px solid #000;
+  border: 1.5px solid #6F003C;
   font-family: "Inter", sans-serif;
   font-size: 14px;
   background: #fff;
@@ -1050,8 +1007,8 @@ h1.headline .banner {
   display: grid;
   grid-template-columns: repeat(3, 1fr);
   gap: 1px;
-  background: #000;
-  border: 1px solid #000;
+  background: #6F003C;
+  border: 1px solid #6F003C;
 }
 
 @media (max-width: 780px) {
@@ -1080,7 +1037,7 @@ h1.headline .banner {
 .signer .avatar {
   width: 42px;
   height: 42px;
-  background: #000;
+  background: #6F003C;
   color: #fff;
   display: flex;
   align-items: center;
@@ -1131,8 +1088,8 @@ h1.headline .banner {
 
 .signers-foot button {
   background: transparent;
-  border: 1.5px solid #000;
-  color: #000;
+  border: 1.5px solid #6F003C;
+  color: #6F003C;
   padding: 10px 18px;
   font-family: "Work Sans";
   font-weight: 700;
@@ -1141,7 +1098,7 @@ h1.headline .banner {
 }
 
 .signers-foot button:hover {
-  background: #000;
+  background: #6F003C;
   color: #fff;
 }
 
@@ -1150,7 +1107,7 @@ footer {
   background: #fff;
   color: var(--schwarz);
   padding: 64px 28px 32px;
-  border-top: 1px solid #000;
+  border-top: 1px solid #6F003C;
 }
 
 .footer-inner {
@@ -1248,7 +1205,7 @@ footer {
   left: 0;
   right: 0;
   background: #fff;
-  border: 1.5px solid #000;
+  border: 1.5px solid #6F003C;
   border-top: none;
   z-index: 10;
   max-height: 200px;

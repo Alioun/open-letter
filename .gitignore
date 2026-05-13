@@ -4,3 +4,4 @@ dist
 .env
 *.log
 design-extract
+.claude

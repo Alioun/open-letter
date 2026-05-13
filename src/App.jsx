@@ -320,11 +320,6 @@ export default function App() {
           aria-label="Titelbild und Unterschriftenzähler"
         >
           <div className="hero-inner">
-            <div className="eyebrow">
-              <span className="pulse"></span> Offener Brief der Basis · seit 12.
-              März 2026
-            </div>
-
             <h1 className="headline">
               <span className="banner">Gehalt</span>
               <br />
@@ -388,8 +383,8 @@ export default function App() {
                   onClick={() => scrollTo("brief")}
                   style={{
                     background: "transparent",
-                    color: "#000",
-                    borderColor: "#000",
+                    color: "#6F003C",
+                    borderColor: "#6F003C",
                   }}
                 >
                   Brief lesen
@@ -397,58 +392,13 @@ export default function App() {
               </div>
             </div>
 
-            <div className="stoerer" aria-hidden="true">
-              <div>
-                Genoss:innen,
-                <br />
-                setzt euch
-                <br />
-                ein Limit!
-                <small>Basis-Initiative</small>
-              </div>
-            </div>
+
           </div>
         </section>
 
         <section className="section" id="brief" aria-label="Der offene Brief">
           <div className="section-inner">
-            <div className="section-head">
-              <span className="num">01 / Der Brief</span>
-              <h2>
-                Was wir
-                <br />
-                fordern.
-              </h2>
-            </div>
-
-            <div className="brief-wrap">
-              <div>
-                <dl className="brief-meta">
-                  <dt>An</dt>
-                  <dd>
-                    Parteivorstand DIE LINKE
-                    <br />
-                    Mitglieder der Bundestagsfraktion
-                  </dd>
-                  <dt>Cc</dt>
-                  <dd>
-                    Landesvorstände
-                    <br />
-                    Bundesausschuss
-                  </dd>
-                  <dt>Datum</dt>
-                  <dd>12. März 2026</dd>
-                  <dt>Initiative</dt>
-                  <dd>
-                    Offene Sammlung aus den Kreisverbänden, ohne Mandat des
-                    Vorstandes.
-                  </dd>
-                  <dt>Kontakt</dt>
-                  <dd>kontakt@diaetendeckel-initiative.de</dd>
-                </dl>
-              </div>
-
-              <article className="brief-paper">
+            <article className="brief-paper">
                 <h3>Offener Brief der Basis</h3>
                 <p className="anrede">Liebe Genossinnen und Genossen,</p>
 
@@ -502,7 +452,6 @@ export default function App() {
                   Sympathisant:innen der Partei DIE LINKE
                 </p>
               </article>
-            </div>
           </div>
         </section>
 
