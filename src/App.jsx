@@ -391,99 +391,94 @@ export default function App() {
                 </button>
               </div>
             </div>
-
-
           </div>
         </section>
 
         <section className="section" id="brief" aria-label="Der offene Brief">
           <div className="section-inner">
             <article className="brief-paper">
-                <h3>Offener Brief der Basis</h3>
-                <p className="anrede">Liebe Genoss*innen,</p>
+              <h3>Offener Brief der Basis</h3>
+              <p className="anrede">Liebe Genoss*innen,</p>
 
-                <p className="lead">
-                  in diesem Brief melden wir uns als aktive Mitglieder der
-                  Linken – mit und ohne Funktion – zu Wort. Wir wollen uns
-                  konstruktiv in die Debatte um den Gehaltsdeckel für
-                  Mandatsträger*innen einbringen, die in den vergangenen Wochen
-                  von Abgeordneten teils unschön über die Medien geführt wurde.
-                  Denn es ist uns wichtig, dass unsere Perspektive gehört wird.
-                </p>
+              <p className="lead">
+                in diesem Brief melden wir uns als aktive Mitglieder der Linken
+                – mit und ohne Funktion – zu Wort. Wir wollen uns konstruktiv in
+                die Debatte um den Gehaltsdeckel für Mandatsträger*innen
+                einbringen, die in den vergangenen Wochen von Abgeordneten teils
+                unschön über die Medien geführt wurde. Denn es ist uns wichtig,
+                dass unsere Perspektive gehört wird.
+              </p>
 
-                <p>
-                  Der Parteivorstand hat dem nächsten Bundesparteitag in Potsdam
-                  einen Antrag zur Begrenzung der Diäten von
-                  Mandatsträger*innen vorgelegt. Für uns ist dieser Antrag
-                  absolut richtig und längst überfällig. Denn natürlich ist in
-                  einer Partei wie der Linken die Rolle von
-                  Mandatsträger*innen und ihr Verhältnis zur Partei eine zentrale
-                  politische Frage. Wir wollen über den Diätendeckel
-                  demokratisch diskutieren, und zwar auf dem Parteitag. Genau
-                  dort gehört diese Auseinandersetzung hin. Für uns ist es
-                  unverständlich, wenn einzelne Abgeordnete diese Debatte über
-                  die Medien führen. Solche öffentlichen Eskalationen helfen
-                  weder der Partei noch der inhaltlichen Diskussion.
-                </p>
+              <p>
+                Der Parteivorstand hat dem nächsten Bundesparteitag in Potsdam
+                einen Antrag zur Begrenzung der Diäten von Mandatsträger*innen
+                vorgelegt. Für uns ist dieser Antrag absolut richtig und längst
+                überfällig. Denn natürlich ist in einer Partei wie der Linken
+                die Rolle von Mandatsträger*innen und ihr Verhältnis zur Partei
+                eine zentrale politische Frage. Wir wollen über den Diätendeckel
+                demokratisch diskutieren, und zwar auf dem Parteitag. Genau dort
+                gehört diese Auseinandersetzung hin. Für uns ist es
+                unverständlich, wenn einzelne Abgeordnete diese Debatte über die
+                Medien führen. Solche öffentlichen Eskalationen helfen weder der
+                Partei noch der inhaltlichen Diskussion.
+              </p>
 
-                <p>
-                  Das Comeback 2025 wurde nicht von Mandatsträger*innen allein
-                  ermöglicht. Es wurde von tausenden Mitgliedern getragen, die
-                  ihre Feierabende, ihre Wochenenden und ihre Energie mit
-                  Wahlkampf verbracht haben. Von Genoss*innen, die geblieben
-                  sind, als es schwierig war. Die Infostände organisiert, an
-                  hunderttausende Haustüren geklopft und zehntausende Plakate
-                  aufgehängt haben.
-                </p>
+              <p>
+                Das Comeback 2025 wurde nicht von Mandatsträger*innen allein
+                ermöglicht. Es wurde von tausenden Mitgliedern getragen, die
+                ihre Feierabende, ihre Wochenenden und ihre Energie mit
+                Wahlkampf verbracht haben. Von Genoss*innen, die geblieben sind,
+                als es schwierig war. Die Infostände organisiert, an
+                hunderttausende Haustüren geklopft und zehntausende Plakate
+                aufgehängt haben.
+              </p>
 
-                <div className="pullquote">
-                  „Die Linke wurde von uns allen gerettet."
-                </div>
+              <div className="pullquote">
+                „Die Linke wurde von uns allen gerettet."
+              </div>
 
-                <p>
-                  Wir erwarten, dass Mandate in der Linken anders verstanden
-                  werden als in anderen Parteien: als politische Verantwortung
-                  gegenüber der Partei und den Menschen, die sie tragen. Und
-                  nicht als persönliche Karrieremöglichkeit. Wenn wir sagen,
-                  dass wir als Linke Politik anders machen wollen, dann muss
-                  sich dieser Anspruch auch in unserer politischen Praxis
-                  widerspiegeln. Gerade in unserer Partei, die beinahe daran
-                  zerbrochen wäre, dass einzelne Funktionär*innen sie für
-                  persönliche Interessen missbraucht haben, ist die Debatte über
-                  die Rolle und Verantwortung von Abgeordneten
-                  selbstverständlich. Denn Mandatsträger*innen sind
-                  Aushängeschilder unserer Politik. An ihrem Auftreten wird Die
-                  Linke insgesamt gemessen. Wenn unsere Mandatsträger*innen ihre
-                  Diäten wirksam begrenzen, dann stärkt das die Glaubwürdigkeit
-                  unserer Partei. Ein wirksamer Gehaltsdeckel ist es für uns
-                  nur, wenn wir uns an den Durchschnittslöhnen in diesem Land
-                  orientieren.
-                </p>
+              <p>
+                Wir erwarten, dass Mandate in der Linken anders verstanden
+                werden als in anderen Parteien: als politische Verantwortung
+                gegenüber der Partei und den Menschen, die sie tragen. Und nicht
+                als persönliche Karrieremöglichkeit. Wenn wir sagen, dass wir
+                als Linke Politik anders machen wollen, dann muss sich dieser
+                Anspruch auch in unserer politischen Praxis widerspiegeln.
+                Gerade in unserer Partei, die beinahe daran zerbrochen wäre,
+                dass einzelne Funktionär*innen sie für persönliche Interessen
+                missbraucht haben, ist die Debatte über die Rolle und
+                Verantwortung von Abgeordneten selbstverständlich. Denn
+                Mandatsträger*innen sind Aushängeschilder unserer Politik. An
+                ihrem Auftreten wird Die Linke insgesamt gemessen. Wenn unsere
+                Mandatsträger*innen ihre Diäten wirksam begrenzen, dann stärkt
+                das die Glaubwürdigkeit unserer Partei. Ein wirksamer
+                Gehaltsdeckel ist es für uns nur, wenn wir uns an den
+                Durchschnittslöhnen in diesem Land orientieren.
+              </p>
 
-                <p>
-                  Wir alle teilen eine Vision. Das Comeback 2025 war nur der
-                  erste Schritt. Wir wollen die Linke weiter aufbauen, Menschen
-                  organisieren und so eine nachhaltige sozialistische Politik
-                  schaffen. In den letzten Monaten haben wir erlebt, zu was wir
-                  in der Lage sind, wenn wir uns fokussieren und gemeinsam an
-                  einem Strang ziehen. Genau diesen Weg wollen wir fortsetzen,
-                  denn wir haben viel zu tun und die Herausforderungen sind
-                  groß. Wir werden auf dem Parteitag Personalentscheidungen
-                  maßgeblich davon abhängig machen, wer sich produktiv an
-                  dieser Debatte beteiligt. Denn die Aufgaben, vor denen wir
-                  stehen, gehen weit über einen Gehaltsdeckel hinaus. Unsere
-                  gemeinsame Aufgabe ist schließlich, Die Linke weiter
-                  aufzubauen. Das Comeback zur Bundestagswahl müssen wir in
-                  nachhaltige und glaubwürdige sozialistische Politik
-                  überführen.
-                </p>
+              <p>
+                Wir alle teilen eine Vision. Das Comeback 2025 war nur der erste
+                Schritt. Wir wollen die Linke weiter aufbauen, Menschen
+                organisieren und so eine nachhaltige sozialistische Politik
+                schaffen. In den letzten Monaten haben wir erlebt, zu was wir in
+                der Lage sind, wenn wir uns fokussieren und gemeinsam an einem
+                Strang ziehen. Genau diesen Weg wollen wir fortsetzen, denn wir
+                haben viel zu tun und die Herausforderungen sind groß. Wir
+                werden auf dem Parteitag Personalentscheidungen maßgeblich davon
+                abhängig machen, wer sich produktiv an dieser Debatte beteiligt.
+                Denn die Aufgaben, vor denen wir stehen, gehen weit über einen
+                Gehaltsdeckel hinaus. Unsere gemeinsame Aufgabe ist schließlich,
+                Die Linke weiter aufzubauen. Das Comeback zur Bundestagswahl
+                müssen wir in nachhaltige und glaubwürdige sozialistische
+                Politik überführen.
+              </p>
 
-                <p className="grusss">Mit solidarischen Grüßen,</p>
-                <p className="signers-line">
-                  {total.toLocaleString("de-DE")} Mitglieder und
-                  Sympathisant:innen der Partei Die Linke
-                </p>
-              </article>
+              <p className="grusss">Mit solidarischen Grüßen,</p>
+              <p className="signers-line">
+                {total.toLocaleString("de-DE")} Mitglieder und
+                Sympathisant:innen der Partei Die Linke
+              </p>
+            </article>
           </div>
         </section>
 
@@ -646,7 +641,10 @@ export default function App() {
               <>
                 <div className="signers-grid">
                   {signers.map((s) => (
-                    <div key={s.id} className={"signer" + (s._isNew ? " new" : "")}>
+                    <div
+                      key={s.id}
+                      className={"signer" + (s._isNew ? " new" : "")}
+                    >
                       <div className="avatar">{initials(s.name)}</div>
                       <div className="info">
                         <div className="name">{s.name}</div>
@@ -688,25 +686,20 @@ export default function App() {
               <div className="footer-disclaimer">
                 Diese Seite wurde nicht von der Partei Die Linke herausgegeben.
                 Es handelt sich um eine Initiative von Parteimitgliedern an der
-                Basis (Lorem-Ipsum-Platzhaltertext bis Brieffassung final).
+                Basis.
               </div>
             </div>
             <div>
               <h3>Kontakt</h3>
-              <a href="mailto:kontakt@diaetendeckel.jetzt">
-                kontakt@diaetendeckel.jetzt
+              <a href="mailto:kontakt@gehaltsdeckel-jetzt.de">
+                kontakt@gehaltsdeckel-jetzt.de
               </a>
-              <a href="#">Pressekontakt</a>
-              <a href="#">Mitmachen im Kreisverband</a>
             </div>
             <div>
               <h3>Rechtliches</h3>
               <a href="#">Impressum</a>
               <a href="#">Datenschutz</a>
             </div>
-          </div>
-          <div className="footer-bottom">
-            <span>© 2026 Initiative Gehaltsdeckel</span>
           </div>
         </div>
       </footer>

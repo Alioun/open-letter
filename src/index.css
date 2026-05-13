@@ -1,7 +1,7 @@
 :root {
   --rot: #ff0000;
   --weiss: #ffffff;
-  --schwarz: #6F003C;
+  --schwarz: #6f003c;
   --akzent: #6f003c;
   --akzent-hell: #ff0000;
   --fond: #f4f1ec;
@@ -10,9 +10,12 @@
   --grau-hell: #e6e6e6;
 }
 
-* { box-sizing: border-box }
+* {
+  box-sizing: border-box;
+}
 
-html, body {
+html,
+body {
   margin: 0;
   padding: 0;
   background: var(--weiss);
@@ -21,17 +24,27 @@ html, body {
   -webkit-font-smoothing: antialiased;
 }
 
-body { overflow-x: hidden }
-a { color: inherit }
-button { font-family: inherit }
+body {
+  overflow-x: hidden;
+}
+a {
+  color: inherit;
+}
+button {
+  font-family: inherit;
+}
 
 :focus-visible {
   outline: 2px solid var(--rot);
   outline-offset: 2px;
 }
 
-.work { font-family: "Work Sans", "Inter", sans-serif }
-.mono { font-family: ui-monospace, "SFMono-Regular", Menlo, monospace }
+.work {
+  font-family: "Work Sans", "Inter", sans-serif;
+}
+.mono {
+  font-family: ui-monospace, "SFMono-Regular", Menlo, monospace;
+}
 
 /* ---------- Skip link ---------- */
 .skip-link {
@@ -55,7 +68,7 @@ button { font-family: inherit }
   top: 0;
   z-index: 30;
   background: var(--weiss);
-  border-bottom: 1px solid #6F003C;
+  border-bottom: 1px solid #6f003c;
   display: flex;
   align-items: center;
   justify-content: space-between;
@@ -93,10 +106,12 @@ button { font-family: inherit }
   cursor: pointer;
 }
 
-.topbar nav a:hover { opacity: 1 }
+.topbar nav a:hover {
+  opacity: 1;
+}
 
 .topbar .cta {
-  background: #6F003C;
+  background: #6f003c;
   color: #fff;
   border: none;
   padding: 10px 18px;
@@ -108,11 +123,18 @@ button { font-family: inherit }
   letter-spacing: 0.01em;
 }
 
-.topbar .cta:hover { background: var(--rot) }
+.topbar .cta:hover {
+  background: var(--rot);
+}
 
 @media (max-width: 780px) {
-  .topbar nav { display: none }
-  .topbar .cta { font-size: 13px; padding: 8px 14px }
+  .topbar nav {
+    display: none;
+  }
+  .topbar .cta {
+    font-size: 13px;
+    padding: 8px 14px;
+  }
 }
 
 /* ---------- Hero ---------- */
@@ -121,7 +143,7 @@ button { font-family: inherit }
   background: var(--fond);
   padding: 64px 28px 72px;
   overflow: hidden;
-  border-bottom: 1px solid #6F003C;
+  border-bottom: 1px solid #6f003c;
 }
 
 .hero-inner {
@@ -170,8 +192,13 @@ button { font-family: inherit }
 }
 
 @keyframes pulse {
-  0%, 100% { opacity: 0.4 }
-  50% { opacity: 1 }
+  0%,
+  100% {
+    opacity: 0.4;
+  }
+  50% {
+    opacity: 1;
+  }
 }
 
 h1.headline {
@@ -181,14 +208,18 @@ h1.headline {
   line-height: 0.92;
   letter-spacing: -0.025em;
   margin: 0 0 24px;
-  color: #6F003C;
+  color: #6f003c;
   max-width: 14ch;
   position: relative;
   z-index: 3;
 }
 
-h1.headline .light { font-weight: 300 }
-h1.headline .rot { color: var(--rot) }
+h1.headline .light {
+  font-weight: 300;
+}
+h1.headline .rot {
+  color: var(--rot);
+}
 
 h1.headline .banner {
   background: var(--rot);
@@ -204,13 +235,13 @@ h1.headline .banner {
   line-height: 1.25;
   max-width: 38ch;
   margin: 0 0 32px;
-  color: #6F003C;
+  color: #6f003c;
   position: relative;
   z-index: 3;
   background: #fff;
   display: inline-block;
   padding: 18px 24px;
-  border: 1.5px solid #6F003C;
+  border: 1.5px solid #6f003c;
   box-shadow: 10px 10px 0 var(--rot);
 }
 
@@ -225,17 +256,19 @@ h1.headline .banner {
 }
 
 @media (max-width: 900px) {
-  .hero-row { grid-template-columns: 1fr }
+  .hero-row {
+    grid-template-columns: 1fr;
+  }
 }
 
 .counter-card {
-  background: #6F003C;
+  background: #6f003c;
   color: #fff;
   padding: 28px 30px 24px;
   display: flex;
   flex-direction: column;
   gap: 6px;
-  border: 1px solid #6F003C;
+  border: 1px solid #6f003c;
   box-shadow: 10px 10px 0 var(--rot);
 }
 
@@ -271,7 +304,7 @@ h1.headline .banner {
 
 .counter-card .goal-bar {
   height: 6px;
-  background: #6F003C;
+  background: #6f003c;
   margin-top: 14px;
   position: relative;
   overflow: hidden;
@@ -298,27 +331,29 @@ h1.headline .banner {
   font-family: "Work Sans";
   font-weight: 700;
   font-size: 14px;
-  color: #6F003C;
+  color: #6f003c;
   background: #fff;
-  border: 1.5px solid #6F003C;
+  border: 1.5px solid #6f003c;
   padding: 14px 20px;
   cursor: pointer;
-  transition: transform 0.15s ease, background 0.15s ease, color 0.15s ease;
+  transition:
+    transform 0.15s ease,
+    background 0.15s ease,
+    color 0.15s ease;
   text-decoration: none;
 }
 
 .scrollcta:hover {
-  background: #6F003C;
+  background: #6f003c;
   color: #fff;
   transform: translate(-2px, -2px);
   box-shadow: 4px 4px 0 var(--rot);
 }
 
-
 /* ---------- Brief ---------- */
 .section {
   padding: 96px 28px;
-  border-bottom: 1px solid #6F003C;
+  border-bottom: 1px solid #6f003c;
 }
 
 .section-inner {
@@ -357,7 +392,10 @@ h1.headline .banner {
 }
 
 @media (max-width: 900px) {
-  .brief-wrap { grid-template-columns: 1fr; gap: 32px }
+  .brief-wrap {
+    grid-template-columns: 1fr;
+    gap: 32px;
+  }
 }
 
 .brief-meta {
@@ -375,7 +413,9 @@ h1.headline .banner {
   margin-top: 18px;
 }
 
-.brief-meta dt:first-child { margin-top: 0 }
+.brief-meta dt:first-child {
+  margin-top: 0;
+}
 
 .brief-meta dd {
   margin: 4px 0 0;
@@ -385,13 +425,15 @@ h1.headline .banner {
 .brief-paper {
   background: var(--fond);
   padding: 56px 64px;
-  border: 1px solid #6F003C;
-  box-shadow: 12px 12px 0 #6F003C;
+  border: 1px solid #6f003c;
+  box-shadow: 12px 12px 0 #6f003c;
   position: relative;
 }
 
 @media (max-width: 600px) {
-  .brief-paper { padding: 36px 28px }
+  .brief-paper {
+    padding: 36px 28px;
+  }
 }
 
 .brief-paper::before {
@@ -425,20 +467,12 @@ h1.headline .banner {
   font-size: 16.5px;
   line-height: 1.65;
   margin: 0 0 18px;
-  color: #6F003C;
+  color: #6f003c;
 }
 
-.brief-paper p.lead::first-letter {
-  font-family: "Work Sans";
-  font-weight: 900;
-  font-size: 42px;
-  float: left;
-  line-height: 0.85;
-  padding: 6px 10px 0 0;
-  color: var(--rot);
+.brief-paper p strong {
+  font-weight: 700;
 }
-
-.brief-paper p strong { font-weight: 700 }
 
 .brief-paper .gruss {
   font-family: "Work Sans";
@@ -468,10 +502,10 @@ h1.headline .banner {
 
 /* ---------- Forderungen Strip ---------- */
 .demands {
-  background: #6F003C;
+  background: #6f003c;
   color: #fff;
   padding: 72px 28px;
-  border-bottom: 1px solid #6F003C;
+  border-bottom: 1px solid #6f003c;
 }
 
 .demands-inner {
@@ -497,16 +531,18 @@ h1.headline .banner {
   display: grid;
   grid-template-columns: repeat(3, 1fr);
   gap: 1px;
-  background: #6F003C;
-  border: 1px solid #6F003C;
+  background: #6f003c;
+  border: 1px solid #6f003c;
 }
 
 @media (max-width: 780px) {
-  .demands-grid { grid-template-columns: 1fr }
+  .demands-grid {
+    grid-template-columns: 1fr;
+  }
 }
 
 .demand {
-  background: #6F003C;
+  background: #6f003c;
   padding: 32px;
   display: flex;
   flex-direction: column;
@@ -539,7 +575,9 @@ h1.headline .banner {
 }
 
 /* ---------- Unterschreiben Section ---------- */
-.sign-section { background: var(--weiss) }
+.sign-section {
+  background: var(--weiss);
+}
 
 .sign-grid {
   display: grid;
@@ -548,7 +586,10 @@ h1.headline .banner {
 }
 
 @media (max-width: 900px) {
-  .sign-grid { grid-template-columns: 1fr; gap: 40px }
+  .sign-grid {
+    grid-template-columns: 1fr;
+    gap: 40px;
+  }
 }
 
 .sign-intro h2 {
@@ -560,7 +601,9 @@ h1.headline .banner {
   letter-spacing: -0.025em;
 }
 
-.sign-intro h2 .rot { color: var(--rot) }
+.sign-intro h2 .rot {
+  color: var(--rot);
+}
 
 .sign-intro .lead {
   font-family: "Work Sans";
@@ -599,28 +642,30 @@ h1.headline .banner {
   font-size: 13px;
   color: var(--grau);
   line-height: 1.55;
-  border-top: 1px solid #6F003C;
+  border-top: 1px solid #6f003c;
   padding-top: 18px;
   margin-top: 22px;
 }
 
 .form-card {
   background: var(--fond);
-  border: 1px solid #6F003C;
+  border: 1px solid #6f003c;
   padding: 36px;
   box-shadow: 14px 14px 0 var(--rot);
   position: relative;
 }
 
 @media (max-width: 600px) {
-  .form-card { padding: 24px }
+  .form-card {
+    padding: 24px;
+  }
 }
 
 .form-card .badge {
   position: absolute;
   top: -14px;
   left: 24px;
-  background: #6F003C;
+  background: #6f003c;
   color: #fff;
   font-family: "Work Sans";
   font-weight: 700;
@@ -645,7 +690,9 @@ h1.headline .banner {
   line-height: 1.5;
 }
 
-.field { margin-bottom: 16px }
+.field {
+  margin-bottom: 16px;
+}
 
 .field label {
   display: block;
@@ -673,12 +720,16 @@ h1.headline .banner {
   font-size: 15px;
   font-family: "Inter", sans-serif;
   background: #fff;
-  border: 1.5px solid #6F003C;
+  border: 1.5px solid #6f003c;
   outline: none;
-  transition: box-shadow 0.1s ease, transform 0.1s ease;
+  transition:
+    box-shadow 0.1s ease,
+    transform 0.1s ease;
 }
 
-.field input:focus { box-shadow: 4px 4px 0 var(--rot) }
+.field input:focus {
+  box-shadow: 4px 4px 0 var(--rot);
+}
 
 .field .err {
   color: #b00020;
@@ -712,7 +763,7 @@ h1.headline .banner {
   appearance: none;
   width: 20px;
   height: 20px;
-  border: 1.5px solid #6F003C;
+  border: 1.5px solid #6f003c;
   background: #fff;
   flex-shrink: 0;
   margin-top: 1px;
@@ -739,9 +790,9 @@ h1.headline .banner {
 
 .submit {
   width: 100%;
-  background: #6F003C;
+  background: #6f003c;
   color: #fff;
-  border: 1.5px solid #6F003C;
+  border: 1.5px solid #6f003c;
   padding: 18px;
   font-family: "Work Sans";
   font-weight: 900;
@@ -752,13 +803,16 @@ h1.headline .banner {
   align-items: center;
   justify-content: center;
   gap: 10px;
-  transition: background 0.15s ease, transform 0.1s ease, box-shadow 0.1s ease;
+  transition:
+    background 0.15s ease,
+    transform 0.1s ease,
+    box-shadow 0.1s ease;
 }
 
 .submit:hover:not(:disabled) {
   background: var(--rot);
   transform: translate(-2px, -2px);
-  box-shadow: 6px 6px 0 #6F003C;
+  box-shadow: 6px 6px 0 #6f003c;
 }
 
 .submit:disabled {
@@ -766,8 +820,12 @@ h1.headline .banner {
   cursor: not-allowed;
 }
 
-.submit .arrow { transition: transform 0.15s ease }
-.submit:hover .arrow { transform: translateX(4px) }
+.submit .arrow {
+  transition: transform 0.15s ease;
+}
+.submit:hover .arrow {
+  transform: translateX(4px);
+}
 
 /* ---------- Modal ---------- */
 .modal-overlay {
@@ -783,13 +841,17 @@ h1.headline .banner {
 }
 
 @keyframes fadein {
-  from { opacity: 0 }
-  to { opacity: 1 }
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
 }
 
 .modal {
   background: #fff;
-  border: 1px solid #6F003C;
+  border: 1px solid #6f003c;
   max-width: 520px;
   width: 100%;
   box-shadow: 16px 16px 0 var(--rot);
@@ -798,8 +860,14 @@ h1.headline .banner {
 }
 
 @keyframes pop {
-  from { transform: translateY(20px) scale(0.97); opacity: 0 }
-  to { transform: translateY(0) scale(1); opacity: 1 }
+  from {
+    transform: translateY(20px) scale(0.97);
+    opacity: 0;
+  }
+  to {
+    transform: translateY(0) scale(1);
+    opacity: 1;
+  }
 }
 
 .modal-head {
@@ -841,7 +909,7 @@ h1.headline .banner {
 
 .modal-body .email-pill {
   display: inline-block;
-  background: #6F003C;
+  background: #6f003c;
   color: #fff;
   font-family: ui-monospace, monospace;
   font-size: 13px;
@@ -853,19 +921,23 @@ h1.headline .banner {
   width: 100%;
   margin-top: 18px;
   padding: 16px;
-  background: #6F003C;
+  background: #6f003c;
   color: #fff;
-  border: 1.5px solid #6F003C;
+  border: 1.5px solid #6f003c;
   font-family: "Work Sans";
   font-weight: 900;
   font-size: 16px;
   cursor: pointer;
 }
 
-.modal-body .confirm-btn:hover { background: var(--rot) }
+.modal-body .confirm-btn:hover {
+  background: var(--rot);
+}
 
 /* Success modal */
-.modal.success .modal-head { background: #0a7a3a }
+.modal.success .modal-head {
+  background: #0a7a3a;
+}
 
 .modal.success .check-anim {
   width: 80px;
@@ -880,9 +952,15 @@ h1.headline .banner {
 }
 
 @keyframes bounce {
-  0% { transform: scale(0) }
-  60% { transform: scale(1.15) }
-  100% { transform: scale(1) }
+  0% {
+    transform: scale(0);
+  }
+  60% {
+    transform: scale(1.15);
+  }
+  100% {
+    transform: scale(1);
+  }
 }
 
 .modal.success .check-anim svg {
@@ -894,7 +972,7 @@ h1.headline .banner {
 /* ---------- Unterzeichner Section ---------- */
 .signers-section {
   background: var(--fond);
-  border-bottom: 1px solid #6F003C;
+  border-bottom: 1px solid #6f003c;
 }
 
 .signers-head {
@@ -923,7 +1001,7 @@ h1.headline .banner {
 }
 
 .signers-head .total b {
-  color: #6F003C;
+  color: #6f003c;
   font-weight: 900;
   font-size: 30px;
 }
@@ -932,13 +1010,15 @@ h1.headline .banner {
   display: grid;
   grid-template-columns: repeat(4, 1fr);
   gap: 1px;
-  background: #6F003C;
-  border: 1px solid #6F003C;
+  background: #6f003c;
+  border: 1px solid #6f003c;
   margin-bottom: 48px;
 }
 
 @media (max-width: 780px) {
-  .stats-row { grid-template-columns: repeat(2, 1fr) }
+  .stats-row {
+    grid-template-columns: repeat(2, 1fr);
+  }
 }
 
 .stat {
@@ -972,25 +1052,27 @@ h1.headline .banner {
 }
 
 .filter-chip {
-  border: 1.5px solid #6F003C;
+  border: 1.5px solid #6f003c;
   background: transparent;
-  color: #6F003C;
+  color: #6f003c;
   padding: 8px 14px;
   min-height: 44px;
   font-family: "Work Sans";
   font-weight: 700;
   font-size: 13px;
   cursor: pointer;
-  transition: background 0.12s ease, color 0.12s ease;
+  transition:
+    background 0.12s ease,
+    color 0.12s ease;
 }
 
 .filter-chip:hover {
-  background: #6F003C;
+  background: #6f003c;
   color: #fff;
 }
 
 .filter-chip.active {
-  background: #6F003C;
+  background: #6f003c;
   color: #fff;
 }
 
@@ -998,7 +1080,7 @@ h1.headline .banner {
   flex: 1;
   min-width: 200px;
   padding: 8px 14px;
-  border: 1.5px solid #6F003C;
+  border: 1.5px solid #6f003c;
   font-family: "Inter", sans-serif;
   font-size: 14px;
   background: #fff;
@@ -1008,12 +1090,14 @@ h1.headline .banner {
   display: grid;
   grid-template-columns: repeat(3, 1fr);
   gap: 1px;
-  background: #6F003C;
-  border: 1px solid #6F003C;
+  background: #6f003c;
+  border: 1px solid #6f003c;
 }
 
 @media (max-width: 780px) {
-  .signers-grid { grid-template-columns: 1fr }
+  .signers-grid {
+    grid-template-columns: 1fr;
+  }
 }
 
 .signer {
@@ -1031,14 +1115,20 @@ h1.headline .banner {
 }
 
 @keyframes newrow {
-  0% { background: var(--rot); color: #fff }
-  100% { background: var(--fond); color: inherit }
+  0% {
+    background: var(--rot);
+    color: #fff;
+  }
+  100% {
+    background: var(--fond);
+    color: inherit;
+  }
 }
 
 .signer .avatar {
   width: 42px;
   height: 42px;
-  background: #6F003C;
+  background: #6f003c;
   color: #fff;
   display: flex;
   align-items: center;
@@ -1089,8 +1179,8 @@ h1.headline .banner {
 
 .signers-foot button {
   background: transparent;
-  border: 1.5px solid #6F003C;
-  color: #6F003C;
+  border: 1.5px solid #6f003c;
+  color: #6f003c;
   padding: 10px 18px;
   font-family: "Work Sans";
   font-weight: 700;
@@ -1099,7 +1189,7 @@ h1.headline .banner {
 }
 
 .signers-foot button:hover {
-  background: #6F003C;
+  background: #6f003c;
   color: #fff;
 }
 
@@ -1108,7 +1198,7 @@ footer {
   background: #fff;
   color: var(--schwarz);
   padding: 64px 28px 32px;
-  border-top: 1px solid #6F003C;
+  border-top: 1px solid #6f003c;
 }
 
 .footer-inner {
@@ -1124,7 +1214,10 @@ footer {
 }
 
 @media (max-width: 780px) {
-  .footer-top { grid-template-columns: 1fr; gap: 32px }
+  .footer-top {
+    grid-template-columns: 1fr;
+    gap: 32px;
+  }
 }
 
 .footer-top h3 {
@@ -1145,7 +1238,9 @@ footer {
   margin-bottom: 6px;
 }
 
-.footer-top a:hover { color: var(--schwarz) }
+.footer-top a:hover {
+  color: var(--schwarz);
+}
 
 .footer-disclaimer {
   background: var(--fond);
@@ -1206,7 +1301,7 @@ footer {
   left: 0;
   right: 0;
   background: #fff;
-  border: 1.5px solid #6F003C;
+  border: 1.5px solid #6f003c;
   border-top: none;
   z-index: 10;
   max-height: 200px;
