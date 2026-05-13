@@ -10,7 +10,7 @@ import {
 import { sendVerificationEmail } from "./email.js";
 import { checkRateLimit } from "./ratelimit.js";
 
-const PORT = parseInt(process.env.PORT || "3001", 10);
+const PORT = parseInt(process.env.PORT || "3000", 10);
 const BASE_URL = process.env.BASE_URL || `http://localhost:${PORT}`;
 const isDev = process.env.NODE_ENV !== "production";
 

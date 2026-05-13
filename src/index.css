@@ -1,7 +1,7 @@
 :root {
   --rot: #ff0000;
   --weiss: #ffffff;
-  --schwarz: #111111;
+  --schwarz: #6F003C;
   --akzent: #6f003c;
   --akzent-hell: #ff0000;
   --fond: #f4f1ec;
@@ -271,7 +271,7 @@ h1.headline .banner {
 
 .counter-card .goal-bar {
   height: 6px;
-  background: #222;
+  background: #6F003C;
   margin-top: 14px;
   position: relative;
   overflow: hidden;
@@ -425,13 +425,13 @@ h1.headline .banner {
   font-size: 16.5px;
   line-height: 1.65;
   margin: 0 0 18px;
-  color: #111;
+  color: #6F003C;
 }
 
 .brief-paper p.lead::first-letter {
   font-family: "Work Sans";
   font-weight: 900;
-  font-size: 62px;
+  font-size: 42px;
   float: left;
   line-height: 0.85;
   padding: 6px 10px 0 0;
@@ -497,8 +497,8 @@ h1.headline .banner {
   display: grid;
   grid-template-columns: repeat(3, 1fr);
   gap: 1px;
-  background: #222;
-  border: 1px solid #222;
+  background: #6F003C;
+  border: 1px solid #6F003C;
 }
 
 @media (max-width: 780px) {
@@ -974,6 +974,7 @@ h1.headline .banner {
 .filter-chip {
   border: 1.5px solid #6F003C;
   background: transparent;
+  color: #6F003C;
   padding: 8px 14px;
   min-height: 44px;
   font-family: "Work Sans";
