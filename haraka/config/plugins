@@ -2,5 +2,4 @@ process_title
 srs_forward
 aliases
 relay
-dkim_sign
-queue/outbound
+dkim
