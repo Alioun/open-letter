@@ -1,0 +1,61 @@
+Resend Email Setup — gehaltsdeckel.jetzt
+========================================
+
+GOAL: Send transactional emails FROM noreply@gehaltsdeckel.jetzt through
+      Resend. Cloudflare Email Routing can remain active for inbound mail.
+
+RESEND API
+----------
+  Endpoint: https://api.resend.com/emails
+  Auth:     Authorization: Bearer <RESEND_API_KEY>
+  Sender:   "Gehaltsdeckel Initiative" <noreply@gehaltsdeckel.jetzt>
+
+
+STEP 1 — Verify the domain in Resend
+------------------------------------
+In the Resend dashboard, add and verify:
+
+  gehaltsdeckel.jetzt
+
+Resend will show the DNS records required for SPF/DKIM/domain verification.
+Add those records in Cloudflare exactly as Resend shows them. Leave existing
+Cloudflare Email Routing MX records alone unless Resend explicitly says a
+record conflicts.
+
+
+STEP 2 — Create an API key
+--------------------------
+Create a Resend API key with send access and add it to the server environment:
+
+  RESEND_API_KEY=re_...
+  RESEND_FROM="Gehaltsdeckel Initiative" <noreply@gehaltsdeckel.jetzt>
+
+RESEND_FROM is optional. If it is not set, the app uses the value above.
+
+
+STEP 3 — Deploy
+---------------
+On the server:
+
+  docker compose up -d --build
+
+The app sends directly to Resend's HTTP API. SMTP, mailbox.org, and Haraka are
+not part of the production mail path.
+
+
+STEP 4 — Verify
+---------------
+Watch app logs:
+
+  docker compose logs -f app
+
+A successful send looks like:
+
+  [email] sent via=resend auth=yes toDomain=example.org messageId=<resend-id>
+
+If the app exits with "Production email requires RESEND_API_KEY", add
+RESEND_API_KEY to the deployment environment.
+
+If Resend rejects a message, the app logs a "Resend email failed" error with
+the HTTP status and API message. Check that gehaltsdeckel.jetzt is verified in
+Resend and that RESEND_FROM uses that verified domain.

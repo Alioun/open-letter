@@ -10,10 +10,8 @@ services:
       - ADMIN_PATH=${ADMIN_PATH}
       - ADMIN_PASSWORD=${ADMIN_PASSWORD}
       - ADMIN_JWT_SECRET=${ADMIN_JWT_SECRET}
-      - SMTP_HOST=smtp.mailbox.org
-      - SMTP_PORT=587
-      - SMTP_USER=${MAILBOX_USER}
-      - SMTP_PASS=${MAILBOX_PASSWORD}
+      - RESEND_API_KEY=${RESEND_API_KEY}
+      - RESEND_FROM=${RESEND_FROM:-"Gehaltsdeckel Initiative" <noreply@gehaltsdeckel.jetzt>}
     depends_on:
       db:
         condition: service_healthy

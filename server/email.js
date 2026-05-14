@@ -1,35 +1,16 @@
-import nodemailer from "nodemailer";
 import juice from "juice";
 import { getEmailTemplateBySlug, getNewsletterStats } from "./db.js";
 
-const smtpHost = process.env.SMTP_HOST || "smtp.mailbox.org";
-const smtpPort = parseInt(process.env.SMTP_PORT || "587", 10);
-const smtpUser = process.env.SMTP_USER || "";
-const smtpPass = process.env.SMTP_PASS || "";
-const hasSmtpAuth = Boolean(smtpUser);
+const resendApiKey = process.env.RESEND_API_KEY || "";
+const resendFrom =
+  process.env.RESEND_FROM ||
+  '"Gehaltsdeckel Initiative" <noreply@gehaltsdeckel.jetzt>';
+const resendEndpoint = "https://api.resend.com/emails";
+const transportSummary = `resend auth=${resendApiKey ? "yes" : "no"}`;
 
-if (!Number.isInteger(smtpPort)) {
-  throw new Error(`Invalid SMTP_PORT: ${process.env.SMTP_PORT}`);
+if (process.env.NODE_ENV === "production" && !resendApiKey) {
+  throw new Error("Production email requires RESEND_API_KEY");
 }
-
-if (smtpUser && !smtpPass) {
-  throw new Error("SMTP_PASS must be set when SMTP_USER is set");
-}
-
-if (process.env.NODE_ENV === "production" && (!smtpUser || !smtpPass)) {
-  throw new Error("Production email requires SMTP_USER and SMTP_PASS");
-}
-
-const transportSummary = `${smtpHost}:${smtpPort} auth=${hasSmtpAuth ? "yes" : "no"}`;
-
-export const transporter = nodemailer.createTransport({
-  host: smtpHost,
-  port: smtpPort,
-  secure: false,
-  ...(hasSmtpAuth ? { auth: { user: smtpUser, pass: smtpPass } } : {}),
-});
-
-const from = '"Gehaltsdeckel Initiative" <noreply@gehaltsdeckel.jetzt>';
 
 const fallbackTemplates = {
   verification: {
@@ -127,15 +108,34 @@ export async function sendRenderedEmail({ to, subject, html }) {
   console.log(
     `[email] sending via=${transportSummary} toDomain=${toDomain} subject="${subject}"`,
   );
-  const info = await transporter.sendMail({
-    from,
-    to,
-    subject,
-    html,
-    text: htmlToText(html),
+
+  if (!resendApiKey) {
+    throw new Error("RESEND_API_KEY is required to send email");
+  }
+
+  const response = await fetch(resendEndpoint, {
+    method: "POST",
+    headers: {
+      Authorization: `Bearer ${resendApiKey}`,
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({
+      from: resendFrom,
+      to,
+      subject,
+      html,
+      text: htmlToText(html),
+    }),
   });
+
+  const result = await response.json().catch(() => ({}));
+  if (!response.ok) {
+    const message = result?.message || result?.error || response.statusText;
+    throw new Error(`Resend email failed: ${response.status} ${message}`);
+  }
+
   console.log(
-    `[email] sent via=${transportSummary} toDomain=${toDomain} messageId=${info.messageId} response="${info.response || ""}"`,
+    `[email] sent via=${transportSummary} toDomain=${toDomain} messageId=${result.id || ""}`,
   );
 }
 

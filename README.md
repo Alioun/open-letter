@@ -8,7 +8,7 @@ Campaign landing page for an open letter by the base of Die Linke demanding caps
 - **Frontend**: React 18, vanilla CSS
 - **Backend**: `Bun.serve()` with route handlers
 - **Database**: PostgreSQL 18 via [postgres.js](https://github.com/porsager/postgres)
-- **Email**: nodemailer via authenticated mailbox.org SMTP
+- **Email**: Resend HTTP API for transactional mail
 
 ## Project Structure
 
@@ -30,7 +30,7 @@ diaetendeckel/
 ├── server/
 │   ├── index.js               # Bun.serve() — routes + security headers
 │   ├── db.js                  # Parameterized Postgres queries
-│   ├── email.js               # Email templates + SMTP transport
+│   ├── email.js               # Email templates + Resend transport
 │   └── ratelimit.js           # In-memory sliding window rate limiter
 └── src/
     ├── main.jsx               # React entry point
@@ -77,8 +77,8 @@ This starts Postgres 18, creates the schema, seeds 200 verified signers, trickle
 | `ADMIN_PATH`       | Yes        | —                       | Secret single-segment admin path, without leading or trailing slashes. Use `my-secret-panel`, not `/my-secret-panel`. |
 | `ADMIN_PASSWORD`   | Yes        | —                       | Admin login password                                                                                                  |
 | `ADMIN_JWT_SECRET` | Yes        | —                       | Long random secret for admin session JWTs                                                                             |
-| `MAILBOX_USER`     | Yes (prod) | —                       | mailbox.org account address used for SMTP auth                                                                        |
-| `MAILBOX_PASSWORD` | Yes (prod) | —                       | mailbox.org account password                                                                                          |
+| `RESEND_API_KEY`   | Yes (prod) | —                       | Resend API key used to send transactional email                                                                       |
+| `RESEND_FROM`      | No         | `Gehaltsdeckel Initiative <noreply@gehaltsdeckel.jetzt>` | Verified sender used for outbound email                                                  |
 
 See `.env.example` for a template.
 
@@ -119,7 +119,7 @@ See `.env.example` for a template.
 - Validates: name >= 2 chars, valid email format
 - Sanitizes all inputs (trim, strip HTML, length cap)
 - Generates a UUID token with 24h expiry
-- Sends verification email (console log in dev)
+- Sends verification email through Resend
 - Returns `{ok: true}` regardless of whether the email already exists (no information leakage)
 
 ### GET /api/signers
@@ -147,9 +147,9 @@ Schema creation is idempotent (`IF NOT EXISTS`) — safe to run on every contain
 
 ## Email
 
-**Dev/demo:** Set `MAILBOX_USER` and `MAILBOX_PASSWORD` to test real email delivery via mailbox.org. Without SMTP credentials, development starts but email submission will fail when a route tries to send mail.
+**Dev/demo:** Set `RESEND_API_KEY` to test real email delivery through Resend. Without an API key, development starts but email submission will fail when a route tries to send mail.
 
-**Production:** `MAILBOX_USER` and `MAILBOX_PASSWORD` are required. The app sends directly via `smtp.mailbox.org:587` (STARTTLS) using nodemailer; Haraka is not part of the production mail path. See `mailbox-smtp-setup.txt` for the mailbox.org sender alias and DNS setup (SPF, DKIM, DMARC) required to send from `noreply@gehaltsdeckel.jetzt`.
+**Production:** `RESEND_API_KEY` is required. The app sends directly to Resend's Email API; SMTP, mailbox.org, and Haraka are not part of the production mail path. See `resend-email-setup.txt` for the Resend domain verification and deployment setup.
 
 ## Security
 
@@ -171,8 +171,8 @@ Set in Dokploy UI or `.env`:
 
 - `DB_PASSWORD` — strong random password
 - `BASE_URL` — public URL (e.g. `https://diaetendeckel.example.de`)
-- `MAILBOX_USER` — mailbox.org account address used for SMTP auth
-- `MAILBOX_PASSWORD` — mailbox.org account password
+- `RESEND_API_KEY` — Resend API key with send access
+- `RESEND_FROM` — optional verified sender override
 
 ### Production with external Postgres
 
