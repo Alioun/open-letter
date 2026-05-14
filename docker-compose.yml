@@ -54,7 +54,11 @@ services:
       - ./haraka/config/dkim:/haraka/config/dkim:ro
     restart: unless-stopped
     healthcheck:
-      test: ["CMD-SHELL", "node -e \"require('net').createConnection(587,'127.0.0.1').on('connect',()=>process.exit(0)).on('error',()=>process.exit(1))\""]
+      test:
+        [
+          "CMD-SHELL",
+          'node -e "require(''net'').createConnection(587,''127.0.0.1'').on(''connect'',()=>process.exit(0)).on(''error'',()=>process.exit(1))"',
+        ]
       interval: 30s
       timeout: 5s
       retries: 3
