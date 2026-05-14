@@ -93,16 +93,19 @@ export function htmlToText(html) {
 }
 
 export async function sendRenderedEmail({ to, subject, html }) {
-  await transporter.sendMail({
+  console.log(`[email] sending to=${to} subject="${subject}"`);
+  const info = await transporter.sendMail({
     from,
     to,
     subject,
     html,
     text: htmlToText(html),
   });
+  console.log(`[email] sent to=${to} messageId=${info.messageId}`);
 }
 
 export async function sendDeletionEmail({ to, token, baseUrl }) {
+  console.log(`[email] deletion request to=${to}`);
   const deleteUrl = `${baseUrl}/api/delete/${token}`;
   const rendered = await renderTemplateBySlug("deletion", { deleteUrl });
 
@@ -114,6 +117,7 @@ export async function sendDeletionEmail({ to, token, baseUrl }) {
 }
 
 export async function sendVerificationEmail({ to, name, token, baseUrl }) {
+  console.log(`[email] verification to=${to} name="${name}"`);
   const confirmUrl = `${baseUrl}/api/confirm/${token}`;
   const rendered = await renderTemplateBySlug("verification", {
     name,

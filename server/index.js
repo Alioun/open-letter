@@ -197,6 +197,9 @@ async function sleep(ms) {
 async function sendCampaign(campaign) {
   const template = await getEmailTemplate(campaign.template_id);
   if (!template) {
+    console.error(
+      `[campaign] ${campaign.id} template ${campaign.template_id} not found — aborting`,
+    );
     await markCampaignFailed(campaign.id, 0);
     return;
   }
@@ -205,6 +208,10 @@ async function sendCampaign(campaign) {
   const stats = await getNewsletterStats();
   const signerCount = stats.signerCount?.toLocaleString("de-DE") || "0";
   let sent = 0;
+
+  console.log(
+    `[campaign] ${campaign.id} starting — ${recipients.length} recipients, subject="${campaign.subject}"`,
+  );
 
   try {
     for (let i = 0; i < recipients.length; i += 50) {
@@ -229,12 +236,18 @@ async function sendCampaign(campaign) {
         sent += 1;
       }
 
+      console.log(
+        `[campaign] ${campaign.id} progress — ${sent}/${recipients.length} sent`,
+      );
       if (i + 50 < recipients.length) await sleep(1000);
     }
 
+    console.log(
+      `[campaign] ${campaign.id} done — ${sent}/${recipients.length} sent`,
+    );
     await markCampaignSent(campaign.id, sent);
   } catch (err) {
-    console.error(`Campaign ${campaign.id} failed:`, err);
+    console.error(`[campaign] ${campaign.id} failed after ${sent} sent:`, err);
     await markCampaignFailed(campaign.id, sent);
   }
 }
