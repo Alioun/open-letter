@@ -51,7 +51,7 @@ const KREISVERBAENDE = [
   "Osnabrück",
 ];
 
-const ZIEL = 5000;
+const ZIEL = 100;
 
 function initials(name) {
   const parts = (name || "").trim().split(/\s+/);
