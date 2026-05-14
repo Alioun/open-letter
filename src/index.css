@@ -1002,7 +1002,7 @@ h1.headline .banner {
   border: 1px solid var(--akzent);
   max-width: 520px;
   width: 100%;
-  box-shadow: 16px 16px 0 var(--rot);
+  box-shadow: 16px 16px 0 var(--akzent);
   position: relative;
   animation: pop 0.25s cubic-bezier(0.2, 0.7, 0.2, 1);
 }
@@ -1536,7 +1536,7 @@ footer {
 
 @media (max-width: 520px) {
   .modal {
-    box-shadow: 8px 8px 0 var(--rot);
+    box-shadow: 8px 8px 0 var(--akzent);
     margin: 0 8px;
   }
 }
