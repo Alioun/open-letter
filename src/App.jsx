@@ -130,6 +130,7 @@ export default function App() {
   const [emailModal, setEmailModal] = useState(null);
   const [showSuccess, setShowSuccess] = useState(false);
   const [submitError, setSubmitError] = useState(null);
+  const [navOpen, setNavOpen] = useState(false);
 
   const emailTrapRef = useFocusTrap(!!emailModal);
   const successTrapRef = useFocusTrap(showSuccess);
@@ -261,11 +262,12 @@ export default function App() {
       if (e.key === "Escape") {
         if (showSuccess) closeSuccess();
         else if (emailModal) closeModal();
+        else if (navOpen) setNavOpen(false);
       }
     }
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-  }, [showSuccess, emailModal]);
+  }, [showSuccess, emailModal, navOpen]);
 
   const total = stats.total;
   const pct = Math.min(100, Math.round((total / ZIEL) * 100));
@@ -276,9 +278,9 @@ export default function App() {
         Zum Inhalt springen
       </a>
 
-      <div className="topbar" role="banner">
+      <header className="topbar">
         <div className="wordmark">
-          <span className="dot"></span> Gehaltsdeckel jetzt.
+          <span className="dot" aria-hidden="true"></span> Gehaltsdeckel jetzt.
         </div>
         <nav aria-label="Hauptnavigation">
           <a
@@ -306,13 +308,73 @@ export default function App() {
               scrollTo("liste");
             }}
           >
-            Unterstützer:innen
+            Unterstützer*innen
           </a>
         </nav>
-        <button className="cta" onClick={() => scrollTo("unterzeichnen")}>
-          Mitzeichnen →
+        <button className="cta topbar-cta" onClick={() => scrollTo("unterzeichnen")}>
+          Mitzeichnen <span aria-hidden="true">→</span>
         </button>
-      </div>
+        <button
+          className={"hamburger" + (navOpen ? " open" : "")}
+          aria-label={navOpen ? "Menü schließen" : "Menü öffnen"}
+          aria-expanded={navOpen}
+          aria-controls="mobile-nav"
+          onClick={() => setNavOpen((v) => !v)}
+        >
+          <span></span>
+          <span></span>
+          <span></span>
+        </button>
+      </header>
+      {navOpen && (
+        <nav
+          id="mobile-nav"
+          className="mobile-nav"
+          aria-label="Mobilnavigation"
+        >
+          <a
+            href="#brief"
+            onClick={(e) => {
+              e.preventDefault();
+              setNavOpen(false);
+              scrollTo("brief");
+            }}
+          >
+            Brief
+          </a>
+          <a
+            href="#unterzeichnen"
+            onClick={(e) => {
+              e.preventDefault();
+              setNavOpen(false);
+              scrollTo("unterzeichnen");
+            }}
+          >
+            Unterzeichnen
+          </a>
+          <a
+            href="#liste"
+            onClick={(e) => {
+              e.preventDefault();
+              setNavOpen(false);
+              scrollTo("liste");
+            }}
+          >
+            Unterstützer*innen
+          </a>
+          <a
+            href="#unterzeichnen"
+            className="mobile-nav-cta"
+            onClick={(e) => {
+              e.preventDefault();
+              setNavOpen(false);
+              scrollTo("unterzeichnen");
+            }}
+          >
+            Jetzt mitzeichnen <span aria-hidden="true">→</span>
+          </a>
+        </nav>
+      )}
 
       <main id="main">
         <section
@@ -340,7 +402,7 @@ export default function App() {
                 </div>
                 <div className="meta">
                   Ziel: {ZIEL.toLocaleString("de-DE")} verifizierte
-                  Mitzeichner:innen
+                  Mitzeichner*innen
                 </div>
                 <div
                   className="goal-bar"
@@ -376,15 +438,15 @@ export default function App() {
                   className="scrollcta"
                   onClick={() => scrollTo("unterzeichnen")}
                 >
-                  Jetzt mitzeichnen <span>→</span>
+                  Jetzt mitzeichnen <span aria-hidden="true">→</span>
                 </button>
                 <button
                   className="scrollcta"
                   onClick={() => scrollTo("brief")}
                   style={{
                     background: "transparent",
-                    color: "#6F003C",
-                    borderColor: "#6F003C",
+                    color: "var(--akzent)",
+                    borderColor: "var(--akzent)",
                   }}
                 >
                   Brief lesen
@@ -397,7 +459,7 @@ export default function App() {
         <section className="section" id="brief" aria-label="Der offene Brief">
           <div className="section-inner">
             <article className="brief-paper">
-              <h3>Offener Brief der Basis</h3>
+              <h2>Offener Brief der Basis</h2>
               <p className="anrede">Liebe Genoss*innen,</p>
 
               <p className="lead">
@@ -473,10 +535,10 @@ export default function App() {
                 Politik überführen.
               </p>
 
-              <p className="grusss">Mit solidarischen Grüßen,</p>
+              <p className="gruss">Mit solidarischen Grüßen,</p>
               <p className="signers-line">
                 {total.toLocaleString("de-DE")} Mitglieder und
-                Sympathisant:innen der Partei Die Linke
+                Sympathisant*innen der Partei Die Linke
               </p>
             </article>
           </div>
@@ -516,7 +578,7 @@ export default function App() {
                   <li>
                     Du bist Mitglied oder Sympathisant:in der Partei Die Linke.
                   </li>
-                  <li>Du stehst hinter den drei Forderungen dieses Briefes.</li>
+                  <li>Du stehst hinter den Forderungen dieses Briefes.</li>
                   <li>
                     Du bist einverstanden, dass dein Name veröffentlicht wird.
                   </li>
@@ -537,7 +599,7 @@ export default function App() {
         <section
           className="section signers-section"
           id="liste"
-          aria-label="Liste der Unterstützer:innen"
+          aria-label="Liste der Unterstützer*innen"
         >
           <div className="section-inner">
             <div className="signers-head">
@@ -556,7 +618,7 @@ export default function App() {
                   03 / Schon dabei
                 </span>
                 <h2>
-                  {total.toLocaleString("de-DE")} Genoss:innen
+                  {total.toLocaleString("de-DE")} Genoss*innen
                   <br />
                   haben unterzeichnet.
                 </h2>
@@ -730,7 +792,7 @@ export default function App() {
                 Erst nach dem Klick auf den Link in dieser E-Mail wird deine
                 Unterschrift gezählt und öffentlich gelistet.
               </p>
-              <p style={{ color: "var(--grau)", fontSize: 13 }}>
+              <p className="hint">
                 Keine E-Mail erhalten? Schau in den Spam-Ordner oder fordere den
                 Link neu an.
               </p>
@@ -775,15 +837,7 @@ export default function App() {
                   <polyline points="20 6 9 17 4 12"></polyline>
                 </svg>
               </div>
-              <p
-                style={{
-                  fontFamily: "Work Sans",
-                  fontWeight: 900,
-                  fontSize: 22,
-                  margin: "0 0 8px",
-                  letterSpacing: "-0.01em",
-                }}
-              >
+              <p className="success-title">
                 Solidarisch dabei.
               </p>
               <p>
@@ -799,7 +853,7 @@ export default function App() {
                   scrollTo("liste");
                 }}
               >
-                Mich in der Liste zeigen →
+                Mich in der Liste zeigen <span aria-hidden="true">→</span>
               </button>
             </div>
           </div>
@@ -983,7 +1037,7 @@ function SignForm({ onSubmit, serverError }) {
           </span>
         </label>
         {errors.agree && (
-          <div className="err" style={{ marginLeft: 32 }} role="alert">
+          <div className="err err-indent" role="alert">
             {errors.agree}
           </div>
         )}
@@ -991,17 +1045,9 @@ function SignForm({ onSubmit, serverError }) {
 
       <button type="submit" className="submit" disabled={submitting}>
         {submitting ? "Wird gesendet…" : "Jetzt mitzeichnen"}{" "}
-        <span className="arrow">→</span>
+        <span className="arrow" aria-hidden="true">→</span>
       </button>
-      <p
-        style={{
-          fontSize: 12,
-          color: "var(--grau)",
-          marginTop: 14,
-          lineHeight: 1.5,
-          textAlign: "center",
-        }}
-      >
+      <p className="form-legal">
         Mit Klick auf „Mitzeichnen" schicken wir dir einen Bestätigungslink an
         deine E-Mail. Erst danach zählt deine Unterschrift.
       </p>

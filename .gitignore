@@ -5,3 +5,4 @@ dist
 *.log
 design-extract
 .claude
+bun.lock
