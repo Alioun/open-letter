@@ -28,8 +28,27 @@ STEP 3 — Remove "via gmail.com" annotation (optional but recommended)
 ------------------------------------------------------------------------
 This step makes Gmail send natively as noreply@gehaltsdeckel.jetzt.
 
-3a. noreply@gehaltsdeckel.jetzt must be able to receive email.
-    Set up a mailbox or forward for that address at your DNS/mail provider.
+3a. noreply@gehaltsdeckel.jetzt must be able to receive email so Gmail can
+    send the verification code to it. Set up a forward to your Gmail:
+
+    In your DNS/mail provider (wherever the MX records for gehaltsdeckel.jetzt
+    are managed), create an email forward:
+
+      noreply@gehaltsdeckel.jetzt  →  gehaltsdeckel.jetzt@gmail.com
+
+    Provider-specific instructions:
+    - Hetzner DNS Console: Domains → gehaltsdeckel.jetzt → Email Routing
+    - Cloudflare: Email → Email Routing → Custom addresses → Add address
+    - IONOS / 1&1:  Email → Forwarding → Add forwarding address
+    - Netcup:       Domains → gehaltsdeckel.jetzt → Postfach/Weiterleitung
+
+    Note: email forwarding requires an MX record pointing to your provider's
+    mail servers. If you are using Cloudflare Email Routing, they add those
+    automatically. Otherwise check your provider's docs for the required MX.
+
+    Once the forward is active, proceed to step 3b — the confirmation code
+    Gmail sends to noreply@gehaltsdeckel.jetzt will arrive in
+    gehaltsdeckel.jetzt@gmail.com.
 
 3b. In Gmail:
     Settings (gear) → See all settings → Accounts and Import
