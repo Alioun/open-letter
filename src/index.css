@@ -1615,6 +1615,425 @@ footer {
   }
 }
 
+/* ---------- Admin + unsubscribe surfaces ---------- */
+.admin-shell {
+  min-height: 100vh;
+  background: var(--weiss);
+}
+
+.login-shell {
+  display: grid;
+  place-items: center;
+  padding: 32px;
+  background: var(--fond);
+}
+
+.admin-login {
+  width: min(100%, 440px);
+}
+
+.admin-login h1,
+.unsubscribe-card h1 {
+  font-family: "Work Sans";
+  font-size: clamp(32px, 5vw, 48px);
+  line-height: 1;
+  margin: 12px 0 8px;
+}
+
+.admin-topbar nav {
+  align-items: center;
+}
+
+.admin-topbar nav button,
+.admin-list button,
+.campaign-row button {
+  background: transparent;
+  border: none;
+  color: color-mix(in srgb, var(--akzent) 70%, var(--weiss));
+  cursor: pointer;
+  font-size: 14px;
+  font-weight: 700;
+}
+
+.admin-topbar nav button.active,
+.admin-topbar nav button:hover,
+.admin-list button.active,
+.admin-list button:hover {
+  color: var(--akzent);
+}
+
+.admin-layout {
+  display: grid;
+  grid-template-columns: minmax(220px, 280px) minmax(0, 1fr);
+  gap: 28px;
+  align-items: start;
+}
+
+.admin-sidebar {
+  display: grid;
+  gap: 18px;
+}
+
+.admin-card {
+  background: var(--fond);
+  border: 1px solid var(--akzent);
+  padding: 22px;
+}
+
+.admin-card-title {
+  font-family: "Work Sans";
+  font-size: 20px;
+  font-weight: 900;
+  margin-bottom: 16px;
+}
+
+.admin-card label {
+  display: block;
+  font-family: "Work Sans";
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  margin-bottom: 8px;
+  text-transform: uppercase;
+}
+
+.admin-card input,
+.admin-card select,
+.admin-login input,
+.campaign-form input,
+.campaign-form select {
+  width: 100%;
+  background: var(--weiss);
+  border: 1.5px solid var(--akzent);
+  color: var(--akzent);
+  font: 15px "Inter", sans-serif;
+  min-height: 44px;
+  padding: 12px;
+}
+
+.admin-card input:focus,
+.admin-card select:focus,
+.admin-login input:focus {
+  box-shadow: 4px 4px 0 var(--rot);
+  outline: none;
+}
+
+.admin-card .cta,
+.admin-login .cta,
+.campaign-form .cta {
+  background: var(--akzent);
+  border: 1px solid var(--akzent);
+  color: var(--weiss);
+  cursor: pointer;
+  font-family: "Work Sans";
+  font-weight: 900;
+  min-height: 44px;
+  padding: 10px 16px;
+}
+
+.admin-card .cta:hover,
+.admin-login .cta:hover,
+.campaign-form .cta:hover {
+  background: var(--rot);
+}
+
+.admin-list {
+  display: grid;
+  gap: 8px;
+}
+
+.admin-list button {
+  border: 1px solid var(--akzent);
+  display: grid;
+  gap: 4px;
+  justify-items: start;
+  min-height: 58px;
+  padding: 12px;
+  text-align: left;
+}
+
+.admin-list button.active {
+  background: var(--akzent);
+  color: var(--weiss);
+}
+
+.admin-list span,
+.admin-muted,
+.campaign-row span,
+.campaign-row small,
+.admin-actions span {
+  color: var(--grau);
+  font-size: 13px;
+}
+
+.admin-list button.active span {
+  color: color-mix(in srgb, var(--weiss) 72%, var(--fond));
+}
+
+.admin-editor-grid {
+  display: grid;
+  grid-template-columns: minmax(0, 1.1fr) minmax(280px, 0.9fr);
+  gap: 24px;
+  min-width: 0;
+}
+
+.editor-toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin: 14px 0;
+}
+
+.editor-toolbar button,
+.admin-variable-row button {
+  background: var(--weiss);
+  border: 1px solid var(--akzent);
+  color: var(--akzent);
+  cursor: pointer;
+  font-family: "Work Sans";
+  font-weight: 700;
+  min-height: 36px;
+  min-width: 36px;
+  padding: 7px 9px;
+}
+
+.editor-toolbar button.active,
+.editor-toolbar button:hover,
+.admin-variable-row button:hover {
+  background: var(--akzent);
+  color: var(--weiss);
+}
+
+.admin-editor-surface {
+  background: var(--fond);
+  border: 1px solid var(--akzent);
+  color: var(--akzent);
+  min-height: 430px;
+  padding: 24px;
+}
+
+.admin-editor-surface .ProseMirror {
+  font-family: "Work Sans", "Inter", sans-serif;
+  min-height: 380px;
+  outline: none;
+}
+
+.admin-editor-surface .ProseMirror p {
+  line-height: 1.6;
+}
+
+.admin-editor-surface span[data-template-variable] {
+  color: var(--rot);
+  text-decoration: underline;
+  text-decoration-thickness: 2px;
+  text-underline-offset: 3px;
+}
+
+.admin-variable-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 14px;
+}
+
+.admin-actions {
+  align-items: center;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+  margin-top: 18px;
+}
+
+.admin-danger {
+  background: var(--fehler);
+  border: 1px solid var(--fehler);
+  color: var(--weiss);
+  cursor: pointer;
+  font-family: "Work Sans";
+  font-weight: 800;
+  min-height: 44px;
+  padding: 10px 16px;
+}
+
+.admin-danger:disabled,
+.cta:disabled {
+  cursor: not-allowed;
+  opacity: 0.55;
+}
+
+.preview-card {
+  min-width: 0;
+}
+
+.preview-card iframe {
+  background: var(--weiss);
+  border: 1px solid var(--akzent);
+  height: 620px;
+  width: 100%;
+}
+
+.admin-campaigns,
+.settings-grid {
+  display: grid;
+  gap: 24px;
+  grid-template-columns: minmax(280px, 420px) minmax(0, 1fr);
+  align-items: start;
+}
+
+.admin-date-grid {
+  display: grid;
+  gap: 18px;
+  grid-template-columns: minmax(0, 1fr) 150px;
+  align-items: start;
+}
+
+.rdp-root {
+  --rdp-accent-color: var(--rot);
+  --rdp-background-color: var(--weiss);
+  margin: 0;
+}
+
+.campaign-list {
+  display: grid;
+  gap: 12px;
+}
+
+.campaign-row {
+  align-items: center;
+  border: 1px solid var(--akzent);
+  display: grid;
+  gap: 14px;
+  grid-template-columns: minmax(0, 1fr) auto auto;
+  padding: 14px;
+}
+
+.campaign-row > div {
+  display: grid;
+  gap: 4px;
+  min-width: 0;
+}
+
+.campaign-row strong,
+.campaign-row span {
+  overflow-wrap: anywhere;
+}
+
+.admin-status {
+  border: 1px solid var(--akzent);
+  font-family: "Work Sans";
+  font-size: 12px;
+  font-weight: 900;
+  padding: 5px 9px;
+  text-transform: uppercase;
+}
+
+.status-scheduled {
+  background: var(--weiss);
+  color: var(--akzent);
+}
+
+.status-sending {
+  background: var(--fond);
+  color: var(--rot);
+}
+
+.status-sent {
+  background: var(--erfolg);
+  border-color: var(--erfolg);
+  color: var(--weiss);
+}
+
+.status-failed {
+  background: var(--fehler);
+  border-color: var(--fehler);
+  color: var(--weiss);
+}
+
+.stat-card {
+  display: grid;
+  gap: 8px;
+}
+
+.stat-card span {
+  color: var(--grau);
+  font-size: 13px;
+  font-weight: 700;
+  text-transform: uppercase;
+}
+
+.stat-card strong {
+  font-family: "Work Sans";
+  font-size: clamp(36px, 6vw, 68px);
+  line-height: 0.95;
+}
+
+.unsubscribe-shell {
+  min-height: 100vh;
+  background: var(--fond);
+}
+
+.unsubscribe-inner {
+  max-width: 840px;
+}
+
+.unsubscribe-card {
+  background: var(--weiss);
+}
+
+.unsubscribe-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+  margin-top: 28px;
+}
+
+.unsubscribe-actions .cta {
+  background: var(--akzent);
+  border: 1px solid var(--akzent);
+  color: var(--weiss);
+  cursor: pointer;
+  font-family: "Work Sans";
+  font-weight: 900;
+  min-height: 44px;
+  padding: 10px 16px;
+}
+
+@media (max-width: 980px) {
+  .admin-layout,
+  .admin-editor-grid,
+  .admin-campaigns,
+  .settings-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .admin-sidebar {
+    grid-template-columns: 1fr;
+  }
+}
+
+@media (max-width: 620px) {
+  .admin-topbar {
+    align-items: flex-start;
+    flex-direction: column;
+    gap: 14px;
+  }
+
+  .admin-topbar nav {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 12px;
+  }
+
+  .admin-date-grid,
+  .campaign-row {
+    grid-template-columns: 1fr;
+  }
+
+  .preview-card iframe {
+    height: 460px;
+  }
+}
+
 /* ---------- Footer link buttons (Impressum / Datenschutz) ---------- */
 .footer-link {
   background: none;

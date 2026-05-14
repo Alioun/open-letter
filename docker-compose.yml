@@ -7,10 +7,13 @@ services:
       - BASE_URL=${BASE_URL:-https://gehaltsdeckel.jetzt}
       - ALLOWED_ORIGINS=${ALLOWED_ORIGINS:-https://gehaltsdeckel.jetzt,https://gehaltsdeckel-jetzt.de}
       - NODE_ENV=production
-      - SMTP_HOST=smtp.gmail.com
+      - ADMIN_PATH=${ADMIN_PATH}
+      - ADMIN_PASSWORD=${ADMIN_PASSWORD}
+      - ADMIN_JWT_SECRET=${ADMIN_JWT_SECRET}
+      - SMTP_HOST=smtp.mailbox.org
       - SMTP_PORT=587
-      - SMTP_USER=${GMAIL_USER}
-      - SMTP_PASS=${GMAIL_APP_PASSWORD}
+      - SMTP_USER=${MAILBOX_USER}
+      - SMTP_PASS=${MAILBOX_PASSWORD}
     depends_on:
       db:
         condition: service_healthy

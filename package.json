@@ -11,9 +11,21 @@
   "dependencies": {
     "@fontsource/inter": "^5.2.8",
     "@fontsource/work-sans": "^5.2.8",
+    "@tiptap/core": "^3.23.4",
+    "@tiptap/extension-character-count": "^3.23.4",
+    "@tiptap/extension-link": "^3.23.4",
+    "@tiptap/extension-placeholder": "^3.23.4",
+    "@tiptap/extension-underline": "^3.23.4",
+    "@tiptap/pm": "^3.23.4",
+    "@tiptap/react": "^3.23.4",
+    "@tiptap/starter-kit": "^3.23.4",
+    "date-fns": "^4.1.0",
+    "jose": "^6.2.3",
+    "juice": "^11.1.1",
     "nodemailer": "^8.0.7",
     "postgres": "^3",
     "react": "^18.3.1",
+    "react-day-picker": "^10.0.0",
     "react-dom": "^18.3.1"
   }
 }

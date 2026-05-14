@@ -1,121 +1,105 @@
-Gmail / Google Workspace SMTP Setup — gehaltsdeckel.jetzt
-==========================================================
+mailbox.org SMTP Setup — gehaltsdeckel.jetzt
+=============================================
 
-GOAL: Use Google as SMTP relay, sending FROM noreply@gehaltsdeckel.jetzt
-      without the "via gmail.com" annotation in recipients' email clients.
+GOAL: Send transactional emails FROM noreply@gehaltsdeckel.jetzt via a
+      personal mailbox.org account. Cloudflare Email Routing (forwarding
+      to Gmail) remains active and is unaffected by this setup.
 
-SMTP SERVER (same for both options below)
-------------------------------------------
-  Host:     smtp.gmail.com
+SMTP SERVER
+-----------
+  Host:     smtp.mailbox.org
   Port:     587
-  Security: STARTTLS
+  Security: STARTTLS (secure: false in nodemailer — no code change needed)
+  Auth:     your full mailbox.org address + account password
+            (no app password needed — standard credentials work)
 
 
-OPTION A — Google Workspace (recommended, cleaner)
-----------------------------------------------------
-If your MX records already point to Google (Google Workspace / Google MX),
-you can create a real noreply@gehaltsdeckel.jetzt account in Workspace and
-use it directly — no "via gmail.com" annotation, no extra steps.
+STEP 1 — Add noreply@gehaltsdeckel.jetzt as a sender alias in mailbox.org
+--------------------------------------------------------------------------
+mailbox.org must verify you own the domain before allowing you to send from it.
 
-  1. In Google Admin (admin.google.com) create the user noreply@gehaltsdeckel.jetzt
-     (or use an existing Workspace account you want to send from)
-  2. Enable 2-Step Verification on that account
-  3. Create an App Password for it (see Step 1 below for how)
-  4. Set in .env:
-       GMAIL_USER=noreply@gehaltsdeckel.jetzt
-       GMAIL_APP_PASSWORD=xxxx xxxx xxxx xxxx
+1a. Log in to mailbox.org → gear icon (top right) → All settings
+    → Email addresses → Email aliases section
+    → "Add external alias" → enter: noreply@gehaltsdeckel.jetzt → Save
+
+1b. mailbox.org will show a validation error containing a security key in
+    two parts, e.g.:
+      Part 1 (hostname): p30oe995fc9105322345b6277ac3b1i2eb45106j5j7
+      Part 2 (value):    IN TXT 5ahgui6nsdj5kkk666l333m7m7k7n5k6nnnn5bb4
+
+1c. In Cloudflare DNS for gehaltsdeckel.jetzt, add a TXT record:
+      Type:    TXT
+      Name:    p30oe995fc9105322345b6277ac3b1i2eb45106j5j7   ← use your actual Part 1
+      Content: 5ahgui6nsdj5kkk666l333m7m7k7n5k6nnnn5bb4     ← use your actual Part 2
+      TTL:     Auto
+
+1d. DNS propagation can take up to 48 hours. Once complete, mailbox.org
+    confirms the alias and noreply@gehaltsdeckel.jetzt becomes a usable
+    sender identity on your account.
 
 
-OPTION B — Personal Gmail with "Send mail as"
+STEP 2 — DNS records for SPF, DKIM, and DMARC
 ----------------------------------------------
-If you are using a personal @gmail.com account and want it to send as
-noreply@gehaltsdeckel.jetzt, follow Steps 1–3 below.
+Add these records in Cloudflare DNS for gehaltsdeckel.jetzt.
+In Cloudflare, proxy status for all of these must be DNS only (grey cloud).
+
+  SPF (merge with any existing SPF record — only ONE TXT on @ is allowed):
+    Type:    TXT
+    Name:    @
+    Content: v=spf1 include:_spf.mx.cloudflare.net include:mailbox.org ~all
+    Note:    include:_spf.mx.cloudflare.net covers Cloudflare Email Routing
+             (forwarding to Gmail). If that include is already present, just
+             add include:mailbox.org to the existing record.
+
+  DKIM (four CNAME records — mailbox.org rotates keys automatically via CNAME):
+    Type:    CNAME   Name: MBO0001._domainkey   Target: MBO0001._domainkey.mailbox.org.
+    Type:    CNAME   Name: MBO0002._domainkey   Target: MBO0002._domainkey.mailbox.org.
+    Type:    CNAME   Name: MBO0003._domainkey   Target: MBO0003._domainkey.mailbox.org.
+    Type:    CNAME   Name: MBO0004._domainkey   Target: MBO0004._domainkey.mailbox.org.
+    Note:    Cloudflare may or may not require a trailing dot on the target —
+             add it if Cloudflare doesn't append it automatically.
+
+  DMARC:
+    Type:    TXT
+    Name:    _dmarc
+    Content: v=DMARC1;p=none;rua=mailto:postmaster@gehaltsdeckel.jetzt
+    TTL:     400
+    Note:    p=none means no action on failures — only reporting. Keep this
+             value until you have confirmed SPF and DKIM are working, then
+             optionally tighten to p=quarantine or p=reject.
+             Always include rua= — some receiving servers reject mail if it
+             is missing even though the RFC makes it optional.
+
+  MX records: DO NOT CHANGE. Cloudflare Email Routing MX records stay as-is.
+              They handle inbound/forwarding to Gmail and are independent of
+              outbound authentication.
 
 
-STEP 1 — Create a Gmail App Password
---------------------------------------
-1. Go to the Gmail account you want to send from (e.g. yourname@gmail.com)
-2. Enable 2-Step Verification if not already on:
-   https://myaccount.google.com/security
-3. Go to App Passwords:
-   https://myaccount.google.com/apppasswords
-4. Create a new App Password → name it "gehaltsdeckel-smtp"
-5. Copy the 16-character password (format: xxxx xxxx xxxx xxxx)
+STEP 3 — Add credentials to .env on the server
+------------------------------------------------
+  MAILBOX_USER=your@mailbox.org
+  MAILBOX_PASSWORD=your-mailbox-account-password
 
 
-STEP 2 — Add credentials to .env
------------------------------------
-Add these two lines to your .env file on the server:
+STEP 4 — Verify DNS records (macOS / Linux)
+--------------------------------------------
+  # SPF
+  dig gehaltsdeckel.jetzt TXT | grep spf
 
-  # Google Workspace account:
-  GMAIL_USER=noreply@gehaltsdeckel.jetzt
-  # OR personal Gmail account:
-  # GMAIL_USER=yourname@gmail.com
+  # DKIM (check one of the four — all should resolve)
+  dig MBO0001._domainkey.gehaltsdeckel.jetzt TXT
 
-  GMAIL_APP_PASSWORD=xxxx xxxx xxxx xxxx
+  # DMARC
+  dig _dmarc.gehaltsdeckel.jetzt TXT
 
-
-STEP 3 — Remove "via gmail.com" annotation (optional but recommended)
-------------------------------------------------------------------------
-This step makes Gmail send natively as noreply@gehaltsdeckel.jetzt.
-
-3a. noreply@gehaltsdeckel.jetzt must be able to receive email so Gmail can
-    send the verification code to it. Set up a forward to your Gmail:
-
-    In your DNS/mail provider (wherever the MX records for gehaltsdeckel.jetzt
-    are managed), create an email forward:
-
-      noreply@gehaltsdeckel.jetzt  →  gehaltsdeckel.jetzt@gmail.com
-
-    Provider-specific instructions:
-    - Hetzner DNS Console: Domains → gehaltsdeckel.jetzt → Email Routing
-    - Cloudflare: Email → Email Routing → Custom addresses → Add address
-    - IONOS / 1&1:  Email → Forwarding → Add forwarding address
-    - Netcup:       Domains → gehaltsdeckel.jetzt → Postfach/Weiterleitung
-
-    Note: email forwarding requires an MX record pointing to your provider's
-    mail servers. If you are using Cloudflare Email Routing, they add those
-    automatically. Otherwise check your provider's docs for the required MX.
-
-    Once the forward is active, proceed to step 3b — the confirmation code
-    Gmail sends to noreply@gehaltsdeckel.jetzt will arrive in
-    gehaltsdeckel.jetzt@gmail.com.
-
-3b. In Gmail:
-    Settings (gear) → See all settings → Accounts and Import
-    → "Send mail as" section → Add another email address
-
-3c. Enter:
-    Name: Gehaltsdeckel Initiative
-    Email: noreply@gehaltsdeckel.jetzt
-    Uncheck "Treat as an alias"
-    → click "Next Step"
-
-3d. IMPORTANT — SMTP server dialog:
-    Gmail shows this because you unchecked "Treat as an alias".
-    Enter Gmail's own SMTP here:
-
-      SMTP Server: smtp.gmail.com
-      Port:        587
-      Username:    yourname@gmail.com   ← your full Gmail address
-      Password:    your 16-char App Password (from Step 1)
-      Security:    TLS (recommended)
-
-    → click "Add Account"
-
-3e. Gmail sends a confirmation code to noreply@gehaltsdeckel.jetzt.
-    The forwarding rule from 3a delivers it to your Gmail inbox.
-    Enter the code to complete verification.
-
-3f. Set noreply@gehaltsdeckel.jetzt as default sender in Gmail settings
-    if desired.
+  Each should return a non-empty ANSWER SECTION. If empty, DNS has not
+  propagated yet — wait and retry.
 
 
-STEP 4 — Deploy
------------------
-On the server, redeploy with:
+STEP 5 — Deploy
+----------------
+On the server:
 
-  docker compose pull
   docker compose up -d --build
 
 Haraka has been removed. The app now connects directly to smtp.gmail.com:587.

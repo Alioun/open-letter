@@ -9,10 +9,13 @@ services:
       - DATABASE_URL=postgres://diaetendeckel:${DB_PASSWORD:-devpass}@db:5432/diaetendeckel
       - PORT=3000
       - BASE_URL=${BASE_URL:-http://localhost:3000}
-      - SMTP_HOST=smtp.gmail.com
+      - ADMIN_PATH=${ADMIN_PATH}
+      - ADMIN_PASSWORD=${ADMIN_PASSWORD}
+      - ADMIN_JWT_SECRET=${ADMIN_JWT_SECRET}
+      - SMTP_HOST=smtp.mailbox.org
       - SMTP_PORT=587
-      - SMTP_USER=${GMAIL_USER}
-      - SMTP_PASS=${GMAIL_APP_PASSWORD}
+      - SMTP_USER=${MAILBOX_USER}
+      - SMTP_PASS=${MAILBOX_PASSWORD}
     depends_on:
       db:
         condition: service_healthy

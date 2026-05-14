@@ -8,7 +8,7 @@ Campaign landing page for an open letter by the base of Die Linke demanding caps
 - **Frontend**: React 18, vanilla CSS
 - **Backend**: `Bun.serve()` with route handlers
 - **Database**: PostgreSQL 18 via [postgres.js](https://github.com/porsager/postgres)
-- **Email**: Pluggable — console log by default, [Resend](https://resend.com) drop-in ready
+- **Email**: nodemailer via mailbox.org SMTP — console log in dev, live delivery in production
 
 ## Project Structure
 
@@ -68,39 +68,51 @@ This starts Postgres 18, creates the schema, seeds 200 verified signers, trickle
 
 ## Environment Variables
 
-| Variable | Required | Default | Description |
-|----------|----------|---------|-------------|
-| `DATABASE_URL` | Yes | — | Postgres connection string |
-| `PORT` | No | `3000` | Server port |
-| `BASE_URL` | No | `http://localhost:3000` | Public URL (used in verification emails) |
-| `NODE_ENV` | No | `development` | `production` enables CSP headers + asset minification |
-| `RESEND_API_KEY` | No | — | Enables real email delivery via Resend |
+| Variable           | Required   | Default                 | Description                                                                                                           |
+| ------------------ | ---------- | ----------------------- | --------------------------------------------------------------------------------------------------------------------- |
+| `DATABASE_URL`     | Yes        | —                       | Postgres connection string                                                                                            |
+| `PORT`             | No         | `3000`                  | Server port                                                                                                           |
+| `BASE_URL`         | No         | `http://localhost:3000` | Public URL (used in verification emails)                                                                              |
+| `NODE_ENV`         | No         | `development`           | `production` enables CSP headers + asset minification                                                                 |
+| `ADMIN_PATH`       | Yes        | —                       | Secret single-segment admin path, without leading or trailing slashes. Use `my-secret-panel`, not `/my-secret-panel`. |
+| `ADMIN_PASSWORD`   | Yes        | —                       | Admin login password                                                                                                  |
+| `ADMIN_JWT_SECRET` | Yes        | —                       | Long random secret for admin session JWTs                                                                             |
+| `MAILBOX_USER`     | Yes (prod) | —                       | mailbox.org account address used for SMTP auth                                                                        |
+| `MAILBOX_PASSWORD` | Yes (prod) | —                       | mailbox.org account password                                                                                          |
 
 See `.env.example` for a template.
 
 ## Scripts
 
-| Command | Description |
-|---------|-------------|
-| `bun run dev` | Start dev server with watch mode + HMR |
-| `bun run start` | Start production server |
-| `bun run db:setup` | Apply database schema (idempotent) |
-| `bun run db:seed` | Seed 200 demo signers + trickle new ones every 6s |
+| Command            | Description                                       |
+| ------------------ | ------------------------------------------------- |
+| `bun run dev`      | Start dev server with watch mode + HMR            |
+| `bun run start`    | Start production server                           |
+| `bun run db:setup` | Apply database schema (idempotent)                |
+| `bun run db:seed`  | Seed 200 demo signers + trickle new ones every 6s |
 
 ## API
 
-| Method | Path | Description |
-|--------|------|-------------|
-| `GET` | `/api/health` | Health check — `{ok, db}`, returns 503 if DB unreachable |
-| `GET` | `/api/stats` | Signature totals — `{total, today, week, kvCount}` |
-| `GET` | `/api/signers` | Verified signers list (paginated, filterable) |
-| `POST` | `/api/sign` | Submit a signature — triggers verification email |
-| `GET` | `/api/confirm/:token` | Email confirmation link — verifies + redirects |
+| Method | Path                              | Description                                              |
+| ------ | --------------------------------- | -------------------------------------------------------- |
+| `GET`  | `/api/health`                     | Health check — `{ok, db}`, returns 503 if DB unreachable |
+| `GET`  | `/api/stats`                      | Signature totals — `{total, today, week, kvCount}`       |
+| `GET`  | `/api/signers`                    | Verified signers list (paginated, filterable)            |
+| `POST` | `/api/sign`                       | Submit a signature — triggers verification email         |
+| `GET`  | `/api/confirm/:token`             | Email confirmation link — verifies + redirects           |
+| `GET`  | `/api/unsubscribe/:token`         | Newsletter unsubscribe state                             |
+| `POST` | `/api/unsubscribe/:token/opt-out` | Opt out of newsletter emails                             |
+| `POST` | `/api/unsubscribe/:token/delete`  | Delete signature from a newsletter link                  |
 
 ### POST /api/sign
 
 ```json
-{ "name": "Anna Berger", "email": "anna@example.org", "kv": "Berlin-Neukölln", "newsletter": true }
+{
+  "name": "Anna Berger",
+  "email": "anna@example.org",
+  "kv": "Berlin-Neukölln",
+  "newsletter": true
+}
 ```
 
 - Rate limited: 3 requests per IP per 15 minutes (429 with `Retry-After` header)
@@ -112,12 +124,12 @@ See `.env.example` for a template.
 
 ### GET /api/signers
 
-| Param | Default | Description |
-|-------|---------|-------------|
-| `filter` | `alle` | `alle`, `heute` (last 24h), `kv` (with Kreisverband) |
-| `search` | — | Search by name or Kreisverband |
-| `limit` | `18` | Results per page (max 100) |
-| `offset` | `0` | Pagination offset |
+| Param    | Default | Description                                          |
+| -------- | ------- | ---------------------------------------------------- |
+| `filter` | `alle`  | `alle`, `heute` (last 24h), `kv` (with Kreisverband) |
+| `search` | —       | Search by name or Kreisverband                       |
+| `limit`  | `18`    | Results per page (max 100)                           |
+| `offset` | `0`     | Pagination offset                                    |
 
 Returns `{signers: [{id, name, kreisverband, created_at}], total}`. Email addresses are never exposed.
 
@@ -137,13 +149,7 @@ Schema creation is idempotent (`IF NOT EXISTS`) — safe to run on every contain
 
 **Default (dev):** Verification URLs are logged to the console. Click the URL to confirm a signature.
 
-**Production:** Uncomment the Resend integration in `server/email.js` and set `RESEND_API_KEY`:
-
-```bash
-bun add resend
-```
-
-Then uncomment the import and send block in `server/email.js`.
+**Production:** Set `MAILBOX_USER` and `MAILBOX_PASSWORD` in `.env`. The app sends via `smtp.mailbox.org:587` (STARTTLS) using nodemailer. See `gmail-smtp-setup.txt` for the full DNS setup (SPF, DKIM, DMARC) required to send from `noreply@gehaltsdeckel.jetzt`.
 
 ## Security
 
@@ -162,6 +168,7 @@ docker compose --profile with-db up --build
 ```
 
 Set in Dokploy UI or `.env`:
+
 - `DB_PASSWORD` — strong random password
 - `BASE_URL` — public URL (e.g. `https://diaetendeckel.example.de`)
 - `RESEND_API_KEY` — (optional) for real email delivery
