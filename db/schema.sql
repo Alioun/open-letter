@@ -4,11 +4,14 @@ CREATE TABLE IF NOT EXISTS signers (
   email              TEXT NOT NULL UNIQUE,
   kreisverband       TEXT DEFAULT '',
   newsletter         BOOLEAN DEFAULT FALSE,
+  show_publicly      BOOLEAN DEFAULT TRUE,
   verified           BOOLEAN DEFAULT FALSE,
   verification_token TEXT UNIQUE,
   token_expires_at   TIMESTAMPTZ,
   created_at         TIMESTAMPTZ DEFAULT NOW()
 );
+
+ALTER TABLE signers ADD COLUMN IF NOT EXISTS show_publicly BOOLEAN DEFAULT TRUE;
 
 CREATE INDEX IF NOT EXISTS idx_signers_verified
   ON signers (verified, created_at DESC);

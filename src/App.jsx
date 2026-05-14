@@ -459,7 +459,7 @@ export default function App() {
         <section className="section" id="brief" aria-label="Der offene Brief">
           <div className="section-inner">
             <article className="brief-paper">
-              <h2>Offener Brief der Basis</h2>
+              <h2>Ein Brief von Genoss*innen</h2>
               <p className="anrede">Liebe Genoss*innen,</p>
 
               <p className="lead">
@@ -535,7 +535,7 @@ export default function App() {
                 Politik überführen.
               </p>
 
-              <p className="gruss">Mit solidarischen Grüßen,</p>
+              <p className="gruss">Mit solidarischen Grüßen</p>
               <p className="signers-line">
                 {total.toLocaleString("de-DE")} Mitglieder und
                 Sympathisant*innen der Partei Die Linke
@@ -578,9 +578,9 @@ export default function App() {
                   <li>
                     Du bist Mitglied oder Sympathisant:in der Partei Die Linke.
                   </li>
-                  <li>Du stehst hinter den Forderungen dieses Briefes.</li>
+                  <li>du stehst hinter diesem Brief.</li>
                   <li>
-                    Du bist einverstanden, dass dein Name veröffentlicht wird.
+                    Du kannst wählen, ob dein Name öffentlich angezeigt wird.
                   </li>
                 </ul>
                 <p className="privacy">
@@ -888,8 +888,7 @@ function SignForm({ onSubmit, serverError }) {
       e.name = "Bitte gib deinen vollständigen Namen an.";
     if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email))
       e.email = "Bitte gib eine gültige E-Mail-Adresse an.";
-    if (!agree)
-      e.agree = "Bitte stimme zu, dass dein Name veröffentlicht wird.";
+    // agree is optional – name is shown publicly only if checked
     setErrors(e);
     return Object.keys(e).length === 0;
   }
@@ -903,6 +902,7 @@ function SignForm({ onSubmit, serverError }) {
       email: email.trim(),
       kv: kv.trim(),
       newsletter,
+      agree,
     });
     setSubmitting(false);
     setName("");
@@ -1020,9 +1020,9 @@ function SignForm({ onSubmit, serverError }) {
             onChange={(e) => setAgree(e.target.checked)}
           />
           <span>
-            Ich stimme zu, dass mein{" "}
-            <strong>Name (und ggf. Kreisverband)</strong> öffentlich auf dieser
-            Seite angezeigt wird.
+            Mein <strong>Name (und ggf. Kreisverband)</strong> darf öffentlich
+            auf dieser Seite angezeigt werden.{" "}
+            <span className="opt">(optional)</span>
           </span>
         </label>
         <label className="check">
@@ -1036,11 +1036,7 @@ function SignForm({ onSubmit, serverError }) {
             jederzeit abbestellbar).
           </span>
         </label>
-        {errors.agree && (
-          <div className="err err-indent" role="alert">
-            {errors.agree}
-          </div>
-        )}
+
       </div>
 
       <button type="submit" className="submit" disabled={submitting}>

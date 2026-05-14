@@ -20,8 +20,8 @@ export async function sendVerificationEmail({ to, name, token, baseUrl }) {
       <p>Danke für deine Unterschrift unter den offenen Brief „Gehaltsdeckel jetzt".</p>
       <p><a href="${confirmUrl}">Klicke hier, um deine E-Mail zu bestätigen</a></p>
       <p>Der Link ist 24 Stunden gültig.</p>
-      <p>Mit solidarischen Grüßen,<br>Initiative Gehaltsdeckel</p>
+      <p>Mit solidarischen Grüßen<br>Initiative Gehaltsdeckel</p>
     `,
-    text: `Hallo ${name},\n\nDanke für deine Unterschrift.\n\nBitte bestätige deine E-Mail-Adresse:\n${confirmUrl}\n\nDer Link ist 24 Stunden gültig.\n\nMit solidarischen Grüßen,\nInitiative Gehaltsdeckel`,
+    text: `Hallo ${name},\n\nDanke für deine Unterschrift.\n\nBitte bestätige deine E-Mail-Adresse:\n${confirmUrl}\n\nDer Link ist 24 Stunden gültig.\n\nMit solidarischen Grüßen\nInitiative Gehaltsdeckel`,
   });
 }

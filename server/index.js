@@ -12,7 +12,21 @@ import { checkRateLimit } from "./ratelimit.js";
 
 const PORT = parseInt(process.env.PORT || "3000", 10);
 const BASE_URL = process.env.BASE_URL || `http://localhost:${PORT}`;
+const ALLOWED_ORIGINS = new Set(
+  (process.env.ALLOWED_ORIGINS || BASE_URL)
+    .split(",")
+    .map((s) => s.trim())
+    .filter(Boolean)
+);
 const isDev = process.env.NODE_ENV !== "production";
+
+function getBaseUrl(req) {
+  const proto = req.headers.get("x-forwarded-proto") || "https";
+  const host =
+    req.headers.get("x-forwarded-host") || req.headers.get("host") || "";
+  const origin = `${proto}://${host}`;
+  return ALLOWED_ORIGINS.has(origin) ? origin : BASE_URL;
+}
 
 function sanitize(str) {
   return String(str || "")
@@ -125,6 +139,7 @@ const server = Bun.serve({
           const email = sanitizeEmail(body.email);
           const kv = sanitize(body.kv || "");
           const newsletter = Boolean(body.newsletter);
+          const showPublicly = body.agree === true;
 
           if (name.length < 2) {
             return json(
@@ -147,6 +162,7 @@ const server = Bun.serve({
             email,
             kv,
             newsletter,
+            showPublicly,
             token,
             expiresAt,
           });
@@ -159,7 +175,7 @@ const server = Bun.serve({
             to: email,
             name,
             token,
-            baseUrl: BASE_URL,
+            baseUrl: getBaseUrl(req),
           });
 
           return json({ ok: true });
@@ -177,9 +193,9 @@ const server = Bun.serve({
           const confirmed = await confirmSigner(token);
 
           if (confirmed) {
-            return Response.redirect(`${BASE_URL}/?confirmed=1`, 302);
+            return Response.redirect(`${getBaseUrl(req)}/?confirmed=1`, 302);
           }
-          return Response.redirect(`${BASE_URL}/?error=token-expired`, 302);
+          return Response.redirect(`${getBaseUrl(req)}/?error=token-expired`, 302);
         } catch (err) {
           console.error("GET /api/confirm error:", err);
           return Response.redirect(`${BASE_URL}/?error=server-error`, 302);

@@ -10,7 +10,7 @@ export async function getSigners({ filter = "alle", search = "", limit = 18, off
   limit = Math.min(Math.max(1, limit), 100);
   offset = Math.max(0, offset);
 
-  const conditions = [`s.verified = TRUE`];
+  const conditions = [`s.verified = TRUE`, `s.show_publicly = TRUE`];
   const params = [];
 
   if (filter === "heute") {
@@ -58,14 +58,15 @@ export async function getStats() {
   return row;
 }
 
-export async function insertSigner({ name, email, kv, newsletter, token, expiresAt }) {
+export async function insertSigner({ name, email, kv, newsletter, showPublicly, token, expiresAt }) {
   const result = await sql`
-    INSERT INTO signers (name, email, kreisverband, newsletter, verification_token, token_expires_at)
-    VALUES (${name}, ${email}, ${kv}, ${newsletter}, ${token}, ${expiresAt})
+    INSERT INTO signers (name, email, kreisverband, newsletter, show_publicly, verification_token, token_expires_at)
+    VALUES (${name}, ${email}, ${kv}, ${newsletter}, ${showPublicly}, ${token}, ${expiresAt})
     ON CONFLICT (email) DO UPDATE
       SET name = EXCLUDED.name,
           kreisverband = EXCLUDED.kreisverband,
           newsletter = EXCLUDED.newsletter,
+          show_publicly = EXCLUDED.show_publicly,
           verification_token = EXCLUDED.verification_token,
           token_expires_at = EXCLUDED.token_expires_at
       WHERE signers.verified = FALSE
