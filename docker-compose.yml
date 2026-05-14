@@ -4,7 +4,7 @@ services:
     ports:
       - "${PORT:-3000}:3000"
     environment:
-      - DATABASE_URL=${DATABASE_URL:-postgres://diaetendeckel:${DB_PASSWORD}@db:5432/diaetendeckel}
+      - DATABASE_URL=${DATABASE_URL}
       - PORT=3000
       - BASE_URL=${BASE_URL:-https://gehaltsdeckel.jetzt}
       - ALLOWED_ORIGINS=${ALLOWED_ORIGINS:-https://gehaltsdeckel.jetzt,https://gehaltsdeckel-jetzt.de}
