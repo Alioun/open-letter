@@ -63,7 +63,7 @@ const securityHeaders = {
     ? {}
     : {
         "Content-Security-Policy":
-          "default-src 'self'; font-src fonts.gstatic.com; style-src 'self' fonts.googleapis.com 'unsafe-inline'; script-src 'self'; img-src 'self' data:; connect-src 'self'",
+          "default-src 'self'; font-src 'self'; style-src 'self' 'unsafe-inline'; script-src 'self'; img-src 'self' data:; connect-src 'self'",
       }),
 };
 

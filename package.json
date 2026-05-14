@@ -9,6 +9,8 @@
     "db:seed": "bun db/seed.js"
   },
   "dependencies": {
+    "@fontsource/inter": "^5.2.8",
+    "@fontsource/work-sans": "^5.2.8",
     "nodemailer": "^8.0.7",
     "postgres": "^3",
     "react": "^18.3.1",
