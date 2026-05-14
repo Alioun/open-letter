@@ -128,6 +128,9 @@ export default function App() {
   const knownIdsRef = useRef(new Set());
 
   const [emailModal, setEmailModal] = useState(null);
+  const [resendCooldown, setResendCooldown] = useState(0);
+  const [resendSent, setResendSent] = useState(false);
+  const [resendError, setResendError] = useState(null);
   const [showSuccess, setShowSuccess] = useState(false);
   const [submitError, setSubmitError] = useState(null);
   const [navOpen, setNavOpen] = useState(false);
@@ -254,14 +257,53 @@ export default function App() {
         setSubmitError(result.error || "Ein Fehler ist aufgetreten.");
         return;
       }
-      setEmailModal({ name: data.name, email: data.email });
+      setEmailModal({ name: data.name, email: data.email, kv: data.kv || "", newsletter: !!data.newsletter, agree: !!data.agree });
     } catch {
       setSubmitError("Verbindung fehlgeschlagen. Bitte versuche es erneut.");
     }
   }
 
+  useEffect(() => {
+    if (!emailModal) {
+      setResendCooldown(0);
+      setResendSent(false);
+      setResendError(null);
+      return;
+    }
+    setResendCooldown(60);
+    const id = setInterval(() => {
+      setResendCooldown((c) => {
+        if (c <= 1) { clearInterval(id); setResendSent(false); return 0; }
+        return c - 1;
+      });
+    }, 1000);
+    return () => clearInterval(id);
+  }, [emailModal]);
+
   function closeModal() {
     setEmailModal(null);
+  }
+
+  async function handleResend() {
+    if (resendCooldown > 0) return;
+    setResendError(null);
+    try {
+      const res = await fetch("/api/resend-verification", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ email: emailModal.email }),
+      });
+      const result = await res.json();
+      if (!res.ok) {
+        setResendError(result.error || "Senden fehlgeschlagen. Bitte versuche es später erneut.");
+        return;
+      }
+    } catch {
+      setResendError("Verbindung fehlgeschlagen. Bitte versuche es erneut.");
+      return;
+    }
+    setResendSent(true);
+    setEmailModal((prev) => ({ ...prev }));
   }
 
   function closeSuccess() {
@@ -822,9 +864,27 @@ export default function App() {
                 Unterschrift gezählt und öffentlich gelistet.
               </p>
               <p className="hint">
-                Keine E-Mail erhalten? Schau in den Spam-Ordner oder fordere den
-                Link neu an.
+                Keine E-Mail erhalten? Schau in den Spam-Ordner.
               </p>
+              <p className="hint">
+                E-Mails können manchmal ein paar Minuten auf sich warten lassen.
+              </p>
+              {resendError && (
+                <p className="hint" style={{ color: "var(--fehler)" }}>
+                  {resendError}
+                </p>
+              )}
+              <button
+                className="resend-btn"
+                onClick={handleResend}
+                disabled={resendCooldown > 0}
+              >
+                {resendSent && resendCooldown > 0
+                  ? `E-Mail gesendet ✓ — nochmal in ${resendCooldown}s`
+                  : resendCooldown > 0
+                  ? `Erneut senden in ${resendCooldown}s`
+                  : "Link erneut anfordern"}
+              </button>
               <button className="confirm-btn" onClick={closeModal}>
                 Verstanden
               </button>

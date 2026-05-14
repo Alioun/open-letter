@@ -7,6 +7,7 @@ import {
   getNewsletterStats,
   insertSigner,
   confirmSigner,
+  refreshVerificationToken,
   createDeletionToken,
   deleteSigner,
   healthCheck,
@@ -389,6 +390,49 @@ const server = Bun.serve({
           return json({ ok: true });
         } catch (err) {
           console.error("POST /api/sign error:", err);
+          return json({ error: "Internal server error" }, 500);
+        }
+      },
+    },
+
+    "/api/resend-verification": {
+      async POST(req) {
+        try {
+          const ip = getClientIp(req);
+          const { allowed, retryAfter } = checkRateLimit(
+            ip,
+            "resend",
+            3,
+            15 * 60 * 1000,
+          );
+          if (!allowed) {
+            return json(
+              { error: "Zu viele Anfragen. Bitte versuche es später erneut." },
+              429,
+              { "Retry-After": String(retryAfter) },
+            );
+          }
+
+          const body = await req.json();
+          const email = sanitizeEmail(body.email);
+          if (!isValidEmail(email)) return json({ ok: true });
+
+          const token = crypto.randomUUID();
+          const expiresAt = new Date(Date.now() + 24 * 60 * 60 * 1000);
+          const name = await refreshVerificationToken(email, token, expiresAt);
+
+          if (name) {
+            await sendVerificationEmail({
+              to: email,
+              name,
+              token,
+              baseUrl: getBaseUrl(req),
+            });
+          }
+
+          return json({ ok: true });
+        } catch (err) {
+          console.error("POST /api/resend-verification error:", err);
           return json({ error: "Internal server error" }, 500);
         }
       },

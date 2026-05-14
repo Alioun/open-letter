@@ -108,6 +108,17 @@ export async function insertSigner({
   return { ok: true, alreadyVerified: result[0].verified };
 }
 
+export async function refreshVerificationToken(email, token, expiresAt) {
+  const result = await sql`
+    UPDATE signers
+    SET verification_token = ${token}, token_expires_at = ${expiresAt}
+    WHERE email = ${email} AND verified = FALSE
+    RETURNING name
+  `;
+  if (result.length === 0) return null; // not found or already verified
+  return result[0].name;
+}
+
 export async function confirmSigner(token) {
   const result = await sql`
     UPDATE signers

@@ -1116,6 +1116,37 @@ h1.headline .banner {
   outline-offset: 2px;
 }
 
+.modal-body .resend-btn {
+  width: 100%;
+  margin-top: 12px;
+  padding: 12px 16px;
+  background: transparent;
+  color: var(--akzent);
+  border: 1.5px solid var(--akzent);
+  font-family: "Work Sans";
+  font-weight: 700;
+  font-size: 14px;
+  cursor: pointer;
+  transition:
+    background 0.15s ease,
+    color 0.15s ease;
+}
+
+.modal-body .resend-btn:not(:disabled):hover {
+  background: var(--akzent);
+  color: var(--weiss);
+}
+
+.modal-body .resend-btn:disabled {
+  opacity: 0.5;
+  cursor: default;
+}
+
+.modal-body .resend-btn:focus-visible {
+  outline: 3px solid var(--rot);
+  outline-offset: 2px;
+}
+
 /* Success modal */
 .modal.success .modal-head {
   background: var(--erfolg);
@@ -1706,7 +1737,9 @@ footer {
   background: var(--weiss);
   border: 1.5px solid var(--akzent);
   color: var(--akzent);
-  font: 15px "Inter", sans-serif;
+  font:
+    15px "Inter",
+    sans-serif;
   min-height: 44px;
   padding: 12px;
 }
