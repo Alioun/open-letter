@@ -70,6 +70,29 @@ function relTime(ts) {
   return Math.floor(diff / (86400 * 30)) + " Mon";
 }
 
+const KNOWN_EMAIL_DOMAINS = new Set([
+  "gmail.com", "googlemail.com",
+  "yahoo.com", "yahoo.de", "yahoo.co.uk", "yahoo.fr", "yahoo.at",
+  "hotmail.com", "hotmail.de", "hotmail.co.uk", "hotmail.fr",
+  "outlook.com", "outlook.de",
+  "live.com", "live.de",
+  "web.de", "gmx.de", "gmx.net", "gmx.com", "gmx.at", "gmx.ch",
+  "t-online.de", "freenet.de", "arcor.de",
+  "posteo.de", "posteo.net",
+  "protonmail.com", "proton.me", "pm.me",
+  "tutanota.com", "tuta.com",
+  "icloud.com", "me.com", "mac.com",
+  "aol.com", "mail.com", "hey.com",
+  "fastmail.com", "fastmail.fm",
+]);
+
+function emailWarning(email) {
+  const domain = String(email || "").split("@")[1]?.toLowerCase() || "";
+  if (domain === "mailbox.org") return "mailbox";
+  if (!KNOWN_EMAIL_DOMAINS.has(domain)) return "custom";
+  return null;
+}
+
 function scrollTo(id) {
   const el = document.getElementById(id);
   if (el) window.scrollTo({ top: el.offsetTop - 70, behavior: "smooth" });
@@ -879,6 +902,16 @@ export default function App() {
                 Bestätigungslink geschickt an:
               </p>
               <div className="email-pill">{emailModal.email}</div>
+              {emailWarning(emailModal.email) === "mailbox" && (
+                <div className="mail-warning">
+                  <strong>Achtung:</strong> mailbox.org blockiert leider Bestätigungs-E-Mails von unserer Domain. Bitte verwende eine andere E-Mail-Adresse (z.B. Gmail, GMX oder Posteo).
+                </div>
+              )}
+              {emailWarning(emailModal.email) === "custom" && (
+                <div className="mail-warning mail-warning--soft">
+                  <strong>Hinweis:</strong> Bei privaten oder Organisations-Domains kann die Zustellung verzögert sein oder im Spam landen.
+                </div>
+              )}
               <p>
                 Erst nach dem Klick auf den Link in dieser E-Mail wird deine
                 Unterschrift gezählt und öffentlich gelistet.

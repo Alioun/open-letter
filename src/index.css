@@ -1088,6 +1088,22 @@ h1.headline .banner {
   margin: 4px 0 18px;
 }
 
+.mail-warning {
+  background: #fff3cd;
+  border: 1.5px solid #e6a817;
+  color: #6b4200;
+  padding: 10px 14px;
+  font-size: 13px;
+  line-height: 1.5;
+  margin: 0 0 14px;
+}
+
+.mail-warning--soft {
+  background: #f5f5f5;
+  border-color: #aaa;
+  color: var(--dunkel);
+}
+
 .modal-body .confirm-btn {
   width: 100%;
   margin-top: 18px;
