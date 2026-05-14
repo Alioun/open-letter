@@ -60,7 +60,6 @@ if (!ADMIN_PATH || !ADMIN_PASSWORD || !ADMIN_JWT_SECRET) {
   );
 }
 
-process.env.PUBLIC_ADMIN_PATH_HASH = await sha256Hex(ADMIN_PATH);
 const { default: homepage } = await import("../index.html");
 
 const adminRoute = `/${ADMIN_PATH}`;
@@ -282,14 +281,6 @@ const server = Bun.serve({
     "/": homepage,
     [adminRoute]: homepage,
     "/abmelden/:token": homepage,
-
-    "/api/config": {
-      GET() {
-        return json({
-          adminPathHash: process.env.PUBLIC_ADMIN_PATH_HASH || "",
-        });
-      },
-    },
 
     "/api/health": {
       async GET() {
