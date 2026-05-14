@@ -3,7 +3,7 @@ WORKDIR /app
 
 FROM base AS deps
 COPY package.json bun.lock* ./
-RUN bun install --production
+RUN bun install --production --no-frozen-lockfile
 
 FROM base AS runner
 WORKDIR /app
