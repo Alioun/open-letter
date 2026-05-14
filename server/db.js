@@ -1,8 +1,10 @@
 import postgres from "postgres";
 
 const dbUrl = process.env.DATABASE_URL || "";
-const sslMode = new URL(dbUrl).searchParams.get("sslmode");
-const ssl = sslMode === "disable" ? false : { rejectUnauthorized: false };
+const sslMode = new URL(dbUrl).searchParams.get("sslmode") || "";
+const ssl = sslMode.startsWith("disable")
+  ? false
+  : { rejectUnauthorized: false };
 
 const sql = postgres(dbUrl, {
   ssl,
