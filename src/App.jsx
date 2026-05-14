@@ -257,7 +257,13 @@ export default function App() {
         setSubmitError(result.error || "Ein Fehler ist aufgetreten.");
         return;
       }
-      setEmailModal({ name: data.name, email: data.email, kv: data.kv || "", newsletter: !!data.newsletter, agree: !!data.agree });
+      setEmailModal({
+        name: data.name,
+        email: data.email,
+        kv: data.kv || "",
+        newsletter: !!data.newsletter,
+        agree: !!data.agree,
+      });
     } catch {
       setSubmitError("Verbindung fehlgeschlagen. Bitte versuche es erneut.");
     }
@@ -273,7 +279,11 @@ export default function App() {
     setResendCooldown(60);
     const id = setInterval(() => {
       setResendCooldown((c) => {
-        if (c <= 1) { clearInterval(id); setResendSent(false); return 0; }
+        if (c <= 1) {
+          clearInterval(id);
+          setResendSent(false);
+          return 0;
+        }
         return c - 1;
       });
     }, 1000);
@@ -295,7 +305,10 @@ export default function App() {
       });
       const result = await res.json();
       if (!res.ok) {
-        setResendError(result.error || "Senden fehlgeschlagen. Bitte versuche es später erneut.");
+        setResendError(
+          result.error ||
+            "Senden fehlgeschlagen. Bitte versuche es später erneut.",
+        );
         return;
       }
     } catch {
@@ -323,7 +336,14 @@ export default function App() {
     }
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-  }, [showSuccess, emailModal, showImpressum, showDatenschutz, showDeleted, navOpen]);
+  }, [
+    showSuccess,
+    emailModal,
+    showImpressum,
+    showDatenschutz,
+    showDeleted,
+    navOpen,
+  ]);
 
   const total = stats.total;
   const pct = Math.min(100, Math.round((total / ZIEL) * 100));
@@ -882,8 +902,8 @@ export default function App() {
                 {resendSent && resendCooldown > 0
                   ? `E-Mail gesendet ✓ — nochmal in ${resendCooldown}s`
                   : resendCooldown > 0
-                  ? `Erneut senden in ${resendCooldown}s`
-                  : "Link erneut anfordern"}
+                    ? `Erneut senden in ${resendCooldown}s`
+                    : "Link erneut anfordern"}
               </button>
               <button className="confirm-btn" onClick={closeModal}>
                 Verstanden
@@ -929,8 +949,8 @@ export default function App() {
               <p className="success-title">Solidarisch dabei.</p>
               <p>
                 Deine Unterschrift ist jetzt Teil des offenen Briefes. Teile ihn
-                mit deinem Kreisverband — wir wollen vor dem nächsten Parteitag
-                bei 5.000 stehen.
+                mit deinem Kreisverband - wir wollen vor dem nächsten Parteitag
+                bei 100 stehen.
               </p>
               <button
                 className="confirm-btn"
@@ -1230,9 +1250,9 @@ function ImpressumModal({ onClose }) {
             </a>
           </p>
           <p style={{ marginTop: 16, color: "var(--grau)", fontSize: 13 }}>
-            Diese Website ist kein offizielles Angebot der Partei Die Linke.
-            Es handelt sich um eine private Initiative von Parteimitgliedern
-            an der Basis.
+            Diese Website ist kein offizielles Angebot der Partei Die Linke. Es
+            handelt sich um eine private Initiative von Parteimitgliedern an der
+            Basis.
           </p>
         </div>
       </div>
@@ -1303,9 +1323,9 @@ function DatenschutzModal({ onClose }) {
             <br />
             Bei jedem Zugriff werden vorübergehend Daten gespeichert:
             IP-Adresse, Datum und Uhrzeit, aufgerufene Seite, Browser und
-            Betriebssystem sowie Referrer-URL. Rechtsgrundlage ist Art. 6
-            Abs. 1 lit. f DS-GVO (berechtigtes Interesse am sicheren Betrieb).
-            Die Protokolldateien werden spätestens nach 7 Tagen gelöscht.
+            Betriebssystem sowie Referrer-URL. Rechtsgrundlage ist Art. 6 Abs. 1
+            lit. f DS-GVO (berechtigtes Interesse am sicheren Betrieb). Die
+            Protokolldateien werden spätestens nach 7 Tagen gelöscht.
           </p>
           <p>
             <strong>b) Unterschriften</strong>
@@ -1343,8 +1363,8 @@ function DatenschutzModal({ onClose }) {
           </p>
           <p>
             Du hast außerdem das Recht, aus Gründen deiner besonderen Situation
-            jederzeit Widerspruch gegen die Verarbeitung einzulegen
-            (Art. 21 Abs. 1 DS-GVO).
+            jederzeit Widerspruch gegen die Verarbeitung einzulegen (Art. 21
+            Abs. 1 DS-GVO).
           </p>
 
           <h5>4. Beschwerderecht</h5>
@@ -1380,7 +1400,11 @@ function DatenschutzModal({ onClose }) {
               einen Löschlink geschickt. Bitte prüfe auch deinen Spam-Ordner.
             </p>
           ) : (
-            <form className="deletion-form" onSubmit={handleDeletion} noValidate>
+            <form
+              className="deletion-form"
+              onSubmit={handleDeletion}
+              noValidate
+            >
               <input
                 type="email"
                 value={deletionEmail}
