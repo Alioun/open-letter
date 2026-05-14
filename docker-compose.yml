@@ -55,7 +55,7 @@ services:
       test:
         [
           "CMD-SHELL",
-          'node -e "require(''net'').createConnection(587,''127.0.0.1'').on(''connect'',()=>process.exit(0)).on(''error'',()=>process.exit(1))"',
+          "node -e \"const s=require('net').createConnection(587,'127.0.0.1');s.on('connect',()=>{s.write('QUIT\\r\\n');s.end();process.exit(0)});s.on('error',()=>process.exit(1))\"",
         ]
       interval: 30s
       timeout: 5s
