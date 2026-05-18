@@ -1306,7 +1306,9 @@ function ImpressumModal({ onClose }) {
         </div>
         <div className="modal-body">
           <p>
-            <strong>Marlen Borchardt</strong>
+            <strong>Klinke e.V.</strong>
+            <br />
+            Marlen Borchardt
             <br />
             Volckmarstr. 5
             <br />
@@ -1372,7 +1374,9 @@ function DatenschutzModal({ onClose }) {
           <p>
             Verantwortlich für diese Website ist:
             <br />
-            <strong>Marlen Borchardt</strong>
+            <strong>Klinke e.V.</strong>
+            <br />
+            Marlen Borchardt
             <br />
             Volckmarstr. 5, 04317 Leipzig
             <br />
