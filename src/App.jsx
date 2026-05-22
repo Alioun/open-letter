@@ -191,6 +191,8 @@ export default function App() {
   const [showDeleted, setShowDeleted] = useState(false);
   const [showOccupations, setShowOccupations] = useState(false);
   const [occupationGroups, setOccupationGroups] = useState([]);
+  const [showKreisverband, setShowKreisverband] = useState(false);
+  const [kvGroups, setKvGroups] = useState([]);
 
   const emailTrapRef = useFocusTrap(!!emailModal);
   const successTrapRef = useFocusTrap(showSuccess);
@@ -304,6 +306,16 @@ export default function App() {
       } catch {}
     })();
   }, [showOccupations]);
+
+  useEffect(() => {
+    if (!showKreisverband) return;
+    (async () => {
+      try {
+        const res = await fetch("/api/kreisverband-stats");
+        if (res.ok) setKvGroups(await res.json());
+      } catch {}
+    })();
+  }, [showKreisverband]);
 
   function handleLoadMore() {
     const next = offset + 18;
@@ -799,10 +811,13 @@ export default function App() {
               <button
                 className={
                   "filter-chip " +
-                  (!showOccupations && filter === "alle" ? "active" : "")
+                  (!showOccupations && !showKreisverband && filter === "alle"
+                    ? "active"
+                    : "")
                 }
                 onClick={() => {
                   setShowOccupations(false);
+                  setShowKreisverband(false);
                   setFilter("alle");
                 }}
               >
@@ -811,10 +826,13 @@ export default function App() {
               <button
                 className={
                   "filter-chip " +
-                  (!showOccupations && filter === "neueste" ? "active" : "")
+                  (!showOccupations && !showKreisverband && filter === "neueste"
+                    ? "active"
+                    : "")
                 }
                 onClick={() => {
                   setShowOccupations(false);
+                  setShowKreisverband(false);
                   setFilter("neueste");
                 }}
               >
@@ -823,10 +841,13 @@ export default function App() {
               <button
                 className={
                   "filter-chip " +
-                  (!showOccupations && filter === "heute" ? "active" : "")
+                  (!showOccupations && !showKreisverband && filter === "heute"
+                    ? "active"
+                    : "")
                 }
                 onClick={() => {
                   setShowOccupations(false);
+                  setShowKreisverband(false);
                   setFilter("heute");
                 }}
               >
@@ -834,24 +855,27 @@ export default function App() {
               </button>
               <button
                 className={
-                  "filter-chip " +
-                  (!showOccupations && filter === "kv" ? "active" : "")
+                  "filter-chip " + (showKreisverband ? "active" : "")
                 }
                 onClick={() => {
                   setShowOccupations(false);
-                  setFilter("kv");
+                  setShowKreisverband((v) => !v);
                 }}
+                aria-pressed={showKreisverband}
               >
-                Mit Kreisverband
+                Kreisverbände
               </button>
               <button
                 className={"filter-chip " + (showOccupations ? "active" : "")}
-                onClick={() => setShowOccupations((v) => !v)}
+                onClick={() => {
+                  setShowKreisverband(false);
+                  setShowOccupations((v) => !v);
+                }}
                 aria-pressed={showOccupations}
               >
                 Berufe
               </button>
-              {!showOccupations && (
+              {!showOccupations && !showKreisverband && (
                 <input
                   className="search"
                   placeholder="Suchen nach Name oder Kreisverband…"
@@ -874,7 +898,30 @@ export default function App() {
               </p>
             )}
 
-            {showOccupations ? (
+            {showKreisverband ? (
+              kvGroups.length === 0 ? (
+                <div
+                  style={{
+                    textAlign: "center",
+                    padding: 40,
+                    color: "var(--grau)",
+                  }}
+                >
+                  Noch keine Kreisverbände.
+                </div>
+              ) : (
+                <div className="occupation-grid">
+                  {kvGroups.map((g) => (
+                    <div key={g.kreisverband} className="occupation-chip">
+                      <span className="occupation-name">
+                        {g.kreisverband}
+                      </span>
+                      <span className="occupation-count">{g.count}</span>
+                    </div>
+                  ))}
+                </div>
+              )
+            ) : showOccupations ? (
               occupationGroups.length === 0 ? (
                 <div
                   style={{

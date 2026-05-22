@@ -6,6 +6,7 @@ import {
   getStats,
   getNewsletterStats,
   getOccupations,
+  getKreisverbandStats,
   insertSigner,
   confirmSigner,
   refreshVerificationToken,
@@ -309,6 +310,18 @@ const server = Bun.serve({
           return json(occupations);
         } catch (err) {
           console.error("GET /api/occupations error:", err);
+          return json({ error: "Internal server error" }, 500);
+        }
+      },
+    },
+
+    "/api/kreisverband-stats": {
+      async GET() {
+        try {
+          const stats = await getKreisverbandStats();
+          return json(stats);
+        } catch (err) {
+          console.error("GET /api/kreisverband-stats error:", err);
           return json({ error: "Internal server error" }, 500);
         }
       },

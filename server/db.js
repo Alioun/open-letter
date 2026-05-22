@@ -386,6 +386,19 @@ export async function getOccupations() {
     .map((g) => ({ occupation: g.label, count: g.count }));
 }
 
+export async function getKreisverbandStats() {
+  const rows = await sql`
+    SELECT
+      CASE WHEN kreisverband = '' THEN 'Ohne Kreisverband' ELSE kreisverband END AS kreisverband,
+      COUNT(*)::int AS count
+    FROM signers
+    WHERE verified = TRUE AND show_publicly = TRUE
+    GROUP BY 1
+    ORDER BY count DESC, kreisverband ASC
+  `;
+  return rows;
+}
+
 export async function healthCheck() {
   try {
     await sql`SELECT 1`;
