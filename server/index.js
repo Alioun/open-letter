@@ -339,7 +339,7 @@ const server = Bun.serve({
           const { allowed, retryAfter } = checkRateLimit(
             ip,
             "sign",
-            3,
+            30,
             15 * 60 * 1000,
           );
           if (!allowed) {
@@ -415,7 +415,7 @@ const server = Bun.serve({
           const { allowed, retryAfter } = checkRateLimit(
             ip,
             "resend",
-            3,
+            12,
             15 * 60 * 1000,
           );
           if (!allowed) {
@@ -478,7 +478,7 @@ const server = Bun.serve({
           const { allowed, retryAfter } = checkRateLimit(
             ip,
             "deletion",
-            3,
+            12,
             15 * 60 * 1000,
           );
           if (!allowed) {
