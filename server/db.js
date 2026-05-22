@@ -18,6 +18,7 @@ export async function getSigners({
   search = "",
   limit = 18,
   offset = 0,
+  sort = "desc",
 }) {
   limit = Math.min(Math.max(1, limit), 100);
   offset = Math.max(0, offset);
@@ -39,6 +40,7 @@ export async function getSigners({
   }
 
   const where = conditions.join(" AND ");
+  const sortDirection = sort === "asc" ? "ASC" : "DESC";
 
   const countResult = await sql.unsafe(
     `SELECT COUNT(*)::int AS total FROM signers s WHERE ${where}`,
@@ -50,7 +52,7 @@ export async function getSigners({
     `SELECT s.id, s.name, s.kreisverband, s.occupation, s.created_at
      FROM signers s
      WHERE ${where}
-     ORDER BY s.created_at DESC
+     ORDER BY s.created_at ${sortDirection}
      LIMIT $${params.length - 1} OFFSET $${params.length}`,
     params,
   );

@@ -322,7 +322,8 @@ const server = Bun.serve({
           const search = url.searchParams.get("search") || "";
           const limit = parseInt(url.searchParams.get("limit") || "18", 10);
           const offset = parseInt(url.searchParams.get("offset") || "0", 10);
-          const result = await getSigners({ filter, search, limit, offset });
+          const sort = url.searchParams.get("sort") || "desc";
+          const result = await getSigners({ filter, search, limit, offset, sort });
           return json(result);
         } catch (err) {
           console.error("GET /api/signers error:", err);
@@ -352,7 +353,7 @@ const server = Bun.serve({
           const body = await req.json();
           const name = sanitize(body.name);
           const email = sanitizeEmail(body.email);
-          const kv = sanitize(body.kv || "");
+          const kv = sanitize(body.kv || "").replace(/^KV\s*/i, "");
           const occupation = sanitize(body.occupation || "");
           const newsletter = Boolean(body.newsletter);
           const showPublicly = body.agree === true;

@@ -210,6 +210,7 @@ export default function App() {
         search: s,
         limit: "18",
         offset: String(o),
+        sort: f === "alle" ? "asc" : "desc",
       });
       const res = await fetch(`/api/signers?${params}`);
       if (!res.ok) throw new Error();
@@ -251,7 +252,9 @@ export default function App() {
           .map((s) => ({ ...s, _isNew: true }));
         if (newOnes.length > 0) {
           newOnes.forEach((s) => knownIdsRef.current.add(s.id));
-          setSigners((prev) => [...newOnes, ...prev]);
+          setSigners((prev) =>
+            filter === "alle" ? [...prev, ...newOnes] : [...newOnes, ...prev],
+          );
           setTimeout(() => {
             setSigners((prev) =>
               prev.map((s) => (s._isNew ? { ...s, _isNew: false } : s)),
@@ -623,10 +626,7 @@ export default function App() {
                 die Rolle von Mandatsträger*innen und ihr Verhältnis zur Partei
                 eine zentrale politische Frage. Wir wollen über den Diätendeckel
                 demokratisch diskutieren, und zwar auf dem Parteitag. Genau dort
-                gehört diese Auseinandersetzung hin. Für uns ist es
-                unverständlich, wenn einzelne Abgeordnete diese Debatte über die
-                Medien führen. Solche öffentlichen Eskalationen helfen weder der
-                Partei noch der inhaltlichen Diskussion.
+                gehört diese Auseinandersetzung hin und nicht in die Presse.
               </p>
 
               <p>
@@ -805,6 +805,18 @@ export default function App() {
                 }}
               >
                 Alle
+              </button>
+              <button
+                className={
+                  "filter-chip " +
+                  (!showOccupations && filter === "neueste" ? "active" : "")
+                }
+                onClick={() => {
+                  setShowOccupations(false);
+                  setFilter("neueste");
+                }}
+              >
+                Neueste
               </button>
               <button
                 className={
@@ -1211,7 +1223,7 @@ function SignForm({ onSubmit, serverError }) {
     await onSubmit({
       name: name.trim(),
       email: email.trim(),
-      kv: kv.trim(),
+      kv: kv.trim().replace(/^KV\s*/i, ""),
       occupation: occupation.trim(),
       newsletter,
       agree,
@@ -1298,7 +1310,10 @@ function SignForm({ onSubmit, serverError }) {
             setShowSuggest(true);
           }}
           onFocus={() => setShowSuggest(true)}
-          onBlur={() => setTimeout(() => setShowSuggest(false), 150)}
+          onBlur={() => {
+            setTimeout(() => setShowSuggest(false), 150);
+            setKv((v) => v.replace(/^KV\s*/i, ""));
+          }}
           placeholder="z. B. Berlin-Neukölln"
           autoComplete="off"
           role="combobox"
