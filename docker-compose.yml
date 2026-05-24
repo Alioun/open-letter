@@ -14,6 +14,7 @@ services:
       - RESEND_FROM=${RESEND_FROM:-"Gehaltsdeckel Initiative" <noreply@gehaltsdeckel.jetzt>}
       - BACKUP_DIR=/app/backups
       - BACKUP_KEEP=${BACKUP_KEEP:-48}
+      - BACKUP_ENCRYPTION_KEY=${BACKUP_ENCRYPTION_KEY}
       - TRUST_PROXY=${TRUST_PROXY:-true}
     volumes:
       - backups:/app/backups

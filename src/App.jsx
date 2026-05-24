@@ -72,6 +72,8 @@ const CITY_COORDS = {
   Heinsberg: [12, 260],
 };
 
+const MAP_VB = { x: -60, y: -10, w: 520, h: 520 };
+
 const GERMANY_PATH =
   "M 47,100 L 75,88 L 115,78 L 120,52 L 130,20 L 155,18 L 180,36 L 210,40 L 232,54 L 268,62 L 300,48 L 340,48 L 358,65 L 372,110 L 370,175 L 386,240 L 360,262 L 322,274 L 292,296 L 286,350 L 336,396 L 312,460 L 272,482 L 226,482 L 190,482 L 166,474 L 146,470 L 122,466 L 82,480 L 76,450 L 88,426 L 106,392 L 112,376 L 56,372 L 32,352 L 16,322 L 8,292 L 6,262 L 14,232 L 32,212 L 44,196 L 52,172 L 56,142 L 47,110 Z";
 
@@ -436,6 +438,7 @@ export default function App() {
         else if (showImpressum) setShowImpressum(false);
         else if (showDatenschutz) setShowDatenschutz(false);
         else if (showDeleted) setShowDeleted(false);
+        else if (showMap) setShowMap(false);
         else if (navOpen) setNavOpen(false);
       }
     }
@@ -1778,7 +1781,7 @@ function KreisverbandMap({ kvGroups }) {
     return { cities, unmapped, ohneCount, total };
   }, [kvGroups]);
 
-  const [expanded, setExpanded] = useState(null);
+  const [popup, setPopup] = useState(null);
 
   const wrapRef = useRef(null);
   useEffect(() => {
@@ -1796,88 +1799,92 @@ function KreisverbandMap({ kvGroups }) {
     }).filter((cl) => cl.total > 0);
   }, [cityData.cities]);
 
-  const collapsedChips = useMemo(() => {
-    const chips = clusterData
-      .filter((cl) => cl.id !== expanded)
-      .map((cl) => {
-        const isSolo = cl.cities.length === 1;
-        const center = isSolo ? CITY_COORDS[cl.cities[0]] : cl.center;
-        const label = isSolo ? cl.cities[0] : cl.label;
-        return { ...chipPos(label, cl.total, center), id: cl.id, isSolo };
-      });
-    return nudgeChips(chips);
-  }, [clusterData, expanded]);
+  const chips = useMemo(() => {
+    const list = clusterData.map((cl) => {
+      const isSolo = cl.cities.length === 1;
+      const center = isSolo ? CITY_COORDS[cl.cities[0]] : cl.center;
+      const label = isSolo ? cl.cities[0] : cl.label;
+      return { ...chipPos(label, cl.total, center), id: cl.id, isSolo };
+    });
+    return nudgeChips(list);
+  }, [clusterData]);
 
-  const expandedChips = useMemo(() => {
-    if (!expanded) return [];
-    const cl = clusterData.find((c) => c.id === expanded);
-    if (!cl) return [];
-    const chips = cl.members
-      .sort((a, b) => b.count - a.count)
-      .map((m) => chipPos(m.city, m.count));
-    return nudgeChips(chips);
-  }, [expanded, clusterData]);
+  function handleClusterClick(chip) {
+    if (chip.isSolo) return;
+    const cl = clusterData.find((c) => c.id === chip.id);
+    if (!cl) return;
+    setPopup({
+      id: cl.id,
+      label: cl.label,
+      total: cl.total,
+      members: cl.members.sort((a, b) => b.count - a.count),
+      x: `${((chip.cx - MAP_VB.x) / MAP_VB.w) * 100}%`,
+      y: `${((chip.cy - MAP_VB.y) / MAP_VB.h) * 100}%`,
+    });
+  }
 
   return (
     <div className="kv-map-wrap" ref={wrapRef}>
-      <svg
-        viewBox="-60 -10 520 520"
-        className="kv-map"
-        aria-hidden="true"
-        onClick={(e) => {
-          if (e.target.closest(".kv-map-marker")) return;
-          setExpanded(null);
-        }}
-      >
-        <path d={GERMANY_PATH} className="kv-map-outline" />
-        {collapsedChips.map((chip) => (
-          <g
-            key={chip.id}
-            className="kv-map-marker"
-            onClick={(e) => {
-              if (!chip.isSolo) {
+      <div style={{ position: "relative", width: "100%", maxWidth: 900 }} onClick={() => setPopup(null)}>
+        <svg
+          viewBox={`${MAP_VB.x} ${MAP_VB.y} ${MAP_VB.w} ${MAP_VB.h}`}
+          className="kv-map"
+          aria-hidden="true"
+          onClick={() => setPopup(null)}
+        >
+          <path d={GERMANY_PATH} className="kv-map-outline" />
+          {chips.map((chip) => (
+            <g
+              key={chip.id}
+              className="kv-map-marker"
+              onClick={(e) => {
                 e.stopPropagation();
-                setExpanded(expanded === chip.id ? null : chip.id);
-              }
-            }}
-            style={!chip.isSolo ? { cursor: "pointer" } : undefined}
-          >
-            <foreignObject
-              x={chip.x}
-              y={chip.y}
-              width={chip.w + 8}
-              height={chip.h + 8}
-              style={{ overflow: "visible" }}
+                if (!chip.isSolo) handleClusterClick(chip);
+              }}
+              style={!chip.isSolo ? { cursor: "pointer" } : undefined}
             >
-              <div
-                className={
-                  "occupation-chip occupation-chip--map" +
-                  (!chip.isSolo ? " occupation-chip--cluster" : "")
-                }
+              <foreignObject
+                x={chip.x}
+                y={chip.y}
+                width={chip.w + 8}
+                height={chip.h + 8}
+                style={{ overflow: "visible" }}
               >
-                <span className="occupation-name">{chip.name}</span>
-                <span className="occupation-count">{chip.count}</span>
-              </div>
-            </foreignObject>
-          </g>
-        ))}
-        {expandedChips.map((chip) => (
-          <g key={chip.name} className="kv-map-marker">
-            <foreignObject
-              x={chip.x}
-              y={chip.y}
-              width={chip.w + 8}
-              height={chip.h + 8}
-              style={{ overflow: "visible" }}
-            >
-              <div className="occupation-chip occupation-chip--map">
-                <span className="occupation-name">{chip.name}</span>
-                <span className="occupation-count">{chip.count}</span>
-              </div>
-            </foreignObject>
-          </g>
-        ))}
-      </svg>
+                <div
+                  className={
+                    "occupation-chip occupation-chip--map" +
+                    (!chip.isSolo ? " occupation-chip--cluster" : "") +
+                    (popup && popup.id === chip.id ? " occupation-chip--active" : "")
+                  }
+                >
+                  <span className="occupation-name">{chip.name}</span>
+                  <span className="occupation-count">{chip.count}</span>
+                </div>
+              </foreignObject>
+            </g>
+          ))}
+        </svg>
+        {popup && (
+          <div
+            className="kv-map-popup"
+            style={{ left: popup.x, top: popup.y }}
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="kv-map-popup-head">
+              <span>{popup.label}</span>
+              <button onClick={() => setPopup(null)} aria-label="Schließen">×</button>
+            </div>
+            <div className="kv-map-popup-body">
+              {popup.members.map((m) => (
+                <div key={m.city} className="kv-map-popup-row">
+                  <span>{m.city}</span>
+                  <span className="occupation-count">{m.count}</span>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+      </div>
       {(cityData.unmapped.length > 0 || cityData.ohneCount > 0) && (
         <div className="kv-map-extras">
           {cityData.unmapped.map((g) => (

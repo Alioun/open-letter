@@ -68,3 +68,9 @@ CREATE INDEX IF NOT EXISTS idx_campaigns_due
   ON campaigns (status, scheduled_at);
 
 ALTER TABLE signers ADD COLUMN IF NOT EXISTS occupation TEXT DEFAULT '';
+
+ALTER TABLE signers ADD COLUMN IF NOT EXISTS state TEXT DEFAULT '';
+
+CREATE INDEX IF NOT EXISTS idx_signers_state
+  ON signers (state)
+  WHERE verified = TRUE AND state != '';

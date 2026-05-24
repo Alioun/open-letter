@@ -1,20 +1,24 @@
 import { mkdir, readdir, unlink } from "node:fs/promises";
 import { join } from "node:path";
+import { createCipheriv, randomBytes } from "node:crypto";
+import { createWriteStream } from "node:fs";
+import { pipeline } from "node:stream/promises";
+import { Readable } from "node:stream";
 
 const BACKUP_DIR = process.env.BACKUP_DIR || "/app/backups";
 const BACKUP_KEEP = Math.max(1, parseInt(process.env.BACKUP_KEEP || "48", 10));
 const DATABASE_URL = process.env.DATABASE_URL || "";
+const BACKUP_ENCRYPTION_KEY = process.env.BACKUP_ENCRYPTION_KEY || "";
 const ONE_HOUR = 60 * 60 * 1000;
 
 async function runBackup() {
   const ts = new Date().toISOString().replace(/[:.]/g, "-").slice(0, 19);
-  const file = join(BACKUP_DIR, `backup-${ts}.dump`);
+  const ext = BACKUP_ENCRYPTION_KEY ? ".dump.enc" : ".dump";
+  const file = join(BACKUP_DIR, `backup-${ts}${ext}`);
 
   try {
     await mkdir(BACKUP_DIR, { recursive: true });
 
-    // Parse the URL so credentials are passed via the environment only,
-    // keeping the password out of the process argument list (visible in `ps`).
     const dbUrl = new URL(DATABASE_URL);
     const pgArgs = ["pg_dump", "--format=custom"];
     if (dbUrl.hostname) pgArgs.push("--host", dbUrl.hostname);
@@ -25,13 +29,26 @@ async function runBackup() {
     if (dbName) pgArgs.push(dbName);
 
     const proc = Bun.spawn(pgArgs, {
-      stdout: Bun.file(file),
+      stdout: "pipe",
       stderr: "pipe",
       env: {
         ...process.env,
         PGPASSWORD: decodeURIComponent(dbUrl.password || ""),
       },
     });
+
+    const stdout = Readable.fromWeb(proc.stdout);
+    const out = createWriteStream(file);
+
+    if (BACKUP_ENCRYPTION_KEY) {
+      const key = Buffer.from(BACKUP_ENCRYPTION_KEY, "hex");
+      const iv = randomBytes(16);
+      const cipher = createCipheriv("aes-256-cbc", key, iv);
+      out.write(iv);
+      await pipeline(stdout, cipher, out);
+    } else {
+      await pipeline(stdout, out);
+    }
 
     const [exitCode, errText] = await Promise.all([
       proc.exited,
@@ -46,7 +63,6 @@ async function runBackup() {
     await prune();
   } catch (err) {
     console.error(`[backup] failed: ${err.message}`);
-    // Remove empty/partial file if it was created
     try {
       await unlink(file);
     } catch {}
@@ -55,7 +71,7 @@ async function runBackup() {
 
 async function prune() {
   const files = (await readdir(BACKUP_DIR))
-    .filter((f) => f.startsWith("backup-") && f.endsWith(".dump"))
+    .filter((f) => f.startsWith("backup-") && (f.endsWith(".dump") || f.endsWith(".dump.enc")))
     .sort()
     .reverse();
 

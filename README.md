@@ -79,6 +79,9 @@ This starts Postgres 18, creates the schema, seeds 200 verified signers, trickle
 | `ADMIN_JWT_SECRET` | Yes        | —                       | Long random secret for admin session JWTs                                                                             |
 | `RESEND_API_KEY`   | Yes (prod) | —                       | Resend API key used to send transactional email                                                                       |
 | `RESEND_FROM`      | No         | `Gehaltsdeckel Initiative <noreply@gehaltsdeckel.jetzt>` | Verified sender used for outbound email                                                  |
+| `BACKUP_ENCRYPTION_KEY` | No    | —                       | 32-byte hex key for AES-256-CBC backup encryption (64 hex chars). If unset, backups are unencrypted. |
+| `BACKUP_DIR`       | No         | `/app/backups`          | Directory for database backup files                                                                                   |
+| `BACKUP_KEEP`      | No         | `48`                    | Number of hourly backup files to retain                                                                               |
 
 See `.env.example` for a template.
 
@@ -158,6 +161,40 @@ Schema creation is idempotent (`IF NOT EXISTS`) — safe to run on every contain
 - **Input sanitization**: All text trimmed, HTML tags stripped, lengths capped. Parameterized SQL queries throughout.
 - **Token security**: `crypto.randomUUID()` (128-bit), 24h expiry, cleared after use.
 - **No email exposure**: `/api/signers` never returns email addresses. `/api/sign` returns the same response whether the email exists or not.
+
+## Backups
+
+The app runs hourly `pg_dump` backups to `BACKUP_DIR` (default `/app/backups`), keeping the most recent `BACKUP_KEEP` files (default 48). Backups use PostgreSQL's custom format.
+
+### Encryption at rest
+
+Set `BACKUP_ENCRYPTION_KEY` to encrypt backups with AES-256-CBC. Generate a key:
+
+```bash
+openssl rand -hex 32
+```
+
+Encrypted backups are saved with a `.dump.enc` extension. Each file has a random 16-byte IV prepended to the ciphertext.
+
+**Store this key securely and separately from the backups.** Without it, encrypted backups cannot be recovered.
+
+### Decrypting a backup
+
+```bash
+# Extract the IV (first 16 bytes) and ciphertext
+dd if=backup.dump.enc bs=16 count=1 of=iv.bin 2>/dev/null
+dd if=backup.dump.enc bs=16 skip=1 of=encrypted.bin 2>/dev/null
+
+# Decrypt (replace <hex-key> with your 64-char BACKUP_ENCRYPTION_KEY)
+openssl enc -d -aes-256-cbc \
+  -in encrypted.bin \
+  -out backup.dump \
+  -K <hex-key> \
+  -iv "$(xxd -p -c 32 iv.bin)"
+
+# Restore into Postgres
+pg_restore -d <database_url> backup.dump
+```
 
 ## Deployment (Dokploy)
 

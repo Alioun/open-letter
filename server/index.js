@@ -31,6 +31,7 @@ import {
   getUnsubscribeState,
   optOutNewsletter,
   deleteSignerByUnsubscribeToken,
+  getStateStats,
 } from "./db.js";
 import {
   sendVerificationEmail,
@@ -42,6 +43,10 @@ import {
 } from "./email.js";
 import { checkRateLimit } from "./ratelimit.js";
 import { startBackupSchedule } from "./backup.js";
+import {
+  enqueueStateResolution,
+  startStateWorker,
+} from "./nominatim.js";
 
 const PORT = parseInt(process.env.PORT || "3000", 10);
 const BASE_URL = process.env.BASE_URL || `http://localhost:${PORT}`;
@@ -348,6 +353,18 @@ const server = Bun.serve({
       },
     },
 
+    "/api/state-stats": {
+      async GET() {
+        try {
+          const stats = await getStateStats();
+          return json(stats);
+        } catch (err) {
+          console.error("GET /api/state-stats error:", err);
+          return json({ error: "Internal server error" }, 500);
+        }
+      },
+    },
+
     "/api/signers": {
       async GET(req) {
         try {
@@ -499,9 +516,12 @@ const server = Bun.serve({
       async GET(req) {
         try {
           const { token } = req.params;
-          const confirmed = await confirmSigner(token);
+          const signer = await confirmSigner(token);
 
-          if (confirmed) {
+          if (signer) {
+            if (signer.kreisverband) {
+              enqueueStateResolution(signer.id, signer.kreisverband);
+            }
             return Response.redirect(`${getBaseUrl(req)}/?confirmed=1`, 302);
           }
           return Response.redirect(
@@ -825,6 +845,7 @@ console.log(
   `Server running on ${server.url} (${isDev ? "development" : "production"})`,
 );
 startBackupSchedule();
+startStateWorker();
 
 function shutdown() {
   console.log("Shutting down...");

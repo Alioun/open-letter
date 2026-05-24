@@ -1,3 +1,5 @@
+FROM postgres:18 AS pg
+
 FROM oven/bun:1 AS base
 WORKDIR /app
 
@@ -8,9 +10,9 @@ RUN bun install --production --no-frozen-lockfile
 FROM base AS runner
 WORKDIR /app
 
-RUN apt-get update \
-    && apt-get install -y --no-install-recommends postgresql-client \
-    && rm -rf /var/lib/apt/lists/*
+COPY --from=pg /usr/lib/postgresql/18/bin/pg_dump /usr/local/bin/pg_dump
+COPY --from=pg /usr/lib/postgresql/18/lib/libpq.so.5 /usr/lib/
+RUN ldconfig
 
 COPY --from=deps /app/node_modules ./node_modules
 COPY . .

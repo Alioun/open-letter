@@ -46,7 +46,7 @@ export async function getSigners({
   `;
 
   const signers = await sql`
-    SELECT s.id, s.name, s.kreisverband, s.occupation, s.created_at
+    SELECT s.id, s.name, s.kreisverband, s.occupation, s.state, s.created_at
     FROM signers s
     WHERE s.verified = TRUE AND s.show_publicly = TRUE
     ${filterClause}
@@ -135,9 +135,10 @@ export async function confirmSigner(token) {
     WHERE verification_token = ${token}
       AND verified = FALSE
       AND token_expires_at > NOW()
-    RETURNING id
+    RETURNING id, kreisverband
   `;
-  return result.length > 0;
+  if (result.length === 0) return null;
+  return { id: result[0].id, kreisverband: result[0].kreisverband };
 }
 
 export async function createDeletionToken(email, token, expiresAt) {
@@ -402,6 +403,32 @@ export async function getKreisverbandStats() {
     ORDER BY count DESC, kreisverband ASC
   `;
   return rows;
+}
+
+export async function updateSignerState(id, state) {
+  await sql`UPDATE signers SET state = ${state} WHERE id = ${id}`;
+}
+
+export async function getSignersNeedingState(limit = 50) {
+  return await sql`
+    SELECT id, kreisverband
+    FROM signers
+    WHERE verified = TRUE AND kreisverband != '' AND state = ''
+    ORDER BY created_at DESC
+    LIMIT ${limit}
+  `;
+}
+
+export async function getStateStats() {
+  return await sql`
+    SELECT
+      CASE WHEN state = '' THEN 'Unbekannt' ELSE state END AS state,
+      COUNT(*)::int AS count
+    FROM signers
+    WHERE verified = TRUE AND show_publicly = TRUE
+    GROUP BY 1
+    ORDER BY count DESC, state ASC
+  `;
 }
 
 export async function healthCheck() {
