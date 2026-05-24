@@ -8,6 +8,7 @@
 
 :root {
   --rot: #ff0000;
+  --rot-text: #cc0000;
   --weiss: #ffffff;
   --akzent: #6f003c;
   --fond: #f4f1ec;
@@ -16,6 +17,9 @@
   --erfolg: #0a7a3a;
   --fehler: #b00020;
   --fehler-hell: color-mix(in srgb, var(--fehler) 7%, var(--weiss));
+  --warnung: #e6a817;
+  --warnung-hell: #fff3cd;
+  --warnung-text: #6b4200;
   --ls-tight: -0.02em;
   --ls-body: -0.01em;
   --ls-wide: 0.08em;
@@ -337,7 +341,7 @@ h1.headline .light {
   font-weight: 300;
 }
 h1.headline .rot {
-  color: var(--rot);
+  color: var(--rot-text);
 }
 
 h1.headline .banner {
@@ -431,8 +435,10 @@ h1.headline .banner {
 
 .counter-card .goal-bar > div {
   height: 100%;
+  width: 100%;
   background: var(--rot);
-  transition: width 0.8s cubic-bezier(0.2, 0.7, 0.2, 1);
+  transform-origin: left;
+  transition: transform 0.8s cubic-bezier(0.2, 0.7, 0.2, 1);
 }
 
 .counter-card .goal-meta {
@@ -492,7 +498,7 @@ h1.headline .banner {
   font-family: "Work Sans";
   font-weight: 900;
   font-size: 14px;
-  color: var(--rot);
+  color: var(--rot-text);
   letter-spacing: var(--ls-wide);
 }
 
@@ -601,7 +607,7 @@ h1.headline .banner {
   line-height: 0.85;
   float: left;
   margin: 4px 8px 0 0;
-  color: var(--rot);
+  color: var(--rot-text);
 }
 
 .brief-paper .gruss {
@@ -732,7 +738,7 @@ h1.headline .banner {
 }
 
 .sign-intro h2 .rot {
-  color: var(--rot);
+  color: var(--rot-text);
 }
 
 .sign-intro .lead {
@@ -1093,9 +1099,9 @@ h1.headline .banner {
 }
 
 .mail-warning {
-  background: #fff3cd;
-  border: 1.5px solid #e6a817;
-  color: #6b4200;
+  background: var(--warnung-hell);
+  border: 1.5px solid var(--warnung);
+  color: var(--warnung-text);
   padding: 10px 14px;
   font-size: 13px;
   line-height: 1.5;
@@ -1103,9 +1109,9 @@ h1.headline .banner {
 }
 
 .mail-warning--soft {
-  background: #f5f5f5;
-  border-color: #aaa;
-  color: var(--dunkel);
+  background: var(--grau-hell);
+  border-color: var(--grau);
+  color: var(--akzent);
 }
 
 .modal-body .confirm-btn {
@@ -1432,6 +1438,25 @@ h1.headline .banner {
   color: var(--weiss);
 }
 
+/* ---------- Section number ---------- */
+.section-num {
+  font-family: "Work Sans", "Inter", sans-serif;
+  font-weight: 900;
+  font-size: 14px;
+  color: var(--rot-text);
+  letter-spacing: var(--ls-wide);
+  display: block;
+  margin-bottom: 12px;
+}
+
+/* ---------- Empty state ---------- */
+.empty-state {
+  text-align: center;
+  padding: 40px;
+  color: var(--grau);
+  font-size: 14px;
+}
+
 /* ---------- Occupation grid ---------- */
 .occupation-grid {
   display: flex;
@@ -1471,6 +1496,102 @@ h1.headline .banner {
   padding: 2px 7px;
   min-width: 22px;
   text-align: center;
+}
+
+/* ---------- Kreisverband Map ---------- */
+.kv-map-wrap {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 18px;
+  padding: 24px 0;
+}
+
+.kv-map {
+  width: 100%;
+  max-width: 600px;
+  height: auto;
+  overflow: visible;
+}
+
+.kv-map-outline {
+  fill: var(--fond);
+  stroke: var(--akzent);
+  stroke-width: 2;
+  stroke-linejoin: round;
+}
+
+.occupation-chip--map {
+  padding: 2px 6px;
+  font-size: 8px;
+  gap: 3px;
+  border-width: 1px;
+  line-height: 1.2;
+  white-space: nowrap;
+  box-shadow: none;
+  transition: transform 0.1s ease, box-shadow 0.1s ease;
+}
+
+.occupation-chip--map .occupation-count {
+  font-size: 7px;
+  padding: 0px 4px;
+  min-width: 14px;
+}
+
+.kv-map-leader {
+  stroke: var(--akzent);
+  stroke-width: 1;
+  opacity: 0.25;
+}
+
+
+.kv-map-marker {
+  cursor: pointer;
+  pointer-events: all;
+}
+
+.kv-map-marker:hover .occupation-chip--map {
+  transform: translate(-1px, -1px);
+  box-shadow: 3px 3px 0 var(--rot);
+}
+
+.kv-map-marker:hover .kv-map-leader {
+  opacity: 0.6;
+  stroke: var(--rot);
+}
+
+
+.kv-map-note {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  background: var(--weiss);
+  border: 1.5px solid var(--akzent);
+  padding: 10px 18px;
+  font-size: 14px;
+}
+
+.kv-map-note-label {
+  font-family: "Work Sans", sans-serif;
+  font-weight: 700;
+  color: var(--akzent);
+}
+
+.kv-map-note-count {
+  font-family: "Work Sans", sans-serif;
+  font-weight: 900;
+  font-size: 12px;
+  background: var(--akzent);
+  color: var(--weiss);
+  padding: 2px 7px;
+  min-width: 22px;
+  text-align: center;
+}
+
+@media (max-width: 600px) {
+  .kv-map {
+    max-width: 100%;
+  }
 }
 
 /* ---------- Footer ---------- */
@@ -1946,7 +2067,7 @@ footer {
 }
 
 .admin-editor-surface span[data-template-variable] {
-  color: var(--rot);
+  color: var(--rot-text);
   text-decoration: underline;
   text-decoration-thickness: 2px;
   text-underline-offset: 3px;
@@ -2128,7 +2249,7 @@ footer {
 
 /* Today (not selected) */
 .rdp-root .rdp-today:not(.rdp-outside):not(.rdp-selected) .rdp-day_button {
-  color: var(--rot);
+  color: var(--rot-text);
   font-weight: 700;
   position: relative;
 }
@@ -2379,6 +2500,13 @@ footer {
   margin: 24px 0;
 }
 
+.modal-disclaimer {
+  margin-top: 16px;
+  color: var(--grau);
+  font-size: 13px;
+  line-height: 1.55;
+}
+
 /* ---------- Deletion form inside Datenschutz modal ---------- */
 .deletion-form {
   display: flex;
@@ -2395,7 +2523,7 @@ footer {
   font-family: inherit;
   font-size: 14px;
   background: var(--weiss);
-  color: var(--schwarz);
+  color: var(--akzent);
   outline: none;
 }
 

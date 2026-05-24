@@ -55,6 +55,57 @@ const MILESTONES = [
   1000, 1300, 1600, 2000, 2300, 2600, 3000, 4000, 5000, 7500, 10000,
 ];
 
+const CITY_COORDS = {
+  Berlin: [323, 163],
+  Potsdam: [298, 178],
+  Hamburg: [179, 98],
+  Leipzig: [280, 238],
+  Dresden: [338, 256],
+  Köln: [38, 276],
+  Düsseldorf: [28, 240],
+  "Frankfurt am Main": [123, 316],
+  München: [246, 440],
+  Stuttgart: [144, 400],
+  Bremen: [128, 128],
+  Hannover: [168, 173],
+  Nürnberg: [225, 358],
+  Rostock: [268, 64],
+  Erfurt: [215, 260],
+  Magdeburg: [248, 188],
+  Kiel: [184, 49],
+  Saarbrücken: [51, 371],
+  Mainz: [97, 323],
+  Aachen: [6, 274],
+  Bonn: [60, 300],
+  Karlsruhe: [111, 385],
+  Freiburg: [87, 450],
+  Heidelberg: [123, 360],
+  "Halle (Saale)": [265, 218],
+  Jena: [242, 280],
+  Chemnitz: [303, 270],
+  Bielefeld: [116, 195],
+  Dortmund: [100, 216],
+  Essen: [58, 215],
+  Duisburg: [22, 200],
+  Wuppertal: [74, 248],
+  Münster: [82, 172],
+  Oldenburg: [103, 124],
+  Göttingen: [176, 226],
+  Kassel: [157, 239],
+  Marburg: [126, 271],
+  Tübingen: [133, 420],
+  Konstanz: [144, 471],
+  Regensburg: [268, 385],
+  Augsburg: [217, 426],
+  Würzburg: [177, 336],
+  Lübeck: [208, 78],
+  Flensburg: [155, 20],
+  Osnabrück: [96, 178],
+};
+
+const GERMANY_PATH =
+  "M 47,100 L 75,88 L 115,78 L 120,52 L 130,20 L 155,18 L 180,36 L 210,40 L 232,54 L 268,62 L 300,48 L 340,48 L 358,65 L 372,110 L 370,175 L 386,240 L 360,262 L 322,274 L 292,296 L 286,350 L 336,396 L 312,460 L 272,482 L 226,482 L 190,482 L 166,474 L 146,470 L 122,466 L 82,480 L 76,450 L 88,426 L 106,392 L 112,376 L 56,372 L 32,352 L 16,322 L 8,292 L 6,262 L 14,232 L 32,212 L 44,196 L 52,172 L 56,142 L 47,110 Z";
+
 function initials(name) {
   const parts = (name || "").trim().split(/\s+/);
   if (parts.length === 0) return "?";
@@ -194,6 +245,7 @@ export default function App() {
   const [showOccupations, setShowOccupations] = useState(false);
   const [occupationGroups, setOccupationGroups] = useState([]);
   const [showKreisverband, setShowKreisverband] = useState(false);
+  const [showMap, setShowMap] = useState(false);
   const [kvGroups, setKvGroups] = useState([]);
 
   const emailTrapRef = useFocusTrap(!!emailModal);
@@ -310,14 +362,14 @@ export default function App() {
   }, [showOccupations]);
 
   useEffect(() => {
-    if (!showKreisverband) return;
+    if (!showKreisverband && !showMap) return;
     (async () => {
       try {
         const res = await fetch("/api/kreisverband-stats");
         if (res.ok) setKvGroups(await res.json());
       } catch {}
     })();
-  }, [showKreisverband]);
+  }, [showKreisverband, showMap]);
 
   function handleLoadMore() {
     const next = offset + 18;
@@ -575,7 +627,7 @@ export default function App() {
                   aria-valuemin={0}
                   aria-valuemax={100}
                 >
-                  <div style={{ width: pct + "%" }}></div>
+                  <div style={{ transform: `scaleX(${pct / 100})` }}></div>
                 </div>
                 <div className="goal-meta">
                   <span>{pct}% erreicht</span>
@@ -718,19 +770,7 @@ export default function App() {
           <div className="section-inner">
             <div className="sign-grid">
               <div className="sign-intro">
-                <span
-                  className="num work"
-                  style={{
-                    fontWeight: 900,
-                    fontSize: 14,
-                    color: "var(--rot)",
-                    letterSpacing: ".05em",
-                    display: "block",
-                    marginBottom: 12,
-                  }}
-                >
-                  02 / Mitzeichnen
-                </span>
+                <span className="section-num">02 / Mitzeichnen</span>
                 <h2>
                   Setz deinen
                   <br />
@@ -766,19 +806,7 @@ export default function App() {
           <div className="section-inner">
             <div className="signers-head">
               <div>
-                <span
-                  className="num work"
-                  style={{
-                    fontWeight: 900,
-                    fontSize: 14,
-                    color: "var(--rot)",
-                    letterSpacing: ".05em",
-                    display: "block",
-                    marginBottom: 8,
-                  }}
-                >
-                  03 / Schon dabei
-                </span>
+                <span className="section-num">03 / Schon dabei</span>
                 <h2>
                   {total.toLocaleString("de-DE")} Genoss*innen
                   <br />
@@ -809,17 +837,21 @@ export default function App() {
               </div>
             </div>
 
-            <div className="filters">
+            <div className="filters" role="group" aria-label="Filter">
               <button
                 className={
                   "filter-chip " +
-                  (!showOccupations && !showKreisverband && filter === "alle"
+                  (!showOccupations && !showKreisverband && !showMap && filter === "alle"
                     ? "active"
                     : "")
+                }
+                aria-pressed={
+                  !showOccupations && !showKreisverband && !showMap && filter === "alle"
                 }
                 onClick={() => {
                   setShowOccupations(false);
                   setShowKreisverband(false);
+                  setShowMap(false);
                   setFilter("alle");
                 }}
               >
@@ -828,13 +860,17 @@ export default function App() {
               <button
                 className={
                   "filter-chip " +
-                  (!showOccupations && !showKreisverband && filter === "neueste"
+                  (!showOccupations && !showKreisverband && !showMap && filter === "neueste"
                     ? "active"
                     : "")
+                }
+                aria-pressed={
+                  !showOccupations && !showKreisverband && !showMap && filter === "neueste"
                 }
                 onClick={() => {
                   setShowOccupations(false);
                   setShowKreisverband(false);
+                  setShowMap(false);
                   setFilter("neueste");
                 }}
               >
@@ -842,23 +878,22 @@ export default function App() {
               </button>
               <button
                 className={
-                  "filter-chip " +
-                  (!showOccupations && !showKreisverband && filter === "heute"
-                    ? "active"
-                    : "")
+                  "filter-chip " + (showMap ? "active" : "")
                 }
+                aria-pressed={showMap}
                 onClick={() => {
                   setShowOccupations(false);
                   setShowKreisverband(false);
-                  setFilter("heute");
+                  setShowMap((v) => !v);
                 }}
               >
-                Heute
+                Karte
               </button>
               <button
                 className={"filter-chip " + (showKreisverband ? "active" : "")}
                 onClick={() => {
                   setShowOccupations(false);
+                  setShowMap(false);
                   setShowKreisverband((v) => !v);
                 }}
                 aria-pressed={showKreisverband}
@@ -869,13 +904,14 @@ export default function App() {
                 className={"filter-chip " + (showOccupations ? "active" : "")}
                 onClick={() => {
                   setShowKreisverband(false);
+                  setShowMap(false);
                   setShowOccupations((v) => !v);
                 }}
                 aria-pressed={showOccupations}
               >
                 Berufe
               </button>
-              {!showOccupations && !showKreisverband && (
+              {!showOccupations && !showKreisverband && !showMap && (
                 <input
                   className="search"
                   placeholder="Suchen nach Name oder Kreisverband…"
@@ -889,7 +925,7 @@ export default function App() {
             {error && (
               <p
                 style={{
-                  color: "var(--rot)",
+                  color: "var(--rot-text)",
                   textAlign: "center",
                   padding: 20,
                 }}
@@ -898,15 +934,17 @@ export default function App() {
               </p>
             )}
 
-            {showKreisverband ? (
+            {showMap ? (
               kvGroups.length === 0 ? (
-                <div
-                  style={{
-                    textAlign: "center",
-                    padding: 40,
-                    color: "var(--grau)",
-                  }}
-                >
+                <div className="empty-state">
+                  Lade Karte…
+                </div>
+              ) : (
+                <KreisverbandMap kvGroups={kvGroups} />
+              )
+            ) : showKreisverband ? (
+              kvGroups.length === 0 ? (
+                <div className="empty-state">
                   Noch keine Kreisverbände.
                 </div>
               ) : (
@@ -921,13 +959,7 @@ export default function App() {
               )
             ) : showOccupations ? (
               occupationGroups.length === 0 ? (
-                <div
-                  style={{
-                    textAlign: "center",
-                    padding: 40,
-                    color: "var(--grau)",
-                  }}
-                >
+                <div className="empty-state">
                   Noch keine Berufe angegeben.
                 </div>
               ) : (
@@ -941,13 +973,7 @@ export default function App() {
                 </div>
               )
             ) : loading && signers.length === 0 ? (
-              <div
-                style={{
-                  textAlign: "center",
-                  padding: 40,
-                  color: "var(--grau)",
-                }}
-              >
+              <div className="empty-state">
                 Lade Unterschriften…
               </div>
             ) : (
@@ -1046,20 +1072,7 @@ export default function App() {
                 Bestätigungslink geschickt an:
               </p>
               <div className="email-pill">{emailModal.email}</div>
-              {emailWarning(emailModal.email) === "mailbox" && (
-                <div className="mail-warning">
-                  <strong>Achtung:</strong> mailbox.org blockiert leider
-                  Bestätigungs-E-Mails von unserer Domain. Bitte verwende eine
-                  andere E-Mail-Adresse (z.B. Gmail, GMX oder Posteo).
-                </div>
-              )}
-              {emailWarning(emailModal.email) === "custom" && (
-                <div className="mail-warning mail-warning--soft">
-                  <strong>Hinweis:</strong> Bei privaten oder
-                  Organisations-Domains kann die Zustellung verzögert sein oder
-                  im Spam landen.
-                </div>
-              )}
+
               <p>
                 Erst nach dem Klick auf den Link in dieser E-Mail wird deine
                 Unterschrift gezählt und öffentlich gelistet.
@@ -1471,6 +1484,153 @@ function SignForm({ onSubmit, serverError }) {
   );
 }
 
+function KreisverbandMap({ kvGroups }) {
+  const cityData = useMemo(() => {
+    const cities = {};
+    let ohneCount = 0;
+    let total = 0;
+    for (const g of kvGroups) {
+      total += g.count;
+      if (g.kreisverband === "Ohne Kreisverband") {
+        ohneCount = g.count;
+        continue;
+      }
+      const city = g.kreisverband.startsWith("Berlin-")
+        ? "Berlin"
+        : g.kreisverband.startsWith("Hamburg-")
+          ? "Hamburg"
+          : g.kreisverband;
+      if (!CITY_COORDS[city]) continue;
+      cities[city] = (cities[city] || 0) + g.count;
+    }
+    return { cities, ohneCount, total };
+  }, [kvGroups]);
+
+  const entries = Object.entries(cityData.cities).sort((a, b) => b[1] - a[1]);
+
+  const resolvedChips = useMemo(() => {
+    const GAP = 4;
+    const CHIP_H = 16;
+    const chips = entries.map(([city, count]) => {
+      const [cx, cy] = CITY_COORDS[city];
+      const nameW = city.length * 4 + 24;
+      const countW = Math.max(String(count).length * 4 + 12, 16);
+      const chipW = nameW + countW;
+      const chipX =
+        cx < 180
+          ? cx - 12
+          : cx > 280
+            ? cx - chipW + 12
+            : cx - chipW / 2;
+      const chipY = cy - CHIP_H - 6;
+      return { city, count, cx, cy, x: chipX, y: chipY, w: chipW, h: CHIP_H, nameW, countW };
+    });
+
+    const placed = [];
+    for (const chip of chips) {
+      const overlaps = (ty) =>
+        placed.some(
+          (p) =>
+            chip.x < p.x + p.w + GAP &&
+            chip.x + chip.w + GAP > p.x &&
+            ty < p.y + p.h + GAP &&
+            ty + chip.h + GAP > p.y,
+        );
+
+      if (!overlaps(chip.y)) {
+        placed.push(chip);
+        continue;
+      }
+
+      let bestUp = null;
+      let bestDown = null;
+      for (let dy = 1; dy <= 300; dy++) {
+        if (bestUp === null && !overlaps(chip.y - dy)) bestUp = chip.y - dy;
+        if (bestDown === null && !overlaps(chip.y + dy)) bestDown = chip.y + dy;
+        if (bestUp !== null && bestDown !== null) break;
+      }
+
+      const distUp = bestUp !== null ? Math.abs(chip.y - bestUp) : Infinity;
+      const distDown = bestDown !== null ? Math.abs(chip.y - bestDown) : Infinity;
+      chip.y = distUp <= distDown ? bestUp : bestDown;
+      placed.push(chip);
+    }
+
+    return chips;
+  }, [entries]);
+
+  const [hovered, setHovered] = useState(null);
+  const renderChips = hovered
+    ? [...resolvedChips].sort((a, b) =>
+        a.city === hovered ? 1 : b.city === hovered ? -1 : 0,
+      )
+    : resolvedChips;
+
+  const minY = Math.min(-30, ...resolvedChips.map((c) => c.y - 5));
+  const maxY = Math.max(510, ...resolvedChips.map((c) => c.y + c.h + 10));
+
+  return (
+    <div className="kv-map-wrap">
+      <svg
+        viewBox={`-60 ${minY} 520 ${maxY - minY + 30}`}
+        className="kv-map"
+        aria-hidden="true"
+      >
+        <path d={GERMANY_PATH} className="kv-map-outline" />
+        {renderChips.map((chip) => {
+          const {
+            city,
+            count,
+            cx,
+            cy,
+            x: chipX,
+            y: chipY,
+            w: chipW,
+            h: chipH,
+          } = chip;
+          return (
+            <g
+              key={city}
+              className="kv-map-marker"
+              onMouseEnter={() => setHovered(city)}
+              onMouseLeave={() => setHovered(null)}
+            >
+              <title>
+                {city}: {count}
+              </title>
+              <line
+                x1={cx}
+                y1={cy}
+                x2={cx}
+                y2={chipY + chipH}
+                className="kv-map-leader"
+              />
+              <foreignObject
+                x={chipX}
+                y={chipY}
+                width={chipW + 8}
+                height={chipH + 8}
+                style={{ overflow: "visible" }}
+              >
+                <div className="occupation-chip occupation-chip--map">
+                  <span className="occupation-name">{city}</span>
+                  <span className="occupation-count">{count}</span>
+                </div>
+              </foreignObject>
+            </g>
+          );
+        })}
+      </svg>
+      {cityData.ohneCount > 0 && (
+        <div className="kv-map-note">
+          <span className="kv-map-note-label">Ohne Kreisverband</span>
+          <span className="kv-map-note-count">{cityData.ohneCount}</span>
+        </div>
+      )}
+    </div>
+  );
+}
+
 function ImpressumModal({ onClose }) {
   const trapRef = useFocusTrap(true);
   return (
@@ -1504,7 +1664,7 @@ function ImpressumModal({ onClose }) {
               kontakt@gehaltsdeckel.jetzt
             </a>
           </p>
-          <p style={{ marginTop: 16, color: "var(--grau)", fontSize: 13 }}>
+          <p className="modal-disclaimer">
             Diese Website ist kein offizielles Angebot der Partei Die Linke. Es
             handelt sich um eine private Initiative von Parteimitgliedern an der
             Basis.
