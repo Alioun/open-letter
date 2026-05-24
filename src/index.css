@@ -869,6 +869,10 @@ h1.headline .banner {
   box-shadow: 4px 4px 0 var(--rot);
 }
 
+.err {
+  margin-bottom: 16px;
+}
+
 .field .err {
   color: var(--fehler);
   font-size: 12px;
@@ -1365,17 +1369,15 @@ h1.headline .banner {
 @keyframes newrow {
   0% {
     background: var(--rot);
-    color: var(--weiss);
   }
   100% {
     background: var(--fond);
-    color: inherit;
   }
 }
 
 .signer .avatar {
-  width: 42px;
-  height: 42px;
+  width: 44px;
+  height: 44px;
   background: var(--akzent);
   color: var(--weiss);
   display: flex;

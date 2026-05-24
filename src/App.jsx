@@ -220,6 +220,7 @@ export default function App() {
 
   const emailTrapRef = useFocusTrap(!!emailModal);
   const successTrapRef = useFocusTrap(showSuccess);
+  const deletedTrapRef = useFocusTrap(showDeleted);
 
   const fetchStats = useCallback(async () => {
     try {
@@ -1108,6 +1109,7 @@ export default function App() {
                   strokeWidth="3.5"
                   strokeLinecap="round"
                   strokeLinejoin="round"
+                  aria-hidden="true"
                 >
                   <polyline points="20 6 9 17 4 12"></polyline>
                 </svg>
@@ -1145,6 +1147,7 @@ export default function App() {
             aria-modal="true"
             aria-labelledby="deleted-modal-title"
             onClick={(e) => e.stopPropagation()}
+            ref={deletedTrapRef}
           >
             <div className="modal-head">
               <h3 id="deleted-modal-title">Daten gelöscht</h3>
@@ -1164,6 +1167,7 @@ export default function App() {
                   strokeWidth="3.5"
                   strokeLinecap="round"
                   strokeLinejoin="round"
+                  aria-hidden="true"
                 >
                   <polyline points="20 6 9 17 4 12"></polyline>
                 </svg>
@@ -1293,7 +1297,7 @@ function SignForm({ onSubmit, serverError }) {
       </div>
 
       {serverError && (
-        <div className="err" style={{ marginBottom: 16 }} role="alert">
+        <div className="err" role="alert">
           {serverError}
         </div>
       )}
