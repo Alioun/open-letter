@@ -6,7 +6,8 @@
     "dev": "bun --watch server/index.js",
     "start": "NODE_ENV=production bun server/index.js",
     "db:setup": "bun db/setup.js",
-    "db:seed": "bun db/seed.js"
+    "db:seed": "bun db/seed.js",
+    "og": "bun scripts/generate-og.js"
   },
   "dependencies": {
     "@fontsource/inter": "^5.2.8",
@@ -26,5 +27,8 @@
     "react": "^18.3.1",
     "react-day-picker": "^10.0.0",
     "react-dom": "^18.3.1"
+  },
+  "devDependencies": {
+    "puppeteer": "^25.0.4"
   }
 }

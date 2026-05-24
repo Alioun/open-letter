@@ -310,6 +310,62 @@ const server = Bun.serve({
     [adminRoute]: homepage,
     "/abmelden/:token": homepage,
 
+    "/og.png": {
+      async GET() {
+        const { readFile } = await import("node:fs/promises");
+        try {
+          const buf = await readFile(
+            new URL("../public/og.png", import.meta.url),
+          );
+          return new Response(buf, {
+            headers: {
+              "Content-Type": "image/png",
+              "Cache-Control": "public, max-age=86400",
+            },
+          });
+        } catch {
+          return new Response("", { status: 404 });
+        }
+      },
+    },
+
+    "/robots.txt": {
+      GET() {
+        const body = [
+          "User-agent: *",
+          "Allow: /",
+          "",
+          "Disallow: /api/",
+          `Disallow: /${ADMIN_PATH}`,
+          "",
+          `Sitemap: ${BASE_URL}/sitemap.xml`,
+        ].join("\n");
+        return new Response(body, {
+          headers: { "Content-Type": "text/plain; charset=utf-8" },
+        });
+      },
+    },
+
+    "/sitemap.xml": {
+      GET() {
+        const now = new Date().toISOString().split("T")[0];
+        const xml = [
+          '<?xml version="1.0" encoding="UTF-8"?>',
+          '<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">',
+          "  <url>",
+          `    <loc>${BASE_URL}/</loc>`,
+          `    <lastmod>${now}</lastmod>`,
+          "    <changefreq>daily</changefreq>",
+          "    <priority>1.0</priority>",
+          "  </url>",
+          "</urlset>",
+        ].join("\n");
+        return new Response(xml, {
+          headers: { "Content-Type": "application/xml; charset=utf-8" },
+        });
+      },
+    },
+
     "/api/health": {
       async GET() {
         const db = await healthCheck();
