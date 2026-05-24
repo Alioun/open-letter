@@ -12,6 +12,10 @@ services:
       - ADMIN_JWT_SECRET=${ADMIN_JWT_SECRET}
       - RESEND_API_KEY=${RESEND_API_KEY}
       - RESEND_FROM=${RESEND_FROM:-"Gehaltsdeckel Initiative" <noreply@gehaltsdeckel.jetzt>}
+      - BACKUP_DIR=/app/backups
+      - BACKUP_KEEP=${BACKUP_KEEP:-48}
+    volumes:
+      - backups:/app/backups
     depends_on:
       db:
         condition: service_healthy
@@ -48,3 +52,4 @@ services:
 
 volumes:
   pgdata:
+  backups:

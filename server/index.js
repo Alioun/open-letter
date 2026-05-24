@@ -41,6 +41,7 @@ import {
   sendAlreadySignedEmail,
 } from "./email.js";
 import { checkRateLimit } from "./ratelimit.js";
+import { startBackupSchedule } from "./backup.js";
 
 const PORT = parseInt(process.env.PORT || "3000", 10);
 const BASE_URL = process.env.BASE_URL || `http://localhost:${PORT}`;
@@ -336,7 +337,13 @@ const server = Bun.serve({
           const limit = parseInt(url.searchParams.get("limit") || "18", 10);
           const offset = parseInt(url.searchParams.get("offset") || "0", 10);
           const sort = url.searchParams.get("sort") || "desc";
-          const result = await getSigners({ filter, search, limit, offset, sort });
+          const result = await getSigners({
+            filter,
+            search,
+            limit,
+            offset,
+            sort,
+          });
           return json(result);
         } catch (err) {
           console.error("GET /api/signers error:", err);
@@ -779,6 +786,7 @@ const server = Bun.serve({
 console.log(
   `Server running on ${server.url} (${isDev ? "development" : "production"})`,
 );
+startBackupSchedule();
 
 function shutdown() {
   console.log("Shutting down...");

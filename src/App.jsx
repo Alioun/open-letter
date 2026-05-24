@@ -1,6 +1,5 @@
 import { useState, useEffect, useMemo, useRef, useCallback } from "react";
 
-
 const MILESTONES = [
   1000, 1300, 1600, 2000, 2300, 2600, 3000, 4000, 5000, 7500, 10000,
 ];
@@ -88,7 +87,8 @@ function relTime(ts) {
   if (diff < 60) return "gerade eben";
   if (diff < 3600) return Math.floor(diff / 60) + " Min";
   if (diff < 86400) return Math.floor(diff / 3600) + " Std";
-  if (diff < 86400 * 7) return Math.floor(diff / 86400) + " Tagen";
+  const days = Math.floor(diff / 86400);
+  if (days < 7) return days + (days === 1 ? " Tag" : " Tagen");
   if (diff < 86400 * 30) return Math.floor(diff / (86400 * 7)) + " Wo";
   return Math.floor(diff / (86400 * 30)) + " Mon";
 }
@@ -811,12 +811,18 @@ export default function App() {
               <button
                 className={
                   "filter-chip " +
-                  (!showOccupations && !showKreisverband && !showMap && filter === "alle"
+                  (!showOccupations &&
+                  !showKreisverband &&
+                  !showMap &&
+                  filter === "alle"
                     ? "active"
                     : "")
                 }
                 aria-pressed={
-                  !showOccupations && !showKreisverband && !showMap && filter === "alle"
+                  !showOccupations &&
+                  !showKreisverband &&
+                  !showMap &&
+                  filter === "alle"
                 }
                 onClick={() => {
                   setShowOccupations(false);
@@ -830,12 +836,18 @@ export default function App() {
               <button
                 className={
                   "filter-chip " +
-                  (!showOccupations && !showKreisverband && !showMap && filter === "neueste"
+                  (!showOccupations &&
+                  !showKreisverband &&
+                  !showMap &&
+                  filter === "neueste"
                     ? "active"
                     : "")
                 }
                 aria-pressed={
-                  !showOccupations && !showKreisverband && !showMap && filter === "neueste"
+                  !showOccupations &&
+                  !showKreisverband &&
+                  !showMap &&
+                  filter === "neueste"
                 }
                 onClick={() => {
                   setShowOccupations(false);
@@ -847,9 +859,7 @@ export default function App() {
                 Neueste
               </button>
               <button
-                className={
-                  "filter-chip " + (showMap ? "active" : "")
-                }
+                className={"filter-chip " + (showMap ? "active" : "")}
                 aria-pressed={showMap}
                 onClick={() => {
                   setShowOccupations(false);
@@ -906,17 +916,13 @@ export default function App() {
 
             {showMap ? (
               kvGroups.length === 0 ? (
-                <div className="empty-state">
-                  Lade Karte…
-                </div>
+                <div className="empty-state">Lade Karte…</div>
               ) : (
                 <KreisverbandMap kvGroups={kvGroups} />
               )
             ) : showKreisverband ? (
               kvGroups.length === 0 ? (
-                <div className="empty-state">
-                  Noch keine Kreisverbände.
-                </div>
+                <div className="empty-state">Noch keine Kreisverbände.</div>
               ) : (
                 <div className="occupation-grid">
                   {kvGroups.map((g) => (
@@ -929,9 +935,7 @@ export default function App() {
               )
             ) : showOccupations ? (
               occupationGroups.length === 0 ? (
-                <div className="empty-state">
-                  Noch keine Berufe angegeben.
-                </div>
+                <div className="empty-state">Noch keine Berufe angegeben.</div>
               ) : (
                 <div className="occupation-grid">
                   {occupationGroups.map((g) => (
@@ -943,9 +947,7 @@ export default function App() {
                 </div>
               )
             ) : loading && signers.length === 0 ? (
-              <div className="empty-state">
-                Lade Unterschriften…
-              </div>
+              <div className="empty-state">Lade Unterschriften…</div>
             ) : (
               <>
                 <div className="signers-grid">
@@ -1225,7 +1227,9 @@ function SignForm({ onSubmit, serverError }) {
         const res = await fetch("/api/kreisverband-stats");
         if (res.ok) {
           const data = await res.json();
-          setKnownKreisverbaende(data.map((d) => d.kreisverband).filter(Boolean));
+          setKnownKreisverbaende(
+            data.map((d) => d.kreisverband).filter(Boolean),
+          );
         }
       } catch {}
     })();
@@ -1467,24 +1471,29 @@ function SignForm({ onSubmit, serverError }) {
 }
 
 const BERLIN_DISTRICTS = new Set([
-  "Spandau", "Lichtenberg", "Tempelhof-Schöneberg",
-  "Treptow-Köpenick", "Treptow Köpenick", "Moabit",
-  "Pankow", "Marzahn-Hellersdorf",
+  "Spandau",
+  "Lichtenberg",
+  "Tempelhof-Schöneberg",
+  "Treptow-Köpenick",
+  "Treptow Köpenick",
+  "Moabit",
+  "Pankow",
+  "Marzahn-Hellersdorf",
 ]);
 
 const REGION_MAP = {
   "Region Hannover": "Hannover",
-  "Bodenseekreis": "Konstanz",
+  Bodenseekreis: "Konstanz",
   "Calw-Freudenstadt": "Stuttgart",
   "Sigmaringen-Zollernalb": "Tübingen",
   "Breisgau-Hochschwarzwald": "Freiburg",
-  "Ortenau": "Freiburg",
-  "Waldshut": "Lörrach",
+  Ortenau: "Freiburg",
+  Waldshut: "Lörrach",
   "Ilm-Kreis": "Erfurt",
   "Lahn-Dill Kreis": "Marburg",
   "Traunstein-BGL": "München",
-  "Uckermark": "Potsdam",
-  "Allgäu": "Augsburg",
+  Uckermark: "Potsdam",
+  Allgäu: "Augsburg",
 };
 
 function resolveCity(kv) {
@@ -1564,29 +1573,140 @@ function resolveCity(kv) {
   // Stellvertretende etc. — organizational, not geographic
   if (/^Stellvertretende/i.test(kv)) return null;
 
-  if (/oberberg/i.test(kv)) return "Köln";       // Oberbergischer Kreis → NRW
-  if (/oberland/i.test(kv)) return "München";    // Oberland → Bayern
+  if (/oberberg/i.test(kv)) return "Köln"; // Oberbergischer Kreis → NRW
+  if (/oberland/i.test(kv)) return "München"; // Oberland → Bayern
 
   return null;
 }
 
 const CLUSTERS = [
-  { id: "nrw", label: "NRW", center: [55, 230], cities: ["Köln", "Düsseldorf", "Aachen", "Bonn", "Bielefeld", "Dortmund", "Essen", "Duisburg", "Wuppertal", "Münster", "Bochum", "Heinsberg"] },
-  { id: "bawue", label: "Baden-Württemberg", center: [125, 420], cities: ["Stuttgart", "Karlsruhe", "Freiburg", "Heidelberg", "Tübingen", "Konstanz", "Mannheim", "Esslingen", "Ludwigsburg", "Reutlingen", "Lörrach", "Ravensburg", "Pforzheim"] },
-  { id: "bayern", label: "Bayern", center: [230, 395], cities: ["München", "Nürnberg", "Regensburg", "Augsburg", "Würzburg", "Erlangen", "Fürth"] },
-  { id: "niedersachsen", label: "Niedersachsen", center: [150, 165], cities: ["Hannover", "Oldenburg", "Göttingen", "Osnabrück", "Braunschweig", "Wolfenbüttel", "Lüneburg", "Hameln"] },
-  { id: "hessen", label: "Hessen", center: [128, 295], cities: ["Frankfurt am Main", "Kassel", "Marburg", "Darmstadt", "Wiesbaden", "Offenbach"] },
-  { id: "sachsen", label: "Sachsen", center: [305, 260], cities: ["Leipzig", "Dresden", "Chemnitz", "Zwickau"] },
+  {
+    id: "nrw",
+    label: "NRW",
+    center: [55, 230],
+    cities: [
+      "Köln",
+      "Düsseldorf",
+      "Aachen",
+      "Bonn",
+      "Bielefeld",
+      "Dortmund",
+      "Essen",
+      "Duisburg",
+      "Wuppertal",
+      "Münster",
+      "Bochum",
+      "Heinsberg",
+    ],
+  },
+  {
+    id: "bawue",
+    label: "Baden-Württemberg",
+    center: [125, 420],
+    cities: [
+      "Stuttgart",
+      "Karlsruhe",
+      "Freiburg",
+      "Heidelberg",
+      "Tübingen",
+      "Konstanz",
+      "Mannheim",
+      "Esslingen",
+      "Ludwigsburg",
+      "Reutlingen",
+      "Lörrach",
+      "Ravensburg",
+      "Pforzheim",
+    ],
+  },
+  {
+    id: "bayern",
+    label: "Bayern",
+    center: [230, 395],
+    cities: [
+      "München",
+      "Nürnberg",
+      "Regensburg",
+      "Augsburg",
+      "Würzburg",
+      "Erlangen",
+      "Fürth",
+    ],
+  },
+  {
+    id: "niedersachsen",
+    label: "Niedersachsen",
+    center: [150, 165],
+    cities: [
+      "Hannover",
+      "Oldenburg",
+      "Göttingen",
+      "Osnabrück",
+      "Braunschweig",
+      "Wolfenbüttel",
+      "Lüneburg",
+      "Hameln",
+    ],
+  },
+  {
+    id: "hessen",
+    label: "Hessen",
+    center: [128, 295],
+    cities: [
+      "Frankfurt am Main",
+      "Kassel",
+      "Marburg",
+      "Darmstadt",
+      "Wiesbaden",
+      "Offenbach",
+    ],
+  },
+  {
+    id: "sachsen",
+    label: "Sachsen",
+    center: [305, 260],
+    cities: ["Leipzig", "Dresden", "Chemnitz", "Zwickau"],
+  },
   { id: "berlin", label: "Berlin", center: [323, 163], cities: ["Berlin"] },
-  { id: "brandenburg", label: "Brandenburg", center: [290, 185], cities: ["Potsdam", "Brandenburg"] },
+  {
+    id: "brandenburg",
+    label: "Brandenburg",
+    center: [290, 185],
+    cities: ["Potsdam", "Brandenburg"],
+  },
   { id: "hamburg", label: "Hamburg", center: [179, 98], cities: ["Hamburg"] },
   { id: "bremen", label: "Bremen", center: [128, 128], cities: ["Bremen"] },
-  { id: "sh", label: "Schleswig-Holstein", center: [175, 48], cities: ["Kiel", "Lübeck", "Flensburg"] },
-  { id: "thueringen", label: "Thüringen", center: [228, 270], cities: ["Erfurt", "Jena"] },
-  { id: "sachsen-anhalt", label: "Sachsen-Anhalt", center: [255, 205], cities: ["Magdeburg", "Halle (Saale)"] },
-  { id: "mv", label: "Meckl.-Vorpommern", center: [268, 64], cities: ["Rostock"] },
+  {
+    id: "sh",
+    label: "Schleswig-Holstein",
+    center: [175, 48],
+    cities: ["Kiel", "Lübeck", "Flensburg"],
+  },
+  {
+    id: "thueringen",
+    label: "Thüringen",
+    center: [228, 270],
+    cities: ["Erfurt", "Jena"],
+  },
+  {
+    id: "sachsen-anhalt",
+    label: "Sachsen-Anhalt",
+    center: [255, 205],
+    cities: ["Magdeburg", "Halle (Saale)"],
+  },
+  {
+    id: "mv",
+    label: "Meckl.-Vorpommern",
+    center: [268, 64],
+    cities: ["Rostock"],
+  },
   { id: "rlp", label: "Rheinland-Pfalz", center: [97, 323], cities: ["Mainz"] },
-  { id: "saarland", label: "Saarland", center: [51, 371], cities: ["Saarbrücken"] },
+  {
+    id: "saarland",
+    label: "Saarland",
+    center: [51, 371],
+    cities: ["Saarbrücken"],
+  },
 ];
 
 function chipPos(name, count, coords) {
@@ -1595,7 +1715,8 @@ function chipPos(name, count, coords) {
   const nameW = name.length * 5 + 23;
   const countW = Math.max(String(count).length * 4.5 + 10, 13);
   const chipW = nameW + countW;
-  const chipX = cx < 180 ? cx - 16 : cx > 280 ? cx - chipW + 16 : cx - chipW / 2;
+  const chipX =
+    cx < 180 ? cx - 16 : cx > 280 ? cx - chipW + 16 : cx - chipW / 2;
   const chipY = cy - CHIP_H / 2;
   return { name, count, cx, cy, x: chipX, y: chipY, w: chipW, h: CHIP_H };
 }
@@ -1655,6 +1776,12 @@ function KreisverbandMap({ kvGroups }) {
 
   const [expanded, setExpanded] = useState(null);
 
+  const wrapRef = useRef(null);
+  useEffect(() => {
+    const el = wrapRef.current;
+    if (el) el.scrollLeft = (el.scrollWidth - el.clientWidth) / 2;
+  }, []);
+
   const clusterData = useMemo(() => {
     return CLUSTERS.map((cl) => {
       const members = cl.cities
@@ -1688,7 +1815,7 @@ function KreisverbandMap({ kvGroups }) {
   }, [expanded, clusterData]);
 
   return (
-    <div className="kv-map-wrap">
+    <div className="kv-map-wrap" ref={wrapRef}>
       <svg
         viewBox="-60 -10 520 520"
         className="kv-map"

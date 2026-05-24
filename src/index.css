@@ -51,6 +51,7 @@ body {
   -webkit-font-smoothing: antialiased;
 }
 
+html,
 body {
   overflow-x: hidden;
 }
@@ -480,6 +481,7 @@ h1.headline .banner {
 .section {
   padding: 96px 28px;
   border-bottom: 1px solid var(--akzent);
+  overflow-x: clip;
 }
 
 .section-inner {
@@ -1212,6 +1214,7 @@ h1.headline .banner {
 .signers-section {
   background: var(--fond);
   border-bottom: 1px solid var(--akzent);
+  overflow-x: clip;
 }
 
 .signers-head {
@@ -1474,7 +1477,9 @@ h1.headline .banner {
   font-size: 14px;
   font-weight: 500;
   color: var(--akzent);
-  transition: transform 0.1s ease, box-shadow 0.1s ease;
+  transition:
+    transform 0.1s ease,
+    box-shadow 0.1s ease;
 }
 
 .occupation-chip:hover {
@@ -1505,6 +1510,33 @@ h1.headline .banner {
   align-items: center;
   gap: 18px;
   padding: 24px 0;
+}
+
+@media (max-width: 600px) {
+  .kv-map-wrap {
+    margin-left: -28px;
+    margin-right: -28px;
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+    align-items: flex-start;
+    padding-left: 16px;
+    padding-right: 16px;
+  }
+
+  .kv-map {
+    min-width: 700px;
+    width: 700px;
+  }
+
+  .occupation-chip--map {
+    font-size: 10px;
+    padding: 7px 11px;
+  }
+
+  .occupation-chip--map .occupation-count {
+    font-size: 9px;
+    padding: 2px 5px;
+  }
 }
 
 .kv-map {
@@ -1548,7 +1580,6 @@ h1.headline .banner {
   cursor: pointer;
   border-style: dashed;
 }
-
 
 .kv-map-extras {
   display: flex;
