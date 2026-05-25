@@ -108,6 +108,10 @@ export function getQueueLength() {
   return queue.length;
 }
 
+export function clearProcessedKvs() {
+  processedKvs.clear();
+}
+
 export async function triggerBackfill() {
   const rows = await getSignersNeedingState();
   for (const row of rows) {

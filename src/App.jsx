@@ -4,73 +4,6 @@ const MILESTONES = [
   1000, 1300, 1600, 2000, 2300, 2600, 3000, 4000, 5000, 7500, 10000,
 ];
 
-const CITY_COORDS = {
-  Berlin: [323, 163],
-  Potsdam: [298, 178],
-  Hamburg: [179, 98],
-  Leipzig: [280, 238],
-  Dresden: [338, 256],
-  Köln: [38, 276],
-  Düsseldorf: [28, 240],
-  "Frankfurt am Main": [123, 316],
-  München: [246, 440],
-  Stuttgart: [144, 400],
-  Bremen: [128, 128],
-  Hannover: [168, 173],
-  Nürnberg: [225, 358],
-  Rostock: [268, 64],
-  Erfurt: [215, 260],
-  Magdeburg: [248, 188],
-  Kiel: [184, 49],
-  Saarbrücken: [51, 371],
-  Mainz: [97, 323],
-  Aachen: [6, 274],
-  Bonn: [60, 300],
-  Karlsruhe: [111, 385],
-  Freiburg: [87, 450],
-  Heidelberg: [123, 360],
-  "Halle (Saale)": [265, 218],
-  Jena: [242, 280],
-  Chemnitz: [303, 270],
-  Bielefeld: [116, 195],
-  Dortmund: [100, 216],
-  Essen: [58, 215],
-  Duisburg: [22, 200],
-  Wuppertal: [74, 248],
-  Münster: [82, 172],
-  Oldenburg: [103, 124],
-  Göttingen: [176, 226],
-  Kassel: [157, 239],
-  Marburg: [126, 271],
-  Tübingen: [133, 420],
-  Konstanz: [144, 471],
-  Regensburg: [268, 385],
-  Augsburg: [217, 426],
-  Würzburg: [177, 336],
-  Lübeck: [208, 78],
-  Flensburg: [155, 20],
-  Osnabrück: [96, 178],
-  Braunschweig: [195, 185],
-  Mannheim: [113, 355],
-  Bochum: [72, 220],
-  Wolfenbüttel: [205, 190],
-  Darmstadt: [113, 335],
-  Lüneburg: [198, 118],
-  Erlangen: [220, 365],
-  Fürth: [218, 362],
-  Zwickau: [295, 278],
-  Esslingen: [148, 408],
-  Ludwigsburg: [138, 395],
-  Reutlingen: [140, 425],
-  Lörrach: [93, 468],
-  Brandenburg: [290, 175],
-  Ravensburg: [168, 458],
-  Wiesbaden: [103, 318],
-  Offenbach: [130, 320],
-  Pforzheim: [118, 393],
-  Hameln: [148, 195],
-  Heinsberg: [12, 260],
-};
 
 const MAP_VB = { x: -60, y: -10, w: 520, h: 520 };
 
@@ -1568,247 +1501,31 @@ const SignForm = memo(function SignForm({
   );
 });
 
-const BERLIN_DISTRICTS = new Set([
-  "Spandau",
-  "Lichtenberg",
-  "Tempelhof-Schöneberg",
-  "Treptow-Köpenick",
-  "Treptow Köpenick",
-  "Moabit",
-  "Pankow",
-  "Marzahn-Hellersdorf",
-]);
-
-const REGION_MAP = {
-  "Region Hannover": "Hannover",
-  Bodenseekreis: "Konstanz",
-  "Calw-Freudenstadt": "Stuttgart",
-  "Sigmaringen-Zollernalb": "Tübingen",
-  "Breisgau-Hochschwarzwald": "Freiburg",
-  Ortenau: "Freiburg",
-  Waldshut: "Lörrach",
-  "Ilm-Kreis": "Erfurt",
-  "Lahn-Dill Kreis": "Marburg",
-  "Traunstein-BGL": "München",
-  Uckermark: "Potsdam",
-  Allgäu: "Augsburg",
-};
-
-function resolveCity(kv) {
-  if (kv === "Ohne Kreisverband") return null;
-
-  // Exact match
-  if (CITY_COORDS[kv]) return kv;
-
-  // Region lookup
-  if (REGION_MAP[kv]) return REGION_MAP[kv];
-
-  // Berlin variants
-  if (/^(Berlin|BV Berlin|SDS.*(Berlin|Tu berlin))/i.test(kv)) return "Berlin";
-  if (BERLIN_DISTRICTS.has(kv)) return "Berlin";
-  if (/^Stellvertretende.*Berlin/i.test(kv)) return "Berlin";
-
-  // Hamburg variants
-  if (/^Hamburg/i.test(kv)) return "Hamburg";
-
-  // Leipzig variants
-  if (/^(Leipzig|SDS Leipzig)/i.test(kv)) return "Leipzig";
-
-  // Köln variants (including typo Kõln)
-  if (/^K[öõ]ln/i.test(kv)) return "Köln";
-
-  // Bremen variants
-  if (/^Bremen/i.test(kv)) return "Bremen";
-
-  // Stuttgart variants
-  if (/^Stuttgart/i.test(kv)) return "Stuttgart";
-
-  // Mainz variants
-  if (/^Mainz/i.test(kv)) return "Mainz";
-
-  // Magdeburg variants
-  if (/Magdeburg/i.test(kv)) return "Magdeburg";
-
-  // Halle variants
-  if (/^Halle/i.test(kv)) return "Halle (Saale)";
-
-  // Heidelberg variants
-  if (/^Heidelberg/i.test(kv)) return "Heidelberg";
-
-  // Rhein-Sieg area → Bonn
-  if (/^Rhein.?Sieg/i.test(kv)) return "Bonn";
-
-  // Ostalb / Ostalbkreis / typo Osralb
-  if (/^Os[tr]alb/i.test(kv)) return "Stuttgart";
-
-  // Pforzheim / Enzkreis
-  if (/^Pforzheim/i.test(kv)) return "Pforzheim";
-
-  // Erlangen variants
-  if (/^Erlangen/i.test(kv)) return "Erlangen";
-
-  // Hameln variants
-  if (/^Hameln/i.test(kv)) return "Hameln";
-
-  // Offenbach variants
-  if (/^Offenbach/i.test(kv) || /^Rodgau/i.test(kv)) return "Offenbach";
-
-  // Heinsberg
-  if (/^Heinsberg/i.test(kv)) return "Aachen";
-
-  // Rhein-Hardt / Rhein-Lahn
-  if (/^Rhein.?Hardt/i.test(kv) || /^Rhein.?Lahn/i.test(kv)) return "Mainz";
-
-  // Brandenburg(Havel)
-  if (/^Brandenburg/i.test(kv)) return "Brandenburg";
-
-  // Aalen → near Stuttgart
-  if (/^Aalen/i.test(kv)) return "Stuttgart";
-
-  // SDS chapters without city prefix
-  if (/^SDS\s/i.test(kv)) return null;
-
-  // Stellvertretende etc. — organizational, not geographic
-  if (/^Stellvertretende/i.test(kv)) return null;
-
-  if (/oberberg/i.test(kv)) return "Köln"; // Oberbergischer Kreis → NRW
-  if (/oberland/i.test(kv)) return "München"; // Oberland → Bayern
-
-  return null;
-}
-
-const CLUSTERS = [
-  {
-    id: "nrw",
-    label: "NRW",
-    center: [55, 230],
-    cities: [
-      "Köln",
-      "Düsseldorf",
-      "Aachen",
-      "Bonn",
-      "Bielefeld",
-      "Dortmund",
-      "Essen",
-      "Duisburg",
-      "Wuppertal",
-      "Münster",
-      "Bochum",
-      "Heinsberg",
-    ],
-  },
-  {
-    id: "bawue",
-    label: "Baden-Württemberg",
-    center: [125, 420],
-    cities: [
-      "Stuttgart",
-      "Karlsruhe",
-      "Freiburg",
-      "Heidelberg",
-      "Tübingen",
-      "Konstanz",
-      "Mannheim",
-      "Esslingen",
-      "Ludwigsburg",
-      "Reutlingen",
-      "Lörrach",
-      "Ravensburg",
-      "Pforzheim",
-    ],
-  },
-  {
-    id: "bayern",
-    label: "Bayern",
-    center: [230, 395],
-    cities: [
-      "München",
-      "Nürnberg",
-      "Regensburg",
-      "Augsburg",
-      "Würzburg",
-      "Erlangen",
-      "Fürth",
-    ],
-  },
-  {
-    id: "niedersachsen",
-    label: "Niedersachsen",
-    center: [150, 165],
-    cities: [
-      "Hannover",
-      "Oldenburg",
-      "Göttingen",
-      "Osnabrück",
-      "Braunschweig",
-      "Wolfenbüttel",
-      "Lüneburg",
-      "Hameln",
-    ],
-  },
-  {
-    id: "hessen",
-    label: "Hessen",
-    center: [128, 295],
-    cities: [
-      "Frankfurt am Main",
-      "Kassel",
-      "Marburg",
-      "Darmstadt",
-      "Wiesbaden",
-      "Offenbach",
-    ],
-  },
-  {
-    id: "sachsen",
-    label: "Sachsen",
-    center: [305, 260],
-    cities: ["Leipzig", "Dresden", "Chemnitz", "Zwickau"],
-  },
-  { id: "berlin", label: "Berlin", center: [323, 163], cities: ["Berlin"] },
-  {
-    id: "brandenburg",
-    label: "Brandenburg",
-    center: [290, 185],
-    cities: ["Potsdam", "Brandenburg"],
-  },
-  { id: "hamburg", label: "Hamburg", center: [179, 98], cities: ["Hamburg"] },
-  { id: "bremen", label: "Bremen", center: [128, 128], cities: ["Bremen"] },
-  {
-    id: "sh",
-    label: "Schleswig-Holstein",
-    center: [175, 48],
-    cities: ["Kiel", "Lübeck", "Flensburg"],
-  },
-  {
-    id: "thueringen",
-    label: "Thüringen",
-    center: [228, 270],
-    cities: ["Erfurt", "Jena"],
-  },
-  {
-    id: "sachsen-anhalt",
-    label: "Sachsen-Anhalt",
-    center: [255, 205],
-    cities: ["Magdeburg", "Halle (Saale)"],
-  },
-  {
-    id: "mv",
-    label: "Meckl.-Vorpommern",
-    center: [268, 64],
-    cities: ["Rostock"],
-  },
-  { id: "rlp", label: "Rheinland-Pfalz", center: [97, 323], cities: ["Mainz"] },
-  {
-    id: "saarland",
-    label: "Saarland",
-    center: [51, 371],
-    cities: ["Saarbrücken"],
-  },
+const STATE_CLUSTERS = [
+  { id: "nrw", label: "NRW", state: "Nordrhein-Westfalen", center: [55, 230] },
+  { id: "bawue", label: "Baden-Württemberg", state: "Baden-Württemberg", center: [125, 420] },
+  { id: "bayern", label: "Bayern", state: "Bayern", center: [230, 395] },
+  { id: "niedersachsen", label: "Niedersachsen", state: "Niedersachsen", center: [150, 165] },
+  { id: "hessen", label: "Hessen", state: "Hessen", center: [128, 295] },
+  { id: "sachsen", label: "Sachsen", state: "Sachsen", center: [305, 260] },
+  { id: "berlin", label: "Berlin", state: "Berlin", center: [323, 163] },
+  { id: "brandenburg", label: "Brandenburg", state: "Brandenburg", center: [290, 185] },
+  { id: "hamburg", label: "Hamburg", state: "Hamburg", center: [179, 98] },
+  { id: "bremen", label: "Bremen", state: "Bremen", center: [128, 128] },
+  { id: "sh", label: "Schleswig-Holstein", state: "Schleswig-Holstein", center: [175, 48] },
+  { id: "thueringen", label: "Thüringen", state: "Thüringen", center: [228, 270] },
+  { id: "sachsen-anhalt", label: "Sachsen-Anhalt", state: "Sachsen-Anhalt", center: [255, 205] },
+  { id: "mv", label: "Meckl.-Vorpommern", state: "Mecklenburg-Vorpommern", center: [268, 64] },
+  { id: "rlp", label: "Rheinland-Pfalz", state: "Rheinland-Pfalz", center: [97, 323] },
+  { id: "saarland", label: "Saarland", state: "Saarland", center: [51, 371] },
 ];
 
+const STATE_TO_CLUSTER = Object.fromEntries(
+  STATE_CLUSTERS.map((cl) => [cl.state, cl.id]),
+);
+
 function chipPos(name, count, coords) {
-  const [cx, cy] = coords || CITY_COORDS[name] || [0, 0];
+  const [cx, cy] = coords || [0, 0];
   const CHIP_H = 16;
   const nameW = name.length * 5 + 23;
   const countW = Math.max(String(count).length * 4.5 + 10, 13);
@@ -1851,8 +1568,9 @@ function nudgeChips(chips, maxNudge = 150) {
 }
 
 function KreisverbandMap({ kvGroups }) {
-  const cityData = useMemo(() => {
-    const cities = {};
+  const mapData = useMemo(() => {
+    const stateCounts = {};
+    const stateKvs = {};
     const unmapped = [];
     let ohneCount = 0;
     let total = 0;
@@ -1862,17 +1580,20 @@ function KreisverbandMap({ kvGroups }) {
         ohneCount = g.count;
         continue;
       }
-      const city = resolveCity(g.kreisverband);
-      if (city && CITY_COORDS[city]) {
-        cities[city] = (cities[city] || 0) + g.count;
+      const clusterId = g.state ? STATE_TO_CLUSTER[g.state] : null;
+      if (clusterId) {
+        stateCounts[clusterId] = (stateCounts[clusterId] || 0) + g.count;
+        if (!stateKvs[clusterId]) stateKvs[clusterId] = [];
+        stateKvs[clusterId].push({ city: g.kreisverband, count: g.count });
       } else {
         unmapped.push(g);
       }
     }
-    return { cities, unmapped, ohneCount, total };
+    return { stateCounts, stateKvs, unmapped, ohneCount, total };
   }, [kvGroups]);
 
   const [popup, setPopup] = useState(null);
+  const [popupAtBottom, setPopupAtBottom] = useState(false);
   const popupCloseRef = useRef(null);
   const lastFocusedRef = useRef(null);
 
@@ -1883,6 +1604,7 @@ function KreisverbandMap({ kvGroups }) {
       lastFocusedRef.current.focus();
       lastFocusedRef.current = null;
     }
+    setPopupAtBottom(false);
   }, [popup]);
 
   useEffect(() => {
@@ -1901,27 +1623,25 @@ function KreisverbandMap({ kvGroups }) {
   }, []);
 
   const clusterData = useMemo(() => {
-    return CLUSTERS.map((cl) => {
-      const members = cl.cities
-        .filter((c) => cityData.cities[c])
-        .map((c) => ({ city: c, count: cityData.cities[c] }));
-      const total = members.reduce((s, m) => s + m.count, 0);
-      return { ...cl, members, total };
-    }).filter((cl) => cl.total > 0);
-  }, [cityData.cities]);
+    return STATE_CLUSTERS.filter((cl) => mapData.stateCounts[cl.id] > 0).map(
+      (cl) => ({
+        ...cl,
+        members: (mapData.stateKvs[cl.id] || []).sort(
+          (a, b) => b.count - a.count,
+        ),
+        total: mapData.stateCounts[cl.id],
+      }),
+    );
+  }, [mapData]);
 
   const chips = useMemo(() => {
     const list = clusterData.map((cl) => {
-      const isSolo = cl.cities.length === 1;
-      const center = isSolo ? CITY_COORDS[cl.cities[0]] : cl.center;
-      const label = isSolo ? cl.cities[0] : cl.label;
-      return { ...chipPos(label, cl.total, center), id: cl.id, isSolo };
+      return { ...chipPos(cl.label, cl.total, cl.center), id: cl.id, isSolo: false };
     });
     return nudgeChips(list);
   }, [clusterData]);
 
   function handleClusterClick(chip, triggerEl) {
-    if (chip.isSolo) return;
     const cl = clusterData.find((c) => c.id === chip.id);
     if (!cl) return;
     if (triggerEl) lastFocusedRef.current = triggerEl;
@@ -1929,7 +1649,7 @@ function KreisverbandMap({ kvGroups }) {
       id: cl.id,
       label: cl.label,
       total: cl.total,
-      members: cl.members.sort((a, b) => b.count - a.count),
+      members: cl.members,
       x: `${((chip.cx - MAP_VB.x) / MAP_VB.w) * 100}%`,
       y: `${((chip.cy - MAP_VB.y) / MAP_VB.h) * 100}%`,
     });
@@ -1958,31 +1678,24 @@ function KreisverbandMap({ kvGroups }) {
                   height={chip.h + 8}
                   style={{ overflow: "visible" }}
                 >
-                  {chip.isSolo ? (
-                    <div className="occupation-chip occupation-chip--map">
-                      <span className="occupation-name">{chip.name}</span>
-                      <span className="occupation-count">{chip.count}</span>
-                    </div>
-                  ) : (
-                    <button
-                      type="button"
-                      className={
-                        "occupation-chip occupation-chip--map occupation-chip--cluster" +
-                        (popup && popup.id === chip.id
-                          ? " occupation-chip--active"
-                          : "")
-                      }
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        handleClusterClick(chip, e.currentTarget);
-                      }}
-                      aria-label={`${chip.name}: ${chip.count} Unterschriften, Details anzeigen`}
-                      aria-expanded={popup ? popup.id === chip.id : false}
-                    >
-                      <span className="occupation-name">{chip.name}</span>
-                      <span className="occupation-count">{chip.count}</span>
-                    </button>
-                  )}
+                  <button
+                    type="button"
+                    className={
+                      "occupation-chip occupation-chip--map occupation-chip--cluster" +
+                      (popup && popup.id === chip.id
+                        ? " occupation-chip--active"
+                        : "")
+                    }
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      handleClusterClick(chip, e.currentTarget);
+                    }}
+                    aria-label={`${chip.name}: ${chip.count} Unterschriften, Details anzeigen`}
+                    aria-expanded={popup ? popup.id === chip.id : false}
+                  >
+                    <span className="occupation-name">{chip.name}</span>
+                    <span className="occupation-count">{chip.count}</span>
+                  </button>
                 </foreignObject>
               </g>
             ))}
@@ -2005,7 +1718,15 @@ function KreisverbandMap({ kvGroups }) {
                   ×
                 </button>
               </div>
-              <div className="kv-map-popup-body">
+              <div
+                className="kv-map-popup-body"
+                onScroll={(e) => {
+                  const el = e.currentTarget;
+                  setPopupAtBottom(
+                    el.scrollHeight - el.scrollTop <= el.clientHeight + 4,
+                  );
+                }}
+              >
                 {popup.members.map((m) => (
                   <div key={m.city} className="kv-map-popup-row">
                     <span>{m.city}</span>
@@ -2013,22 +1734,27 @@ function KreisverbandMap({ kvGroups }) {
                   </div>
                 ))}
               </div>
+              {popup.members.length > 5 && !popupAtBottom && (
+                <div className="kv-map-popup-scroll-hint" aria-hidden="true">
+                  ▾
+                </div>
+              )}
             </div>
           )}
         </div>
       </div>
-      {(cityData.unmapped.length > 0 || cityData.ohneCount > 0) && (
+      {(mapData.unmapped.length > 0 || mapData.ohneCount > 0) && (
         <div className="kv-map-extras">
-          {cityData.unmapped.map((g) => (
+          {mapData.unmapped.map((g) => (
             <div key={g.kreisverband} className="occupation-chip">
               <span className="occupation-name">{g.kreisverband}</span>
               <span className="occupation-count">{g.count}</span>
             </div>
           ))}
-          {cityData.ohneCount > 0 && (
+          {mapData.ohneCount > 0 && (
             <div className="occupation-chip">
               <span className="occupation-name">Ohne Kreisverband</span>
-              <span className="occupation-count">{cityData.ohneCount}</span>
+              <span className="occupation-count">{mapData.ohneCount}</span>
             </div>
           )}
         </div>

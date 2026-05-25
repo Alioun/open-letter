@@ -49,17 +49,19 @@ function areSimilar(a, b) {
 }
 
 /**
- * Find groups of similar KV names using star topology.
+ * Find groups of similar names using star topology.
  * Each group has a canonical entry (highest count) and outliers
  * that are directly similar to the canonical — no transitive chaining.
  *
- * @param {Array<{kreisverband: string, count: number}>} kvs
+ * @param {Array<Object>} items - Objects with a name field and count
+ * @param {string} fieldName - Key to read the name from (default: "kreisverband")
+ * @param {string|null} exclude - Value to exclude (default: "Ohne Kreisverband")
  * @returns {Array<{canonical: {name, count}, outliers: Array<{name, count, distance}>}>}
  */
-export function findOutlierGroups(kvs) {
+export function findOutlierGroups(kvs, fieldName = "kreisverband", exclude = "Ohne Kreisverband", normalize = null) {
   const items = kvs
-    .filter((kv) => kv.kreisverband && kv.kreisverband !== "Ohne Kreisverband")
-    .map((kv) => ({ name: kv.kreisverband, count: kv.count }))
+    .filter((kv) => kv[fieldName] && (!exclude || kv[fieldName] !== exclude))
+    .map((kv) => ({ name: kv[fieldName], count: kv.count }))
     .sort((a, b) => b.count - a.count);
 
   const claimed = new Set();
@@ -76,6 +78,7 @@ export function findOutlierGroups(kvs) {
       const candidate = items[j];
       if (claimed.has(candidate.name)) continue;
 
+      if (normalize && normalize(canonical.name) === normalize(candidate.name)) continue;
       if (areSimilar(canonical.name, candidate.name)) {
         outliers.push({
           name: candidate.name,

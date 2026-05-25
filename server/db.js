@@ -349,15 +349,59 @@ export async function deleteSignerByUnsubscribeToken(token) {
   return Boolean(signer);
 }
 
-function normalizeOccupation(occ) {
+export function normalizeOccupation(occ) {
   let s = occ.trim();
+  // Strip explicit gender markers: *in, *innen, :in, /in etc.
   s = s.replace(/\*innen$|\*in$|:innen$|:in$|\/innen$|\/in$/i, "");
+  // Strip feminine -in/-innen suffix (Lehrerin→Lehrer, Ärztinnen→Ärzt)
   s = s.replace(/innen$|in$/i, (m, offset, str) => {
     const before = str.slice(0, offset);
     if (before.length >= 2) return "";
     return m;
   });
+  // Strip adjectival & weak-noun endings -er/-e so gender variants
+  // normalize to the same base:
+  //   Angestellter / Angestellte  → angestellt
+  //   Sozialpädagoge              → sozialpädagog  (matches Sozialpädagogin→sozialpädagog)
+  //   Lehrer                      → lehr           (matches Lehrerin→Lehrer→lehr)
+  s = s.replace(/er$|e$/i, (m, offset) => {
+    if (offset >= 3) return "";
+    return m;
+  });
   return s.toLowerCase();
+}
+
+function addGendersternchen(label) {
+  // Already has a gender marker — leave it
+  if (/[*:/]in(nen)?$/i.test(label)) return label;
+
+  // Feminine -in/-innen form: Ärztin → Ärzt*in, Studentin → Student*in
+  const femMatch = label.match(/^(.+?)(innen|in)$/i);
+  if (femMatch && femMatch[1].length >= 2) {
+    return `${femMatch[1]}*${femMatch[2].toLowerCase()}`;
+  }
+
+  // Adjectival masculine -er (stem ends in -t/-d):
+  //   Angestellter → Angestellte*r, Beamter → Beamte*r
+  const adjErMatch = label.match(/^(.+[dt])er$/i);
+  if (adjErMatch && adjErMatch[1].length >= 3) {
+    return `${adjErMatch[1]}e*r`;
+  }
+
+  // Adjectival feminine -e (stem ends in -t/-d):
+  //   Angestellte → Angestellte*r, Studierende → Studierende*r
+  const adjEMatch = label.match(/^(.+[dt])e$/i);
+  if (adjEMatch && adjEMatch[1].length >= 3) {
+    return `${label}*r`;
+  }
+
+  // Weak masculine -e (consonant + e): Sozialpädagoge → Sozialpädagog*in
+  if (label.length >= 4 && /[^aeioüö]e$/i.test(label)) {
+    return `${label.slice(0, -1)}*in`;
+  }
+
+  // Default: Lehrer → Lehrer*in
+  return `${label}*in`;
 }
 
 export async function getOccupations() {
@@ -389,17 +433,21 @@ export async function getOccupations() {
   return [...groups.values()]
     .sort((a, b) => b.count - a.count || a.label.localeCompare(b.label, "de"))
     .slice(0, 100)
-    .map((g) => ({ occupation: g.label, count: g.count }));
+    .map((g) => ({
+      occupation: g.count > 1 ? addGendersternchen(g.label) : g.label,
+      count: g.count,
+    }));
 }
 
 export async function getKreisverbandStats() {
   const rows = await sql`
     SELECT
       CASE WHEN kreisverband = '' THEN 'Ohne Kreisverband' ELSE kreisverband END AS kreisverband,
+      COALESCE(NULLIF(state, ''), '') AS state,
       COUNT(*)::int AS count
     FROM signers
     WHERE verified = TRUE AND show_publicly = TRUE
-    GROUP BY 1
+    GROUP BY 1, 2
     ORDER BY count DESC, kreisverband ASC
   `;
   return rows;
@@ -425,6 +473,38 @@ export async function mergeKreisverband(fromKv, toKv) {
   return result.length;
 }
 
+export async function getDistinctOccupations() {
+  return await sql`
+    SELECT occupation, COUNT(*)::int AS count
+    FROM signers
+    WHERE verified = TRUE AND occupation != ''
+    GROUP BY occupation
+    ORDER BY count DESC, occupation ASC
+  `;
+}
+
+export async function mergeOccupation(fromOcc, toOcc) {
+  const result = await sql`
+    UPDATE signers
+    SET occupation = ${toOcc}
+    WHERE occupation = ${fromOcc}
+    RETURNING id
+  `;
+  return result.length;
+}
+
+export async function insertOccNotTypo(canonical, outlier) {
+  await sql`
+    INSERT INTO occupation_not_typo (canonical, outlier)
+    VALUES (${canonical}, ${outlier})
+    ON CONFLICT DO NOTHING
+  `;
+}
+
+export async function loadOccNotTypo() {
+  return await sql`SELECT canonical, outlier FROM occupation_not_typo`;
+}
+
 export async function updateSignerState(id, state) {
   await sql`UPDATE signers SET state = ${state} WHERE id = ${id}`;
 }
@@ -434,11 +514,9 @@ export async function getSignersNeedingState(limit = null) {
     return await sql`
       SELECT s.id, s.kreisverband
       FROM signers s
-      LEFT JOIN kv_state_cache c ON c.kreisverband = s.kreisverband
       WHERE s.verified = TRUE
         AND s.kreisverband != ''
         AND s.state = ''
-        AND (c.kreisverband IS NULL OR c.state != '')
       ORDER BY s.created_at DESC
       LIMIT ${limit}
     `;
@@ -446,12 +524,20 @@ export async function getSignersNeedingState(limit = null) {
   return await sql`
     SELECT s.id, s.kreisverband
     FROM signers s
-    LEFT JOIN kv_state_cache c ON c.kreisverband = s.kreisverband
     WHERE s.verified = TRUE
       AND s.kreisverband != ''
       AND s.state = ''
-      AND (c.kreisverband IS NULL OR c.state != '')
     ORDER BY s.created_at DESC
+  `;
+}
+
+export async function getUnresolvedKvs() {
+  return await sql`
+    SELECT kreisverband, COUNT(*)::int AS count
+    FROM signers
+    WHERE verified = TRUE AND kreisverband != '' AND state = ''
+    GROUP BY kreisverband
+    ORDER BY count DESC, kreisverband ASC
   `;
 }
 
@@ -484,6 +570,14 @@ export async function ensureKvStateCacheTable() {
       PRIMARY KEY (canonical, outlier)
     )
   `;
+  await sql`
+    CREATE TABLE IF NOT EXISTS occupation_not_typo (
+      canonical     TEXT NOT NULL,
+      outlier       TEXT NOT NULL,
+      created_at    TIMESTAMPTZ DEFAULT NOW(),
+      PRIMARY KEY (canonical, outlier)
+    )
+  `;
 }
 
 export async function insertKvNotTypo(canonical, outlier) {
@@ -507,6 +601,14 @@ export async function upsertKvStateCache(kreisverband, state, source = "nominati
           source = EXCLUDED.source,
           resolved_at = NOW()
   `;
+}
+
+export async function clearEmptyKvCacheEntries() {
+  const result = await sql`
+    DELETE FROM kv_state_cache WHERE state = ''
+    RETURNING kreisverband
+  `;
+  return result.length;
 }
 
 export async function loadKvStateCache() {

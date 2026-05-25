@@ -38,6 +38,15 @@ import {
   mergeKreisverband,
   insertKvNotTypo,
   loadKvNotTypo,
+  getUnresolvedKvs,
+  clearEmptyKvCacheEntries,
+  upsertKvStateCache,
+  bulkUpdateSignerStateByKv,
+  getDistinctOccupations,
+  mergeOccupation,
+  insertOccNotTypo,
+  loadOccNotTypo,
+  normalizeOccupation,
 } from "./db.js";
 import {
   sendVerificationEmail,
@@ -54,6 +63,7 @@ import {
   startStateWorker,
   triggerBackfill,
   getQueueLength,
+  clearProcessedKvs,
 } from "./nominatim.js";
 import { initStateCache } from "./states.js";
 import { findOutlierGroups } from "./levenshtein.js";
@@ -972,6 +982,98 @@ const server = Bun.serve({
             return json({ error: "Ungültige Parameter" }, 400);
           }
           await insertKvNotTypo(canonical, outlier);
+          return json({ ok: true });
+        });
+      },
+    },
+
+    "/api/admin/unresolved-kvs": {
+      async GET(req) {
+        return adminJson(req, async () => json(await getUnresolvedKvs()));
+      },
+    },
+
+    "/api/admin/re-enqueue-all": {
+      async POST(req) {
+        return adminJson(req, async () => {
+          const cleared = await clearEmptyKvCacheEntries();
+          clearProcessedKvs();
+          const enqueued = await triggerBackfill();
+          return json({ ok: true, enqueued, cacheCleared: cleared });
+        });
+      },
+    },
+
+    "/api/admin/assign-kv-state": {
+      async POST(req) {
+        return adminJson(req, async () => {
+          if (bodyTooLarge(req))
+            return json({ error: "Payload too large" }, 413);
+          const body = await req.json();
+          const kreisverband = String(body.kreisverband || "").trim();
+          const state = String(body.state || "").trim();
+          if (!kreisverband || !state) {
+            return json({ error: "kreisverband and state required" }, 400);
+          }
+          await upsertKvStateCache(kreisverband, state, "manual");
+          const updated = await bulkUpdateSignerStateByKv(kreisverband, state);
+          return json({ ok: true, updated });
+        });
+      },
+    },
+
+    "/api/admin/occupation-outliers": {
+      async GET(req) {
+        return adminJson(req, async () => {
+          const [occupations, dismissed] = await Promise.all([
+            getDistinctOccupations(),
+            loadOccNotTypo(),
+          ]);
+          const dismissedSet = new Set(
+            dismissed.map((d) => `${d.canonical}\0${d.outlier}`),
+          );
+          const groups = findOutlierGroups(occupations, "occupation", null, normalizeOccupation)
+            .map((g) => ({
+              ...g,
+              outliers: g.outliers.filter(
+                (o) => !dismissedSet.has(`${g.canonical.name}\0${o.name}`),
+              ),
+            }))
+            .filter((g) => g.outliers.length > 0);
+          return json(groups);
+        });
+      },
+    },
+
+    "/api/admin/merge-occupation": {
+      async POST(req) {
+        return adminJson(req, async () => {
+          if (bodyTooLarge(req))
+            return json({ error: "Payload too large" }, 413);
+          const body = await req.json();
+          const from = String(body.from || "").trim();
+          const to = String(body.to || "").trim();
+          if (!from || !to || from === to) {
+            return json({ error: "Ungültige Berufe" }, 400);
+          }
+          const updated = await mergeOccupation(from, to);
+          return json({ ok: true, updated });
+        });
+      },
+    },
+
+    "/api/admin/dismiss-occupation-outlier": {
+      async POST(req) {
+        return adminJson(req, async () => {
+          if (bodyTooLarge(req))
+            return json({ error: "Payload too large" }, 413);
+          const body = await req.json();
+          const canonical = String(body.canonical || "").trim();
+          const outlier = String(body.outlier || "").trim();
+          if (!canonical || !outlier) {
+            return json({ error: "Ungültige Parameter" }, 400);
+          }
+          await insertOccNotTypo(canonical, outlier);
           return json({ ok: true });
         });
       },

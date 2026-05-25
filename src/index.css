@@ -1670,6 +1670,23 @@ h1.headline .banner {
 
 .kv-map-popup-body {
   padding: 8px 0;
+  max-height: 171px;
+  overflow-y: auto;
+}
+
+.kv-map-popup-scroll-hint {
+  position: absolute;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  text-align: center;
+  padding: 14px 0 6px;
+  font-size: 16px;
+  line-height: 1;
+  color: var(--akzent);
+  background: linear-gradient(transparent, white 55%);
+  pointer-events: none;
+  user-select: none;
 }
 
 .kv-map-popup-row {

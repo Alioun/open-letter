@@ -88,3 +88,10 @@ CREATE TABLE IF NOT EXISTS kv_not_typo (
   created_at    TIMESTAMPTZ DEFAULT NOW(),
   PRIMARY KEY (canonical, outlier)
 );
+
+CREATE TABLE IF NOT EXISTS occupation_not_typo (
+  canonical     TEXT NOT NULL,
+  outlier       TEXT NOT NULL,
+  created_at    TIMESTAMPTZ DEFAULT NOW(),
+  PRIMARY KEY (canonical, outlier)
+);
