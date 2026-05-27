@@ -36,6 +36,7 @@ const GERMAN_STATES = [
 ];
 const variables = [
   "name",
+  "firstName",
   "confirmUrl",
   "deleteUrl",
   "signerCount",

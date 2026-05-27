@@ -69,7 +69,7 @@ const URL_VARIABLES = new Set(["confirmUrl", "deleteUrl", "unsubscribeUrl"]);
 
 export function interpolateTemplate(value, variables = {}) {
   return String(value || "").replace(
-    /\{\{\s*(name|confirmUrl|deleteUrl|signerCount|unsubscribeUrl)\s*\}\}/g,
+    /\{\{\s*(name|firstName|confirmUrl|deleteUrl|signerCount|unsubscribeUrl)\s*\}\}/g,
     (_, key) => {
       const raw = String(variables[key] ?? "");
       return URL_VARIABLES.has(key) ? raw : escapeHtml(raw);
@@ -79,7 +79,11 @@ export function interpolateTemplate(value, variables = {}) {
 
 export function renderEmailHtml(htmlBody, variables = {}) {
   const body = interpolateTemplate(htmlBody, variables);
-  const document = `<!doctype html><html><head><meta charset="utf-8"><style>${emailCss}</style></head><body>${body}</body></html>`;
+  const needsFooter = variables.unsubscribeUrl && !/<footer[\s>]/i.test(body);
+  const footer = needsFooter
+    ? `<footer>Du möchtest keine E-Mails mehr erhalten? <a href="${variables.unsubscribeUrl}">Hier abmelden</a>.</footer>`
+    : "";
+  const document = `<!doctype html><html><head><meta charset="utf-8"><style>${emailCss}</style></head><body>${body}${footer}</body></html>`;
   return juice(document);
 }
 
@@ -215,10 +219,10 @@ export async function sendBatchEmails(emails, idempotencyKey = null) {
   }
 }
 
-export async function sendDeletionEmail({ to, token, baseUrl, headers }) {
+export async function sendDeletionEmail({ to, token, baseUrl, headers, unsubscribeUrl }) {
   console.log(`[email] deletion request toDomain=${getEmailDomain(to)}`);
   const deleteUrl = `${baseUrl}/api/delete/${token}`;
-  const rendered = await renderTemplateBySlug("deletion", { deleteUrl });
+  const rendered = await renderTemplateBySlug("deletion", { deleteUrl, unsubscribeUrl });
 
   await sendRenderedEmail({
     to,
@@ -228,11 +232,12 @@ export async function sendDeletionEmail({ to, token, baseUrl, headers }) {
   });
 }
 
-export async function sendAlreadySignedEmail({ to, name, headers }) {
+export async function sendAlreadySignedEmail({ to, name, headers, unsubscribeUrl }) {
   console.log(
     `[email] already-signed notification toDomain=${getEmailDomain(to)}`,
   );
-  const rendered = await renderTemplateBySlug("already_signed", { name });
+  const firstName = name.split(/\s/)[0];
+  const rendered = await renderTemplateBySlug("already_signed", { name, firstName, unsubscribeUrl });
 
   await sendRenderedEmail({
     to,
@@ -242,12 +247,15 @@ export async function sendAlreadySignedEmail({ to, name, headers }) {
   });
 }
 
-export async function sendVerificationEmail({ to, name, token, baseUrl, headers }) {
+export async function sendVerificationEmail({ to, name, token, baseUrl, headers, unsubscribeUrl }) {
   console.log(`[email] verification toDomain=${getEmailDomain(to)}`);
   const confirmUrl = `${baseUrl}/api/confirm/${token}`;
+  const firstName = name.split(/\s/)[0];
   const rendered = await renderTemplateBySlug("verification", {
     name,
+    firstName,
     confirmUrl,
+    unsubscribeUrl,
   });
 
   await sendRenderedEmail({

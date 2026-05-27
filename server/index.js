@@ -276,8 +276,10 @@ async function sendCampaign(campaign) {
         const unsubscribeToken = await refreshUnsubscribeToken(recipient.id);
         const unsubscribeUrl = `${BASE_URL}/abmelden/${unsubscribeToken}`;
         const optOutUrl = `${BASE_URL}/api/unsubscribe/${unsubscribeToken}/opt-out`;
+        const firstName = recipient.name.split(/\s/)[0];
         const variables = {
           name: recipient.name,
+          firstName,
           signerCount,
           unsubscribeUrl,
         };
@@ -533,20 +535,25 @@ const server = Bun.serve({
             const verifiedName = await getVerifiedSignerName(email);
             if (verifiedName) {
               const unsub = await refreshUnsubscribeTokenByEmail(email);
-              const headers = unsub ? buildUnsubscribeHeaders(`${getBaseUrl(req)}/api/unsubscribe/${unsub}/opt-out`) : undefined;
-              await sendAlreadySignedEmail({ to: email, name: verifiedName, headers });
+              const baseUrl = getBaseUrl(req);
+              const headers = unsub ? buildUnsubscribeHeaders(`${baseUrl}/api/unsubscribe/${unsub}/opt-out`) : undefined;
+              const unsubscribeUrl = unsub ? `${baseUrl}/abmelden/${unsub}` : undefined;
+              await sendAlreadySignedEmail({ to: email, name: verifiedName, headers, unsubscribeUrl });
             }
             return json({ ok: true });
           }
 
           const unsub = await refreshUnsubscribeTokenByEmail(email);
-          const unsubHeaders = unsub ? buildUnsubscribeHeaders(`${getBaseUrl(req)}/api/unsubscribe/${unsub}/opt-out`) : undefined;
+          const baseUrl = getBaseUrl(req);
+          const unsubHeaders = unsub ? buildUnsubscribeHeaders(`${baseUrl}/api/unsubscribe/${unsub}/opt-out`) : undefined;
+          const unsubscribeUrl = unsub ? `${baseUrl}/abmelden/${unsub}` : undefined;
           await sendVerificationEmail({
             to: email,
             name,
             token,
-            baseUrl: getBaseUrl(req),
+            baseUrl,
             headers: unsubHeaders,
+            unsubscribeUrl,
           });
 
           return json({ ok: true });
@@ -587,13 +594,16 @@ const server = Bun.serve({
 
           if (name) {
             const unsub = await refreshUnsubscribeTokenByEmail(email);
-            const unsubHeaders = unsub ? buildUnsubscribeHeaders(`${getBaseUrl(req)}/api/unsubscribe/${unsub}/opt-out`) : undefined;
+            const baseUrl = getBaseUrl(req);
+            const unsubHeaders = unsub ? buildUnsubscribeHeaders(`${baseUrl}/api/unsubscribe/${unsub}/opt-out`) : undefined;
+            const unsubscribeUrl = unsub ? `${baseUrl}/abmelden/${unsub}` : undefined;
             await sendVerificationEmail({
               to: email,
               name,
               token,
-              baseUrl: getBaseUrl(req),
+              baseUrl,
               headers: unsubHeaders,
+              unsubscribeUrl,
             });
           }
 
@@ -659,12 +669,15 @@ const server = Bun.serve({
           const found = await createDeletionToken(email, token, expiresAt);
           if (found) {
             const unsub = await refreshUnsubscribeTokenByEmail(email);
-            const unsubHeaders = unsub ? buildUnsubscribeHeaders(`${getBaseUrl(req)}/api/unsubscribe/${unsub}/opt-out`) : undefined;
+            const baseUrl = getBaseUrl(req);
+            const unsubHeaders = unsub ? buildUnsubscribeHeaders(`${baseUrl}/api/unsubscribe/${unsub}/opt-out`) : undefined;
+            const unsubscribeUrl = unsub ? `${baseUrl}/abmelden/${unsub}` : undefined;
             await sendDeletionEmail({
               to: email,
               token,
-              baseUrl: getBaseUrl(req),
+              baseUrl,
               headers: unsubHeaders,
+              unsubscribeUrl,
             });
           }
 
@@ -883,6 +896,7 @@ const server = Bun.serve({
           return json({
             html: renderEmailHtml(sanitizeHtml(body.html_body), {
               name: "Ada Beispiel",
+              firstName: "Ada",
               confirmUrl: `${BASE_URL}/api/confirm/beispiel`,
               deleteUrl: `${BASE_URL}/api/delete/beispiel`,
               signerCount: "1.000",
@@ -915,6 +929,7 @@ const server = Bun.serve({
           const signerCount = stats.signerCount?.toLocaleString("de-DE") || "0";
           const vars = {
             name: "Test-Empfänger",
+            firstName: "Test-Empfänger",
             signerCount,
             unsubscribeUrl: `${BASE_URL}/abmelden/test`,
             confirmUrl: `${BASE_URL}/api/confirm/test`,
