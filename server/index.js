@@ -28,6 +28,7 @@ import {
   markCampaignFailed,
   getNewsletterRecipients,
   refreshUnsubscribeToken,
+  refreshUnsubscribeTokenByEmail,
   getUnsubscribeState,
   optOutNewsletter,
   deleteSignerByUnsubscribeToken,
@@ -52,6 +53,8 @@ import {
   sendVerificationEmail,
   sendDeletionEmail,
   sendRenderedEmail,
+  sendBatchEmails,
+  buildUnsubscribeHeaders,
   renderEmailHtml,
   interpolateTemplate,
   sendAlreadySignedEmail,
@@ -264,12 +267,15 @@ async function sendCampaign(campaign) {
   );
 
   try {
-    for (let i = 0; i < recipients.length; i += 50) {
-      const batch = recipients.slice(i, i + 50);
+    for (let i = 0; i < recipients.length; i += 100) {
+      const batch = recipients.slice(i, i + 100);
+      const chunkIndex = Math.floor(i / 100);
 
+      const payloads = [];
       for (const recipient of batch) {
         const unsubscribeToken = await refreshUnsubscribeToken(recipient.id);
         const unsubscribeUrl = `${BASE_URL}/abmelden/${unsubscribeToken}`;
+        const optOutUrl = `${BASE_URL}/api/unsubscribe/${unsubscribeToken}/opt-out`;
         const variables = {
           name: recipient.name,
           signerCount,
@@ -278,18 +284,21 @@ async function sendCampaign(campaign) {
         const html = renderEmailHtml(template.html_body, variables);
         const subject = interpolateTemplate(campaign.subject, variables);
 
-        await sendRenderedEmail({
+        payloads.push({
           to: recipient.email,
           subject,
           html,
+          headers: buildUnsubscribeHeaders(optOutUrl),
         });
-        sent += 1;
       }
+
+      await sendBatchEmails(payloads, `campaign-${campaign.id}/chunk-${chunkIndex}`);
+      sent += payloads.length;
 
       console.log(
         `[campaign] ${campaign.id} progress — ${sent}/${recipients.length} sent`,
       );
-      if (i + 50 < recipients.length) await sleep(1000);
+      if (i + 100 < recipients.length) await sleep(1000);
     }
 
     console.log(
@@ -523,16 +532,21 @@ const server = Bun.serve({
           if (!ok && alreadyVerified) {
             const verifiedName = await getVerifiedSignerName(email);
             if (verifiedName) {
-              await sendAlreadySignedEmail({ to: email, name: verifiedName });
+              const unsub = await refreshUnsubscribeTokenByEmail(email);
+              const headers = unsub ? buildUnsubscribeHeaders(`${getBaseUrl(req)}/api/unsubscribe/${unsub}/opt-out`) : undefined;
+              await sendAlreadySignedEmail({ to: email, name: verifiedName, headers });
             }
             return json({ ok: true });
           }
 
+          const unsub = await refreshUnsubscribeTokenByEmail(email);
+          const unsubHeaders = unsub ? buildUnsubscribeHeaders(`${getBaseUrl(req)}/api/unsubscribe/${unsub}/opt-out`) : undefined;
           await sendVerificationEmail({
             to: email,
             name,
             token,
             baseUrl: getBaseUrl(req),
+            headers: unsubHeaders,
           });
 
           return json({ ok: true });
@@ -572,11 +586,14 @@ const server = Bun.serve({
           const name = await refreshVerificationToken(email, token, expiresAt);
 
           if (name) {
+            const unsub = await refreshUnsubscribeTokenByEmail(email);
+            const unsubHeaders = unsub ? buildUnsubscribeHeaders(`${getBaseUrl(req)}/api/unsubscribe/${unsub}/opt-out`) : undefined;
             await sendVerificationEmail({
               to: email,
               name,
               token,
               baseUrl: getBaseUrl(req),
+              headers: unsubHeaders,
             });
           }
 
@@ -641,10 +658,13 @@ const server = Bun.serve({
 
           const found = await createDeletionToken(email, token, expiresAt);
           if (found) {
+            const unsub = await refreshUnsubscribeTokenByEmail(email);
+            const unsubHeaders = unsub ? buildUnsubscribeHeaders(`${getBaseUrl(req)}/api/unsubscribe/${unsub}/opt-out`) : undefined;
             await sendDeletionEmail({
               to: email,
               token,
               baseUrl: getBaseUrl(req),
+              headers: unsubHeaders,
             });
           }
 
@@ -905,7 +925,8 @@ const server = Bun.serve({
             String(body.subject || template.subject || ""),
             vars,
           );
-          await sendRenderedEmail({ to, subject: `[TEST] ${subject}`, html });
+          const testUnsubHeaders = buildUnsubscribeHeaders(`${BASE_URL}/api/unsubscribe/test/opt-out`);
+          await sendRenderedEmail({ to, subject: `[TEST] ${subject}`, html, headers: testUnsubHeaders });
           return json({ ok: true });
         });
       },

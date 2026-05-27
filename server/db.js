@@ -366,6 +366,17 @@ export async function refreshUnsubscribeToken(id) {
   return row?.unsubscribe_token || token;
 }
 
+export async function refreshUnsubscribeTokenByEmail(email) {
+  const token = crypto.randomUUID();
+  const [row] = await sql`
+    UPDATE signers
+    SET unsubscribe_token = ${token}, unsubscribe_token_created_at = NOW()
+    WHERE email = ${email}
+    RETURNING unsubscribe_token
+  `;
+  return row?.unsubscribe_token || null;
+}
+
 export async function getUnsubscribeState(token) {
   const [signer] = await sql`
     SELECT id, email, newsletter, verified

@@ -6,6 +6,7 @@ const resendFrom =
   process.env.RESEND_FROM ||
   '"Gehaltsdeckel Initiative" <noreply@gehaltsdeckel.jetzt>';
 const resendEndpoint = "https://api.resend.com/emails";
+const resendBatchEndpoint = "https://api.resend.com/emails/batch";
 const transportSummary = `resend auth=${resendApiKey ? "yes" : "no"}`;
 
 if (process.env.NODE_ENV === "production" && !resendApiKey) {
@@ -112,7 +113,14 @@ function getEmailDomain(email) {
   return String(email || "").split("@").pop() || "unknown";
 }
 
-export async function sendRenderedEmail({ to, subject, html }) {
+export function buildUnsubscribeHeaders(optOutUrl) {
+  return {
+    "List-Unsubscribe": `<${optOutUrl}>`,
+    "List-Unsubscribe-Post": "List-Unsubscribe=One-Click",
+  };
+}
+
+export async function sendRenderedEmail({ to, subject, html, headers }) {
   const toDomain = getEmailDomain(to);
   console.log(
     `[email] sending via=${transportSummary} toDomain=${toDomain} subject="${subject}"`,
@@ -134,6 +142,7 @@ export async function sendRenderedEmail({ to, subject, html }) {
       subject,
       html,
       text: htmlToText(html),
+      ...(headers && { headers }),
     }),
   });
 
@@ -148,7 +157,65 @@ export async function sendRenderedEmail({ to, subject, html }) {
   );
 }
 
-export async function sendDeletionEmail({ to, token, baseUrl }) {
+export async function sendBatchEmails(emails, idempotencyKey = null) {
+  if (!resendApiKey) {
+    throw new Error("RESEND_API_KEY is required to send email");
+  }
+
+  const payload = emails.map((e) => ({
+    from: resendFrom,
+    to: e.to,
+    subject: e.subject,
+    html: e.html,
+    text: htmlToText(e.html),
+    ...(e.headers && { headers: e.headers }),
+  }));
+
+  const maxRetries = 3;
+
+  for (let attempt = 0; attempt <= maxRetries; attempt++) {
+    const headers = {
+      Authorization: `Bearer ${resendApiKey}`,
+      "Content-Type": "application/json",
+    };
+    if (idempotencyKey) headers["Idempotency-Key"] = idempotencyKey;
+
+    console.log(
+      `[email] batch sending ${emails.length} emails via=${transportSummary}${attempt > 0 ? ` (retry ${attempt}/${maxRetries})` : ""}`,
+    );
+
+    const response = await fetch(resendBatchEndpoint, {
+      method: "POST",
+      headers,
+      body: JSON.stringify(payload),
+    });
+
+    const result = await response.json().catch(() => ({}));
+
+    if (response.ok) {
+      const ids = (result.data || result || []).map((r) => r.id).join(", ");
+      console.log(
+        `[email] batch sent ${emails.length} emails via=${transportSummary} ids=${ids}`,
+      );
+      return result;
+    }
+
+    const retryable = response.status === 429 || response.status >= 500;
+    if (retryable && attempt < maxRetries) {
+      const delay = Math.pow(2, attempt) * 1000;
+      console.log(
+        `[email] batch retry ${attempt + 1}/${maxRetries} after ${delay}ms (status=${response.status})`,
+      );
+      await new Promise((r) => setTimeout(r, delay));
+      continue;
+    }
+
+    const message = result?.message || result?.error || response.statusText;
+    throw new Error(`Resend batch failed: ${response.status} ${message}`);
+  }
+}
+
+export async function sendDeletionEmail({ to, token, baseUrl, headers }) {
   console.log(`[email] deletion request toDomain=${getEmailDomain(to)}`);
   const deleteUrl = `${baseUrl}/api/delete/${token}`;
   const rendered = await renderTemplateBySlug("deletion", { deleteUrl });
@@ -157,10 +224,11 @@ export async function sendDeletionEmail({ to, token, baseUrl }) {
     to,
     subject: rendered.subject,
     html: rendered.html,
+    headers,
   });
 }
 
-export async function sendAlreadySignedEmail({ to, name }) {
+export async function sendAlreadySignedEmail({ to, name, headers }) {
   console.log(
     `[email] already-signed notification toDomain=${getEmailDomain(to)}`,
   );
@@ -170,10 +238,11 @@ export async function sendAlreadySignedEmail({ to, name }) {
     to,
     subject: rendered.subject,
     html: rendered.html,
+    headers,
   });
 }
 
-export async function sendVerificationEmail({ to, name, token, baseUrl }) {
+export async function sendVerificationEmail({ to, name, token, baseUrl, headers }) {
   console.log(`[email] verification toDomain=${getEmailDomain(to)}`);
   const confirmUrl = `${baseUrl}/api/confirm/${token}`;
   const rendered = await renderTemplateBySlug("verification", {
@@ -185,5 +254,6 @@ export async function sendVerificationEmail({ to, name, token, baseUrl }) {
     to,
     subject: rendered.subject,
     html: rendered.html,
+    headers,
   });
 }
