@@ -708,7 +708,7 @@ export default function App() {
               <p className="gruss">Mit solidarischen Grüßen</p>
 
               <p className="signers-line">
-                Marlen Borchardt, Philipp Möller, Lisbeth Ritterhoff und Zozan
+                Marlen Borchardt, Philipp Möller, Lisbeth Ritterhoff, Zozan
                 Bulut und
                 <br />
                 {(total - 4).toLocaleString("de-DE")} Mitglieder und
