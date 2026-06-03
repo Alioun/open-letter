@@ -79,9 +79,25 @@ function emailWarning(email) {
   return null;
 }
 
-function scrollTo(id) {
+function getScrollTarget(id) {
   const el = document.getElementById(id);
-  if (el) window.scrollTo({ top: el.offsetTop - 70, behavior: "smooth" });
+  if (!el) return null;
+
+  const header = document.querySelector(".topbar");
+  const headerHeight = header?.getBoundingClientRect().height ?? 70;
+  const offset = Math.max(84, headerHeight + 16);
+  return Math.max(0, window.scrollY + el.getBoundingClientRect().top - offset);
+}
+
+function scrollTo(id) {
+  const target = getScrollTarget(id);
+  if (target === null) return;
+
+  if ("scrollBehavior" in document.documentElement.style) {
+    window.scrollTo({ top: target, behavior: "smooth" });
+  } else {
+    window.scrollTo(0, target);
+  }
 }
 
 function useFocusTrap(active) {
@@ -308,19 +324,87 @@ export default function App() {
     !zoomEventAt ||
     Date.now() < new Date(zoomEventAt).getTime() + 2 * 60 * 60 * 1000;
 
-  useEffect(() => {
-    function scrollToHash() {
-      const hash = window.location.hash;
-      if (!hash) return;
-      const id = hash.slice(1);
-      if (!id) return;
-      window.requestAnimationFrame(() => scrollTo(id));
-    }
+  // Persists deliberate user scroll so layout shifts never yank them back.
+  const hashScrollAbortedRef = useRef(false);
 
-    scrollToHash();
-    window.addEventListener("hashchange", scrollToHash);
-    return () => window.removeEventListener("hashchange", scrollToHash);
-  }, [zoomOpen]);
+  useEffect(() => {
+    // Scroll to the hashed section and keep it pinned while the page settles.
+    // The signer list (#liste, loaded async), web fonts, and images all change
+    // the layout *after* the first scroll, pushing #zoom further down. A single
+    // early scroll therefore lands short (on the signer list). We watch <body>
+    // for any size change and re-pin to the section's true position each time,
+    // until the user takes over or a time cap elapses.
+    let released = false;
+    let releaseTimer = null;
+    let observer = null;
+    let didInitialScroll = false;
+    let lastTarget = null;
+
+    const release = () => {
+      released = true;
+      if (releaseTimer !== null) clearTimeout(releaseTimer);
+      if (observer) observer.disconnect();
+    };
+
+    const onUserInterrupt = () => {
+      hashScrollAbortedRef.current = true;
+      release();
+    };
+
+    const pin = () => {
+      if (released || hashScrollAbortedRef.current) return;
+      const id = (window.location.hash || "").slice(1);
+      if (!id) return;
+      const target = getScrollTarget(id);
+      if (target === null) return; // not mounted yet — a later resize will retry
+
+      if (!didInitialScroll) {
+        // First sighting: animate so the user sees deliberate motion.
+        didInitialScroll = true;
+        lastTarget = target;
+        scrollTo(id);
+      } else if (lastTarget === null || Math.abs(target - lastTarget) > 1) {
+        // Layout above shifted: re-pin instantly to the corrected position.
+        lastTarget = target;
+        window.scrollTo(0, target);
+      }
+    };
+
+    const arm = () => {
+      if (!window.location.hash) return;
+      released = false;
+      didInitialScroll = false;
+      lastTarget = null;
+      if (releaseTimer !== null) clearTimeout(releaseTimer);
+      releaseTimer = setTimeout(release, 5000);
+      if (observer && document.body) observer.observe(document.body);
+      pin();
+    };
+
+    const onHashChange = () => {
+      // Explicit navigation: the user wants to go here, so re-enable and restart.
+      hashScrollAbortedRef.current = false;
+      arm();
+    };
+
+    if (typeof ResizeObserver !== "undefined" && document.body) {
+      observer = new ResizeObserver(pin);
+    }
+    window.addEventListener("hashchange", onHashChange);
+    window.addEventListener("wheel", onUserInterrupt, { passive: true });
+    window.addEventListener("touchmove", onUserInterrupt, { passive: true });
+    window.addEventListener("keydown", onUserInterrupt);
+
+    arm();
+
+    return () => {
+      release();
+      window.removeEventListener("hashchange", onHashChange);
+      window.removeEventListener("wheel", onUserInterrupt);
+      window.removeEventListener("touchmove", onUserInterrupt);
+      window.removeEventListener("keydown", onUserInterrupt);
+    };
+  }, []);
 
   useEffect(() => {
     setOffset(0);

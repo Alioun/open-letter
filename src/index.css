@@ -594,6 +594,7 @@ h1.headline .banner {
   padding: 96px 28px;
   border-bottom: 1px solid var(--akzent);
   overflow-x: clip;
+  scroll-margin-top: 84px;
 }
 
 .section-inner {
