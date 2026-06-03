@@ -165,7 +165,6 @@ export async function getSignerForZoomInvite(token) {
     SELECT id, name, email, kreisverband
     FROM signers
     WHERE unsubscribe_token = ${token}
-      AND unsubscribe_token_created_at > NOW() - INTERVAL '90 days'
       AND verified = TRUE
   `;
   return signer || null;

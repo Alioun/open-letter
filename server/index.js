@@ -442,6 +442,7 @@ async function sendCampaign(campaign) {
             name: recipient.name,
             firstName,
             signerCount,
+            eventLabel: zoomCfg?.label || "",
             unsubscribeUrl,
             zoomJaUrl: `${BASE_URL}/api/zoom-anmelden/${token}?delegiert=0`,
             zoomJaDelegiertUrl: `${BASE_URL}/api/zoom-anmelden/${token}?delegiert=1`,
@@ -1289,6 +1290,7 @@ const server = Bun.serve({
 
     // One-click zoom registration from newsletter invite email.
     // The token is the signer's unsubscribe_token (fresh per campaign send).
+    // These zoom signup links do not expire based on the token age.
     // ?delegiert=1 → registers as delegate, ?delegiert=0 (default) → non-delegate.
     "/api/zoom-anmelden/:token": {
       async GET(req) {
@@ -1768,6 +1770,7 @@ const server = Bun.serve({
                   name: "Test-Empfänger",
                   firstName: "Test-Empfänger",
                   signerCount,
+                  eventLabel: zoomCfg?.label || "",
                   unsubscribeUrl: `${BASE_URL}/abmelden/test`,
                   zoomJaUrl: `${BASE_URL}/api/zoom-anmelden/test?delegiert=0`,
                   zoomJaDelegiertUrl: `${BASE_URL}/api/zoom-anmelden/test?delegiert=1`,
