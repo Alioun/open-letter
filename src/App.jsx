@@ -1085,12 +1085,6 @@ export default function App() {
                     </li>
                     <li>Wir verabreden die nächsten gemeinsamen Schritte.</li>
                   </ul>
-                  {zoomCount > 0 && (
-                    <p className="zoom-count">
-                      <b>{zoomCount.toLocaleString("de-DE")}</b> sind schon
-                      dabei.
-                    </p>
-                  )}
                   <p className="privacy">
                     Den Einwahllink schicken wir dir vor dem Termin per E-Mail.
                     Deine Angaben nutzen wir ausschließlich für die Organisation
