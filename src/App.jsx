@@ -83,10 +83,11 @@ function getScrollTarget(id) {
   const el = document.getElementById(id);
   if (!el) return null;
 
+  // Offset by exactly the pinned header's height so the section sits flush beneath
+  // it — any extra would expose a sliver of the previous section's bottom padding.
   const header = document.querySelector(".topbar");
-  const headerHeight = header?.getBoundingClientRect().height ?? 70;
-  const offset = Math.max(84, headerHeight + 16);
-  return Math.max(0, window.scrollY + el.getBoundingClientRect().top - offset);
+  const headerHeight = header?.getBoundingClientRect().height ?? 0;
+  return Math.max(0, window.scrollY + el.getBoundingClientRect().top - headerHeight);
 }
 
 function scrollTo(id) {

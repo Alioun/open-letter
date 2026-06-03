@@ -59,7 +59,9 @@ body {
 
 html,
 body {
-  overflow-x: hidden;
+  /* clip (not hidden) so horizontal overflow is contained without turning <body>
+     into a scroll container — which would break position: sticky on .topbar */
+  overflow-x: clip;
 }
 a {
   color: inherit;
