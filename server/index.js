@@ -350,16 +350,17 @@ function buildZoomLinkInfo(zoomLink) {
   return linkPart + zoomCalendarButton(ZOOM_ICS_URL);
 }
 
-function buildZoomEventIcs(cfg) {
-  const desc = cfg.link
-    ? `Zoom-Treffen der Initiative Gehaltsdeckel jetzt.\nEinwahl: ${cfg.link}`
+function buildZoomEventIcs(cfg, { includeLink = false } = {}) {
+  const link = includeLink ? cfg.link : "";
+  const desc = link
+    ? `Zoom-Treffen der Initiative Gehaltsdeckel jetzt.\nEinwahl: ${link}`
     : `Zoom-Treffen der Initiative Gehaltsdeckel jetzt.\nDen Einwahllink bekommst du per E-Mail.`;
   return buildZoomIcs({
     start: cfg.eventAt,
     durationMin: cfg.durationMin,
-    summary: "Zoom-Treffen – Gehaltsdeckel jetzt",
+    summary: "Zoom-Treffen - Gehaltsdeckel jetzt",
     description: desc,
-    url: cfg.link,
+    url: link,
     location: "Zoom",
     uid: `zoom-${cfg.eventAt.getTime()}@gehaltsdeckel.jetzt`,
   });
@@ -539,9 +540,10 @@ async function buildZoomMailPayload(kind, recipient, token, cfg) {
     headers: buildUnsubscribeHeaders(optOutUrl),
   };
   if (kind === "link") {
-    const icsB64 = Buffer.from(buildZoomEventIcs(cfg), "utf-8").toString(
-      "base64",
-    );
+    const icsB64 = Buffer.from(
+      buildZoomEventIcs(cfg, { includeLink: true }),
+      "utf-8",
+    ).toString("base64");
     payload.attachments = [
       {
         filename: "zoom-termin.ics",
@@ -1006,7 +1008,13 @@ const server = Bun.serve({
     "/api/zoom-termin.ics": {
       async GET() {
         const cfg = await getZoomConfig();
-        const ics = buildZoomEventIcs(cfg);
+        const linkWindowOpen =
+          cfg.link &&
+          Date.now() >=
+            cfg.eventAt.getTime() - cfg.linkOffsetHours * 60 * 60 * 1000;
+        const ics = buildZoomEventIcs(cfg, {
+          includeLink: Boolean(linkWindowOpen),
+        });
         return new Response(ics, {
           headers: {
             "Content-Type": "text/calendar; charset=utf-8",
@@ -1320,7 +1328,7 @@ const server = Bun.serve({
               : "";
             return new Response(
               zoomUnsubPage(
-                `<h1>Du bist bereits angemeldet</h1><p>Hallo <strong>${firstName}</strong>, du bist bereits ${currentStatus} f\u00fcr das Zoom-Treffen registriert.</p><p><a href="${toggleUrl}">${toggleLabel}</a></p>${unsubLink}`,
+                `<h1>Du bist bereits angemeldet</h1><p>Hallo <strong>${firstName}</strong>, du bist bereits ${currentStatus} f\u00fcr das Zoom-Treffen registriert.</p><p><a href="${toggleUrl}" style="color:#e8001c;">${toggleLabel}</a></p>${unsubLink}`,
               ),
               {
                 headers: {
@@ -1340,9 +1348,10 @@ const server = Bun.serve({
             delegierter: delegiert,
           });
 
+          const cfg = await getZoomConfig();
+
           if (isNew) {
             try {
-              const cfg = await getZoomConfig();
               await sendZoomConfirmationEmail({
                 to: signer.email,
                 name: signer.name,
@@ -1366,7 +1375,7 @@ const server = Bun.serve({
             : "";
           return new Response(
             zoomUnsubPage(
-              `<h1>Du bist dabei!</h1><p>Wir haben deine Anmeldung f\u00fcr das Zoom-Treffen gespeichert, <strong>${sanitize(signer.name.split(/\s/)[0])}</strong>.</p>${delegateNote}${updatedNote}<p>Du bekommst kurz vor dem Termin den Einwahllink per E-Mail.</p>`,
+              `<h1>Du bist dabei!</h1><p>Wir haben deine Anmeldung f\u00fcr das Zoom-Treffen gespeichert, <strong>${sanitize(signer.name.split(/\s/)[0])}</strong>.</p>${delegateNote}${updatedNote}<p>Du bekommst kurz vor dem Termin den Einwahllink per E-Mail.</p>${zoomCalendarButton(cfg.icsUrl)}`,
             ),
             {
               headers: {
