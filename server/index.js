@@ -16,6 +16,7 @@ import {
   getZoomRecipients,
   refreshZoomUnsubscribeToken,
   deleteZoomRegistrationByUnsubscribeToken,
+  getZoomRegistrationByEmail,
   claimZoomMailing,
   markZoomMailing,
   listZoomMailings,
@@ -1285,6 +1286,7 @@ const server = Bun.serve({
       async GET(req) {
         const { token } = req.params;
         const delegiert = req.url.includes("delegiert=1");
+        const force = req.url.includes("force=1");
         try {
           const signer = await getSignerForZoomInvite(token);
           if (!signer) {
@@ -1299,6 +1301,38 @@ const server = Bun.serve({
             );
           }
 
+          const existing = await getZoomRegistrationByEmail(signer.email);
+
+          if (existing && !force) {
+            const firstName = sanitize(signer.name.split(/\s/)[0]);
+            const currentStatus = existing.delegierter
+              ? "als <strong>Delegierte*r</strong>"
+              : "als einfache*r Teilnehmer*in";
+            const toggleLabel = existing.delegierter
+              ? "Nicht als Delegierte*r anmelden"
+              : "Als Delegierte*r anmelden";
+            const toggleUrl = `${BASE_URL}/api/zoom-anmelden/${encodeURIComponent(token)}?delegiert=${existing.delegierter ? 0 : 1}&force=1`;
+            const unsubUrl = existing.unsubscribe_token
+              ? `${BASE_URL}/abmelden/${encodeURIComponent(existing.unsubscribe_token)}?from=zoom`
+              : null;
+            const unsubLink = unsubUrl
+              ? `<p><a href="${unsubUrl}">Abmelden</a></p>`
+              : "";
+            return new Response(
+              zoomUnsubPage(
+                `<h1>Du bist bereits angemeldet</h1><p>Hallo <strong>${firstName}</strong>, du bist bereits ${currentStatus} f\u00fcr das Zoom-Treffen registriert.</p><p><a href="${toggleUrl}">${toggleLabel}</a></p>${unsubLink}`,
+              ),
+              {
+                headers: {
+                  "Content-Type": "text/html; charset=utf-8",
+                  ...securityHeaders,
+                },
+              },
+            );
+          }
+
+          const isNew = !existing;
+
           await insertZoomRegistration({
             name: signer.name,
             email: signer.email,
@@ -1306,28 +1340,33 @@ const server = Bun.serve({
             delegierter: delegiert,
           });
 
-          try {
-            const cfg = await getZoomConfig();
-            await sendZoomConfirmationEmail({
-              to: signer.email,
-              name: signer.name,
-              eventLabel: cfg.label,
-              icsUrl: cfg.icsUrl,
-              linkTimingText: offsetPhrase(cfg.linkOffsetHours),
-            });
-          } catch (mailErr) {
-            console.error(
-              "[zoom-anmelden] confirmation email failed:",
-              mailErr,
-            );
+          if (isNew) {
+            try {
+              const cfg = await getZoomConfig();
+              await sendZoomConfirmationEmail({
+                to: signer.email,
+                name: signer.name,
+                eventLabel: cfg.label,
+                icsUrl: cfg.icsUrl,
+                linkTimingText: offsetPhrase(cfg.linkOffsetHours),
+              });
+            } catch (mailErr) {
+              console.error(
+                "[zoom-anmelden] confirmation email failed:",
+                mailErr,
+              );
+            }
           }
 
           const delegateNote = delegiert
-            ? `<p>Du hast dich als <strong>Delegierte/r</strong> angemeldet.</p>`
+            ? `<p>Du hast dich als <strong>Delegierte*r</strong> angemeldet.</p>`
+            : "";
+          const updatedNote = !isNew
+            ? `<p>Deine Anmeldung wurde aktualisiert.</p>`
             : "";
           return new Response(
             zoomUnsubPage(
-              `<h1>Du bist dabei!</h1><p>Wir haben deine Anmeldung f\u00fcr das Zoom-Treffen gespeichert, <strong>${sanitize(signer.name.split(/\s/)[0])}</strong>.</p>${delegateNote}<p>Du bekommst kurz vor dem Termin den Einwahllink per E-Mail.</p>`,
+              `<h1>Du bist dabei!</h1><p>Wir haben deine Anmeldung f\u00fcr das Zoom-Treffen gespeichert, <strong>${sanitize(signer.name.split(/\s/)[0])}</strong>.</p>${delegateNote}${updatedNote}<p>Du bekommst kurz vor dem Termin den Einwahllink per E-Mail.</p>`,
             ),
             {
               headers: {

@@ -245,6 +245,15 @@ export async function deleteZoomRegistrationByUnsubscribeToken(token) {
   return result.length > 0;
 }
 
+export async function getZoomRegistrationByEmail(email) {
+  const [row] = await sql`
+    SELECT id, delegierter, unsubscribe_token
+    FROM zoom_registrations
+    WHERE email = ${email}
+  `;
+  return row || null;
+}
+
 // Race-safe claim: returns the row only if newly inserted or previously failed
 // (allows retry on failure, prevents double-send while 'sending' or after 'sent').
 export async function claimZoomMailing(kind) {
