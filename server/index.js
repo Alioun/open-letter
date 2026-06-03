@@ -399,7 +399,7 @@ async function sendCampaign(campaign) {
     : await getNewsletterRecipients();
   const stats = await getNewsletterStats();
   const signerCount = stats.signerCount?.toLocaleString("de-DE") || "0";
-  const zoomCfg = isZoom ? await getZoomConfig() : null;
+  const zoomCfg = await getZoomConfig();
   const zoomLinkInfo = zoomCfg ? buildZoomLinkInfo(zoomCfg.link) : "";
 
   // Resume from where a previous run left off (0 for fresh start).
@@ -1720,7 +1720,7 @@ const server = Bun.serve({
           const isZoom = audience === "zoom" || audience === "zoom_delegates";
           const stats = await getNewsletterStats();
           const signerCount = stats.signerCount?.toLocaleString("de-DE") || "0";
-          const zoomCfg = isZoom ? await getZoomConfig() : null;
+          const zoomCfg = await getZoomConfig();
           const realRecipient = isZoom
             ? await getZoomRecipientByEmail(to)
             : await getNewsletterRecipientByEmail(to);
@@ -1748,6 +1748,7 @@ const server = Bun.serve({
                 name: realRecipient.name,
                 firstName,
                 signerCount,
+                eventLabel: zoomCfg?.label || "",
                 unsubscribeUrl,
                 zoomJaUrl: `${BASE_URL}/api/zoom-anmelden/${token}?delegiert=0`,
                 zoomJaDelegiertUrl: `${BASE_URL}/api/zoom-anmelden/${token}?delegiert=1`,
