@@ -305,6 +305,20 @@ export default function App() {
   }, []);
 
   useEffect(() => {
+    function scrollToHash() {
+      const hash = window.location.hash;
+      if (!hash) return;
+      const id = hash.slice(1);
+      if (!id) return;
+      window.requestAnimationFrame(() => scrollTo(id));
+    }
+
+    scrollToHash();
+    window.addEventListener("hashchange", scrollToHash);
+    return () => window.removeEventListener("hashchange", scrollToHash);
+  }, [zoomOpen]);
+
+  useEffect(() => {
     setOffset(0);
     knownIdsRef.current.clear();
     fetchSigners(filter, search, 0, false);
