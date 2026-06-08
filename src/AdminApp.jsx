@@ -20,6 +20,7 @@ const AUDIENCE_LABELS = {
   newsletter: "Newsletter-Unterschreiber",
   zoom: "Zoom-Anmelder",
   zoom_delegates: "Delegierte (Zoom)",
+  email_not_zoom: "Newsletter-Unterschreiber ohne Zoom-Anmeldung",
   selection: "Auswahl",
 };
 
@@ -434,6 +435,7 @@ export default function AdminApp() {
   const [stats, setStats] = useState({
     signerCount: 0,
     subscriberCount: 0,
+    newsletterNotZoomCount: 0,
     zoomCount: 0,
     zoomDelegateCount: 0,
   });
@@ -983,7 +985,9 @@ export default function AdminApp() {
       ? stats.zoomCount
       : audience === "zoom_delegates"
         ? stats.zoomDelegateCount
-        : stats.subscriberCount;
+        : audience === "email_not_zoom"
+          ? stats.newsletterNotZoomCount
+          : stats.subscriberCount;
 
   if (!token) {
     return (
@@ -1123,6 +1127,7 @@ export default function AdminApp() {
                   onChange={(e) => setAudience(e.target.value)}
                 >
                   <option value="newsletter">Newsletter-Unterschreiber</option>
+                  <option value="email_not_zoom">Newsletter ohne Zoom</option>
                   <option value="zoom">Zoom-Anmelder (alle)</option>
                   <option value="zoom_delegates">Nur Delegierte (Zoom)</option>
                 </select>

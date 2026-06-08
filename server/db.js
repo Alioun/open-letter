@@ -237,7 +237,13 @@ export async function getNewsletterStats() {
   const [row] = await sql`
     SELECT
       COUNT(*) FILTER (WHERE verified)::int AS "signerCount",
-      COUNT(*) FILTER (WHERE verified AND newsletter)::int AS "subscriberCount"
+      COUNT(*) FILTER (WHERE verified AND newsletter)::int AS "subscriberCount",
+      COUNT(*) FILTER (
+        WHERE verified AND newsletter
+          AND NOT EXISTS (
+            SELECT 1 FROM zoom_registrations z WHERE z.email = signers.email
+          )
+      )::int AS "newsletterNotZoomCount"
     FROM signers
   `;
   return row;
@@ -656,6 +662,19 @@ export async function getNewsletterRecipients() {
     WHERE verified = TRUE
       AND newsletter = TRUE
     ORDER BY created_at ASC
+  `;
+}
+
+export async function getNewsletterNotZoomRecipients() {
+  return await sql`
+    SELECT id, name, email, unsubscribe_token
+    FROM signers s
+    WHERE s.verified = TRUE
+      AND s.newsletter = TRUE
+      AND NOT EXISTS (
+        SELECT 1 FROM zoom_registrations z WHERE z.email = s.email
+      )
+    ORDER BY s.created_at ASC
   `;
 }
 

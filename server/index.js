@@ -43,6 +43,7 @@ import {
   markCampaignFailed,
   incrementCampaignOffset,
   getNewsletterRecipients,
+  getNewsletterNotZoomRecipients,
   getNewsletterRecipientsByIds,
   listNewsletterSigners,
   listNewsletterSignerIds,
@@ -416,12 +417,15 @@ async function sendCampaign(campaign) {
   const audience = campaign.audience || "newsletter";
   const isZoom = audience === "zoom" || audience === "zoom_delegates";
   const isSelection = audience === "selection";
+  const isNotZoom = audience === "email_not_zoom";
 
   const recipients = isZoom
     ? await getZoomRecipients({ delegatesOnly: audience === "zoom_delegates" })
     : isSelection
       ? await getNewsletterRecipientsByIds(campaign.recipient_ids || [])
-      : await getNewsletterRecipients();
+      : isNotZoom
+        ? await getNewsletterNotZoomRecipients()
+        : await getNewsletterRecipients();
   const stats = await getNewsletterStats();
   const signerCount = stats.signerCount?.toLocaleString("de-DE") || "0";
   const zoomCfg = await getZoomConfig();
@@ -1548,6 +1552,7 @@ const server = Bun.serve({
             "zoom",
             "zoom_delegates",
             "selection",
+            "email_not_zoom",
           ].includes(body.audience)
             ? body.audience
             : "newsletter";
@@ -1799,9 +1804,12 @@ const server = Bun.serve({
           if (!template) {
             return json({ error: "Vorlage nicht gefunden" }, 404);
           }
-          const audience = ["newsletter", "zoom", "zoom_delegates"].includes(
-            body.audience,
-          )
+          const audience = [
+            "newsletter",
+            "zoom",
+            "zoom_delegates",
+            "email_not_zoom",
+          ].includes(body.audience)
             ? body.audience
             : "newsletter";
           const isZoom = audience === "zoom" || audience === "zoom_delegates";
