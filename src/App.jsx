@@ -1,8 +1,6 @@
 import { useState, useEffect, useMemo, useRef, useCallback, memo } from "react";
 
-const MILESTONES = [
-  1000, 1300, 1600, 2000, 2300, 2600, 3000, 4000, 5000, 7500, 10000,
-];
+const MILESTONES = [1000, 1300, 1600, 2000, 2300, 2500];
 
 const MAP_VB = { x: -60, y: -10, w: 520, h: 520 };
 
@@ -87,7 +85,10 @@ function getScrollTarget(id) {
   // it — any extra would expose a sliver of the previous section's bottom padding.
   const header = document.querySelector(".topbar");
   const headerHeight = header?.getBoundingClientRect().height ?? 0;
-  return Math.max(0, window.scrollY + el.getBoundingClientRect().top - headerHeight);
+  return Math.max(
+    0,
+    window.scrollY + el.getBoundingClientRect().top - headerHeight,
+  );
 }
 
 function scrollTo(id) {
@@ -567,9 +568,10 @@ export default function App() {
   ]);
 
   const total = stats.total;
-  const ZIEL =
-    MILESTONES.find((m) => m > total) ?? MILESTONES[MILESTONES.length - 1];
-  const pct = Math.min(100, Math.round((total / ZIEL) * 100));
+  const nextMilestone = MILESTONES.find((m) => m > total);
+  const ZIEL = nextMilestone ?? MILESTONES[MILESTONES.length - 1];
+  const rawPct = Math.round((total / ZIEL) * 100);
+  const pct = nextMilestone ? Math.min(100, rawPct) : rawPct;
 
   return (
     <>
@@ -744,7 +746,7 @@ export default function App() {
                     className="goal-bar"
                     role="progressbar"
                     aria-label="Fortschritt zum Unterschriftenziel"
-                    aria-valuenow={pct}
+                    aria-valuenow={Math.min(100, pct)}
                     aria-valuemin={0}
                     aria-valuemax={100}
                   >
