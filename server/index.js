@@ -586,6 +586,36 @@ async function buildZoomMailPayload(kind, recipient, token, cfg) {
   return payload;
 }
 
+async function sendZoomSignupEmail({ regId, name, email, cfg }) {
+  const mailings = await listZoomMailings();
+  const reminderSent = mailings.some(
+    (m) => m.kind === "reminder" && m.status === "sent",
+  );
+  const linkSent = mailings.some(
+    (m) => m.kind === "link" && m.status === "sent",
+  );
+
+  if (reminderSent || linkSent) {
+    const kind = reminderSent ? "reminder" : "link";
+    const unsubToken = await refreshZoomUnsubscribeToken(regId);
+    const payload = await buildZoomMailPayload(
+      kind,
+      { name, email },
+      unsubToken,
+      cfg,
+    );
+    await sendRenderedEmail(payload);
+  } else {
+    await sendZoomConfirmationEmail({
+      to: email,
+      name,
+      eventLabel: cfg.label,
+      icsUrl: cfg.icsUrl,
+      linkTimingText: offsetPhrase(cfg.linkOffsetHours),
+    });
+  }
+}
+
 async function sendZoomLinkMails(cfg) {
   const recipients = await getZoomRecipients();
   let sent = 0;
@@ -980,35 +1010,7 @@ const server = Bun.serve({
 
           try {
             const cfg = await getZoomConfig();
-            const mailings = await listZoomMailings();
-            const reminderSent = mailings.some(
-              (m) => m.kind === "reminder" && m.status === "sent",
-            );
-            const linkSent = mailings.some(
-              (m) => m.kind === "link" && m.status === "sent",
-            );
-
-            if (reminderSent || linkSent) {
-              // Late signup: send the most recent bulk mail directly
-              const kind = reminderSent ? "reminder" : "link";
-              const unsubToken = await refreshZoomUnsubscribeToken(reg.id);
-              const payload = await buildZoomMailPayload(
-                kind,
-                { name, email },
-                unsubToken,
-                cfg,
-              );
-              await sendRenderedEmail(payload);
-            } else {
-              // Normal: send confirmation
-              await sendZoomConfirmationEmail({
-                to: email,
-                name,
-                eventLabel: cfg.label,
-                icsUrl: cfg.icsUrl,
-                linkTimingText: offsetPhrase(cfg.linkOffsetHours),
-              });
-            }
+            await sendZoomSignupEmail({ regId: reg.id, name, email, cfg });
           } catch (mailErr) {
             console.error("zoom registration email failed:", mailErr);
           }
@@ -1373,7 +1375,7 @@ const server = Bun.serve({
 
           const isNew = !existing;
 
-          await insertZoomRegistration({
+          const reg = await insertZoomRegistration({
             name: signer.name,
             email: signer.email,
             kv: signer.kreisverband,
@@ -1384,12 +1386,11 @@ const server = Bun.serve({
 
           if (isNew) {
             try {
-              await sendZoomConfirmationEmail({
-                to: signer.email,
+              await sendZoomSignupEmail({
+                regId: reg.id,
                 name: signer.name,
-                eventLabel: cfg.label,
-                icsUrl: cfg.icsUrl,
-                linkTimingText: offsetPhrase(cfg.linkOffsetHours),
+                email: signer.email,
+                cfg,
               });
             } catch (mailErr) {
               console.error(
@@ -1576,7 +1577,10 @@ const server = Bun.serve({
               return json({ error: "Keine Empfänger*innen ausgewählt" }, 400);
             }
             if (recipientIds.length > 20000) {
-              return json({ error: "Zu viele Empfänger*innen (max. 20000)" }, 400);
+              return json(
+                { error: "Zu viele Empfänger*innen (max. 20000)" },
+                400,
+              );
             }
           }
           const campaign = await createCampaign({
