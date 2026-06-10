@@ -58,6 +58,8 @@ import {
   optOutNewsletter,
   optOutNewsletterByEmail,
   deleteZoomByEmail,
+  updateSignerByEmail,
+  updateZoomByEmail,
   deleteSignerByUnsubscribeToken,
   getStateStats,
   ensureKvStateCacheTable,
@@ -1292,6 +1294,76 @@ const server = Bun.serve({
           return json({ ok: true });
         } catch (err) {
           console.error("POST /api/unsubscribe/all error:", err);
+          return json({ error: "Internal server error" }, 500);
+        }
+      },
+    },
+
+    // Self-service field editing for the holder of an unsubscribe token.
+    // Possession of the token (sent only to the address itself) authorizes
+    // editing that address's signer and/or zoom registration fields.
+    "/api/unsubscribe/:token/update": {
+      async POST(req) {
+        try {
+          const ip = getClientIp(req);
+          const { allowed, retryAfter } = checkRateLimit(
+            ip,
+            "unsub-update",
+            30,
+            15 * 60 * 1000,
+          );
+          if (!allowed) {
+            return json(
+              { error: "Zu viele Anfragen. Bitte versuche es später erneut." },
+              429,
+              { "Retry-After": String(retryAfter) },
+            );
+          }
+
+          if (bodyTooLarge(req))
+            return json({ error: "Payload too large" }, 413);
+
+          const email = await resolveEmailFromToken(req.params.token);
+          if (!email) return json({ ok: false }, 404);
+
+          const body = await req.json();
+          const name = sanitize(body.name || "");
+          const kv = sanitize(body.kv || "").replace(/^KV\s*/i, "");
+          const occupation = sanitize(body.occupation || "");
+          const newsletter = Boolean(body.newsletter);
+          const showPublicly = Boolean(body.showPublicly);
+          const delegierter = Boolean(body.delegierter);
+
+          if (name.length < 2) {
+            return json(
+              { error: "Name muss mindestens 2 Zeichen lang sein." },
+              400,
+            );
+          }
+
+          await updateSignerByEmail(email, {
+            name,
+            kreisverband: kv,
+            occupation,
+            newsletter,
+            showPublicly,
+          });
+          await updateZoomByEmail(email, {
+            name,
+            kreisverband: kv,
+            delegierter,
+          });
+
+          const url = new URL(req.url);
+          const source =
+            url.searchParams.get("from") === "zoom" ? "zoom" : "newsletter";
+          const state = await getUnifiedUnsubscribeState(
+            req.params.token,
+            source,
+          );
+          return json({ ok: true, ...state });
+        } catch (err) {
+          console.error("POST /api/unsubscribe/update error:", err);
           return json({ error: "Internal server error" }, 500);
         }
       },

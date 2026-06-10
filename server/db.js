@@ -788,10 +788,11 @@ export async function getUnifiedUnsubscribeState(token, source) {
   if (!email) return null;
 
   const [signer] = await sql`
-    SELECT newsletter, verified FROM signers WHERE email = ${email}
+    SELECT name, kreisverband, occupation, newsletter, show_publicly, verified
+    FROM signers WHERE email = ${email}
   `;
   const [zoom] = await sql`
-    SELECT id FROM zoom_registrations WHERE email = ${email}
+    SELECT name, kreisverband, delegierter FROM zoom_registrations WHERE email = ${email}
   `;
 
   const masked = email.replace(
@@ -806,7 +807,52 @@ export async function getUnifiedUnsubscribeState(token, source) {
     hasZoom: Boolean(zoom),
     canDeleteSigner: signer?.verified ?? false,
     hasSigner: Boolean(signer),
+    // Current editable values for the self-service settings form.
+    name: signer?.name ?? "",
+    kreisverband: signer?.kreisverband ?? "",
+    occupation: signer?.occupation ?? "",
+    showPublicly: signer?.show_publicly ?? true,
+    zoomName: zoom?.name ?? "",
+    zoomKv: zoom?.kreisverband ?? "",
+    delegierter: zoom?.delegierter ?? false,
   };
+}
+
+// Update an existing signer's editable fields. The unsubscribe token (already
+// resolved to this email) is the authorization — no `verified` guard, since
+// editing a confirmed signature is the whole point. Resetting `state` to ''
+// when the Kreisverband changes lets the state backfill re-resolve it.
+export async function updateSignerByEmail(
+  email,
+  { name, kreisverband, occupation, newsletter, showPublicly },
+) {
+  const [row] = await sql`
+    UPDATE signers SET
+      name = ${name},
+      kreisverband = ${kreisverband},
+      occupation = ${occupation},
+      newsletter = ${newsletter},
+      show_publicly = ${showPublicly},
+      state = CASE WHEN kreisverband IS DISTINCT FROM ${kreisverband} THEN '' ELSE state END
+    WHERE email = ${email}
+    RETURNING id
+  `;
+  return Boolean(row);
+}
+
+export async function updateZoomByEmail(
+  email,
+  { name, kreisverband, delegierter },
+) {
+  const [row] = await sql`
+    UPDATE zoom_registrations SET
+      name = ${name},
+      kreisverband = ${kreisverband},
+      delegierter = ${delegierter}
+    WHERE email = ${email}
+    RETURNING id
+  `;
+  return Boolean(row);
 }
 
 export async function optOutNewsletterByEmail(email) {

@@ -10,12 +10,36 @@ function getSource() {
   return params.get("from") === "zoom" ? "zoom" : "newsletter";
 }
 
+const EMPTY_FORM = {
+  name: "",
+  kv: "",
+  occupation: "",
+  newsletter: false,
+  showPublicly: true,
+  delegierter: false,
+};
+
+function formFromData(d) {
+  return {
+    name: d.name || d.zoomName || "",
+    kv: d.kreisverband || d.zoomKv || "",
+    occupation: d.occupation || "",
+    newsletter: Boolean(d.newsletter),
+    showPublicly: d.showPublicly ?? true,
+    delegierter: Boolean(d.delegierter),
+  };
+}
+
 export default function UnsubscribeApp() {
   const token = useMemo(getToken, []);
   const source = useMemo(getSource, []);
   const [state, setState] = useState({ loading: true, data: null, error: "" });
   const [result, setResult] = useState("");
   const [busy, setBusy] = useState("");
+  const [form, setForm] = useState(EMPTY_FORM);
+  const [saving, setSaving] = useState(false);
+  const [saved, setSaved] = useState(false);
+  const [saveError, setSaveError] = useState("");
 
   useEffect(() => {
     async function load() {
@@ -31,7 +55,9 @@ export default function UnsubscribeApp() {
           });
           return;
         }
-        setState({ loading: false, data: await res.json(), error: "" });
+        const data = await res.json();
+        setForm(formFromData(data));
+        setState({ loading: false, data, error: "" });
       } catch {
         setState({
           loading: false,
@@ -42,6 +68,32 @@ export default function UnsubscribeApp() {
     }
     load();
   }, [token, source]);
+
+  async function save(e) {
+    e.preventDefault();
+    setSaving(true);
+    setSaved(false);
+    setSaveError("");
+    try {
+      const res = await fetch(`/api/unsubscribe/${token}/update?from=${source}`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(form),
+      });
+      const payload = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        setSaveError(payload.error || "Speichern fehlgeschlagen.");
+        return;
+      }
+      setSaved(true);
+      setState((current) => ({ ...current, data: { ...current.data, ...payload } }));
+      setForm(formFromData(payload));
+    } catch {
+      setSaveError("Die Verbindung ist fehlgeschlagen.");
+    } finally {
+      setSaving(false);
+    }
+  }
 
   async function submit(action) {
     setBusy(action);
@@ -106,6 +158,128 @@ export default function UnsubscribeApp() {
             {d && (
               <>
                 <p className="anrede">{d.emailMasked}</p>
+
+                {(d.hasSigner || d.hasZoom) && (
+                  <form
+                    className="unsubscribe-edit"
+                    onSubmit={save}
+                    noValidate
+                  >
+                    <h2>Deine Angaben</h2>
+                    <p className="unsubscribe-edit-intro">
+                      Hier kannst du deine Daten jederzeit anpassen.
+                    </p>
+
+                    {saveError && (
+                      <div className="err" role="alert">
+                        {saveError}
+                      </div>
+                    )}
+                    {saved && !saveError && (
+                      <p className="unsubscribe-saved" role="status">
+                        Deine Angaben wurden aktualisiert.
+                      </p>
+                    )}
+
+                    <div className="field">
+                      <label htmlFor="edit-name">Name</label>
+                      <input
+                        id="edit-name"
+                        type="text"
+                        value={form.name}
+                        onChange={(e) =>
+                          setForm((f) => ({ ...f, name: e.target.value }))
+                        }
+                        autoComplete="name"
+                      />
+                    </div>
+
+                    <div className="field">
+                      <label htmlFor="edit-kv">
+                        Kreisverband <span className="opt"> optional</span>
+                      </label>
+                      <input
+                        id="edit-kv"
+                        type="text"
+                        value={form.kv}
+                        onChange={(e) =>
+                          setForm((f) => ({ ...f, kv: e.target.value }))
+                        }
+                      />
+                    </div>
+
+                    <div className="field">
+                      <label htmlFor="edit-occupation">
+                        Beruf <span className="opt"> optional</span>
+                      </label>
+                      <input
+                        id="edit-occupation"
+                        type="text"
+                        value={form.occupation}
+                        onChange={(e) =>
+                          setForm((f) => ({ ...f, occupation: e.target.value }))
+                        }
+                      />
+                    </div>
+
+                    <div className="checks">
+                      {d.hasSigner && (
+                        <>
+                          <label className="check">
+                            <input
+                              type="checkbox"
+                              checked={form.showPublicly}
+                              onChange={(e) =>
+                                setForm((f) => ({
+                                  ...f,
+                                  showPublicly: e.target.checked,
+                                }))
+                              }
+                            />
+                            <span>Meinen Namen öffentlich anzeigen</span>
+                          </label>
+                          <label className="check">
+                            <input
+                              type="checkbox"
+                              checked={form.newsletter}
+                              onChange={(e) =>
+                                setForm((f) => ({
+                                  ...f,
+                                  newsletter: e.target.checked,
+                                }))
+                              }
+                            />
+                            <span>Newsletter-Updates erhalten</span>
+                          </label>
+                        </>
+                      )}
+                      {d.hasZoom && (
+                        <label className="check">
+                          <input
+                            type="checkbox"
+                            checked={form.delegierter}
+                            onChange={(e) =>
+                              setForm((f) => ({
+                                ...f,
+                                delegierter: e.target.checked,
+                              }))
+                            }
+                          />
+                          <span>
+                            Ich bin <strong>Delegierte*r zum Parteitag.</strong>
+                          </span>
+                        </label>
+                      )}
+                    </div>
+
+                    <button type="submit" className="cta" disabled={saving}>
+                      {saving ? "Wird gespeichert …" : "Angaben speichern"}
+                    </button>
+                  </form>
+                )}
+
+                <div className="unsubscribe-divider" />
+
                 <p>Wähle, wovon du dich abmelden möchtest:</p>
 
                 <div className="unsubscribe-actions">

@@ -30,6 +30,7 @@ const fallbackTemplates = {
       <p>Hallo {{name}},</p>
       <p>deine Unterschrift unter den offenen Brief „Gehaltsdeckel jetzt" ist bereits bestätigt und wird gezählt.</p>
       <p>Du musst nichts weiter tun – danke für deine Solidarität!</p>
+      <p>Möchtest du deine Angaben ändern (Name, Kreisverband, Beruf, Sichtbarkeit) oder dich abmelden? Hier kannst du deine Daten bearbeiten: <a href="{{unsubscribeUrl}}">{{unsubscribeUrl}}</a></p>
       <p>Mit solidarischen Grüßen<br>Initiative Gehaltsdeckel</p>
     `,
   },

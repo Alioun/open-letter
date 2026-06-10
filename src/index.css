@@ -2810,6 +2810,60 @@ footer {
   background: var(--weiss);
 }
 
+.unsubscribe-edit {
+  margin: 4px 0 4px;
+}
+
+.unsubscribe-card .unsubscribe-edit h2 {
+  font-size: clamp(22px, 2.4vw, 28px);
+  line-height: 1.1;
+  margin: 0 0 6px;
+}
+
+.unsubscribe-edit-intro {
+  color: var(--grau);
+  font-size: 15px;
+  margin: 0 0 22px;
+}
+
+.unsubscribe-saved {
+  background: var(--fond);
+  border-left: 3px solid var(--akzent);
+  color: var(--akzent);
+  font-weight: 600;
+  font-size: 15px;
+  padding: 12px 14px;
+  margin: 0 0 18px;
+}
+
+.unsubscribe-edit .cta {
+  background: var(--akzent);
+  border: 1px solid var(--akzent);
+  color: var(--weiss);
+  cursor: pointer;
+  font-family: "Work Sans";
+  font-weight: 900;
+  min-height: 44px;
+  margin-top: 6px;
+  padding: 10px 20px;
+  transition: background 0.15s ease;
+}
+
+.unsubscribe-edit .cta:hover:not(:disabled) {
+  background: var(--rot);
+}
+
+.unsubscribe-edit .cta:disabled {
+  cursor: not-allowed;
+  opacity: 0.5;
+}
+
+.unsubscribe-divider {
+  border-top: 1px solid var(--akzent);
+  margin: 30px 0 24px;
+  opacity: 0.2;
+}
+
 .unsubscribe-actions {
   display: flex;
   flex-wrap: wrap;
