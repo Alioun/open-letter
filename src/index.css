@@ -2883,6 +2883,16 @@ footer {
   opacity: 0.2;
 }
 
+.status-message {
+  background: var(--fond);
+  border-left: 3px solid var(--akzent);
+  color: var(--akzent);
+  font-weight: 600;
+  font-size: 15px;
+  padding: 12px 14px;
+  margin: 0 0 18px;
+}
+
 .form-card-footer {
   margin-top: 24px;
   border-top: 1px solid var(--akzent);
