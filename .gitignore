@@ -7,6 +7,12 @@ design-extract
 .claude
 bun.lock
 
+
 # DKIM private keys — never commit these
 haraka/config/dkim/*/private
 .DS_Store
+design-export
+vendor
+*.db
+*.db-shm
+*.db-wal
