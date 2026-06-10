@@ -2073,6 +2073,10 @@ h1.headline .banner {
 .kv-map-popup {
   position: absolute;
   z-index: 10;
+  /* clamp keeps the popup (max-width 260px + 8px offset shadow) inside the
+     map content so the mobile overflow scroller can't clip it */
+  left: clamp(132px, var(--popup-x), calc(100% - 140px));
+  top: var(--popup-y);
   transform: translate(-50%, calc(-100% - 10px));
   background: var(--weiss);
   border: 1px solid var(--akzent);
@@ -2080,6 +2084,10 @@ h1.headline .banner {
   min-width: 180px;
   max-width: 260px;
   animation: map-popup 0.2s cubic-bezier(0.2, 0.7, 0.2, 1) both;
+}
+
+.kv-map-popup--below {
+  transform: translate(-50%, 10px);
 }
 
 @keyframes map-popup {

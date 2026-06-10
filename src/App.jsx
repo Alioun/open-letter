@@ -2759,13 +2759,20 @@ function KreisverbandMap({ kvGroups }) {
     const cl = clusterData.find((c) => c.id === chip.id);
     if (!cl) return;
     if (triggerEl) lastFocusedRef.current = triggerEl;
+    // Anchor to the rendered chip rect (chipPos offsets + nudgeChips shifts),
+    // not the raw state center. Chips in the upper part of the map open the
+    // popup below themselves so it can't escape the scroll container.
+    const below = (chip.y - MAP_VB.y) / MAP_VB.h < 0.35;
+    const anchorX = chip.x + chip.w / 2;
+    const anchorY = below ? chip.y + chip.h + 8 : chip.y;
     setPopup({
       id: cl.id,
       label: cl.label,
       total: cl.total,
       members: cl.members,
-      x: `${((chip.cx - MAP_VB.x) / MAP_VB.w) * 100}%`,
-      y: `${((chip.cy - MAP_VB.y) / MAP_VB.h) * 100}%`,
+      below,
+      x: `${((anchorX - MAP_VB.x) / MAP_VB.w) * 100}%`,
+      y: `${((anchorY - MAP_VB.y) / MAP_VB.h) * 100}%`,
     });
   }
 
@@ -2813,7 +2820,9 @@ function KreisverbandMap({ kvGroups }) {
           </svg>
           {popup && (
             <div
-              className="kv-map-popup"
+              className={
+                "kv-map-popup" + (popup.below ? " kv-map-popup--below" : "")
+              }
               style={{ "--popup-x": popup.x, "--popup-y": popup.y }}
               onClick={(e) => e.stopPropagation()}
               role="dialog"
