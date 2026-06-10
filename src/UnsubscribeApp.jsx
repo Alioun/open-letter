@@ -37,14 +37,30 @@ export default function UnsubscribeApp() {
   const [result, setResult] = useState("");
   const [busy, setBusy] = useState("");
   const [form, setForm] = useState(EMPTY_FORM);
+  const [fieldErrors, setFieldErrors] = useState({});
   const [saving, setSaving] = useState(false);
   const [saved, setSaved] = useState(false);
   const [saveError, setSaveError] = useState("");
+  const [reloadCount, setReloadCount] = useState(0);
 
   useEffect(() => {
+    const controller = new AbortController();
+
     async function load() {
+      if (!navigator.onLine) {
+        setState({
+          loading: false,
+          data: null,
+          error:
+            "Du bist offline. Bitte prüfe deine Verbindung und lade die Seite neu.",
+        });
+        return;
+      }
+
       try {
-        const res = await fetch(`/api/unsubscribe/${token}?from=${source}`);
+        const res = await fetch(`/api/unsubscribe/${token}?from=${source}`, {
+          signal: controller.signal,
+        });
         if (!res.ok) {
           setState({
             loading: false,
@@ -56,7 +72,8 @@ export default function UnsubscribeApp() {
         const data = await res.json();
         setForm(formFromData(data));
         setState({ loading: false, data, error: "" });
-      } catch {
+      } catch (err) {
+        if (err.name === "AbortError") return;
         setState({
           loading: false,
           data: null,
@@ -65,10 +82,37 @@ export default function UnsubscribeApp() {
       }
     }
     load();
-  }, [token, source]);
+    return () => controller.abort();
+  }, [token, source, reloadCount]);
+
+  function validateForm(values) {
+    const errors = {};
+    if (values.name.length > 100) {
+      errors.name = "Bitte kürze den Namen auf maximal 100 Zeichen.";
+    }
+    if (values.kv.length > 80) {
+      errors.kv = "Bitte kürze den Kreisverband auf maximal 80 Zeichen.";
+    }
+    if (values.occupation.length > 80) {
+      errors.occupation = "Bitte kürze den Beruf auf maximal 80 Zeichen.";
+    }
+    return errors;
+  }
 
   async function save(e) {
     e.preventDefault();
+    const errors = validateForm(form);
+    setFieldErrors(errors);
+    if (Object.keys(errors).length > 0) {
+      setSaveError("Bitte korrigiere die markierten Felder.");
+      return;
+    }
+
+    if (!navigator.onLine) {
+      setSaveError("Du bist offline. Bitte prüfe deine Verbindung.");
+      return;
+    }
+
     setSaving(true);
     setSaved(false);
     setSaveError("");
@@ -102,16 +146,21 @@ export default function UnsubscribeApp() {
   async function submit(action) {
     setBusy(action);
     setResult("");
+    if (!navigator.onLine) {
+      setResult("Du bist offline. Bitte prüfe deine Verbindung.");
+      setBusy("");
+      return;
+    }
     try {
       const res = await fetch(`/api/unsubscribe/${token}/${action}`, {
         method: "POST",
       });
       if (!res.ok) {
-        setState({
-          loading: false,
-          data: null,
-          error: "Dieser Link wurde bereits verwendet.",
-        });
+        const payload = await res.json().catch(() => ({}));
+        setResult(
+          payload.error ||
+            "Die Aktion konnte nicht abgeschlossen werden. Bitte versuche es später erneut.",
+        );
         return;
       }
       const messages = {
@@ -126,7 +175,9 @@ export default function UnsubscribeApp() {
       setResult(messages[action] || "Erledigt.");
       setState((current) => ({ ...current, data: null }));
     } catch {
-      setResult("Die Aktion konnte nicht abgeschlossen werden.");
+      setResult(
+        "Die Aktion konnte nicht abgeschlossen werden. Bitte prüfe deine Verbindung.",
+      );
     } finally {
       setBusy("");
     }
@@ -143,18 +194,36 @@ export default function UnsubscribeApp() {
           <article className="form-card">
             <h1>E-Mail-Einstellungen</h1>
 
-            {state.loading && <p>Link wird geprüft ...</p>}
+            {state.loading && (
+              <p role="status" aria-live="polite">
+                Link wird geprüft …
+              </p>
+            )}
 
             {state.error && (
               <>
-                <p className="lead">{state.error}</p>
+                <p className="lead" role="alert">
+                  {state.error}
+                </p>
                 <p>Bitte nutze den neuesten Link aus einer unserer E-Mails.</p>
+                <button
+                  type="button"
+                  className="cta cta--outline"
+                  onClick={() => {
+                    setState({ loading: true, data: null, error: "" });
+                    setReloadCount((n) => n + 1);
+                  }}
+                >
+                  Erneut versuchen
+                </button>
               </>
             )}
 
             {result && (
               <>
-                <p className="lead">{result}</p>
+                <p className="lead" role="status" aria-live="polite">
+                  {result}
+                </p>
                 <p>Danke für deine Rückmeldung.</p>
               </>
             )}
@@ -187,11 +256,21 @@ export default function UnsubscribeApp() {
                         id="edit-name"
                         type="text"
                         value={form.name}
+                        maxLength={100}
                         onChange={(e) =>
                           setForm((f) => ({ ...f, name: e.target.value }))
                         }
                         autoComplete="name"
+                        aria-invalid={Boolean(fieldErrors.name)}
+                        aria-describedby={
+                          fieldErrors.name ? "err-name" : undefined
+                        }
                       />
+                      {fieldErrors.name && (
+                        <p className="err" id="err-name" role="alert">
+                          {fieldErrors.name}
+                        </p>
+                      )}
                     </div>
 
                     <div className="field">
@@ -202,10 +281,18 @@ export default function UnsubscribeApp() {
                         id="edit-kv"
                         type="text"
                         value={form.kv}
+                        maxLength={80}
                         onChange={(e) =>
                           setForm((f) => ({ ...f, kv: e.target.value }))
                         }
+                        aria-invalid={Boolean(fieldErrors.kv)}
+                        aria-describedby={fieldErrors.kv ? "err-kv" : undefined}
                       />
+                      {fieldErrors.kv && (
+                        <p className="err" id="err-kv" role="alert">
+                          {fieldErrors.kv}
+                        </p>
+                      )}
                     </div>
 
                     <div className="field">
@@ -216,10 +303,20 @@ export default function UnsubscribeApp() {
                         id="edit-occupation"
                         type="text"
                         value={form.occupation}
+                        maxLength={80}
                         onChange={(e) =>
                           setForm((f) => ({ ...f, occupation: e.target.value }))
                         }
+                        aria-invalid={Boolean(fieldErrors.occupation)}
+                        aria-describedby={
+                          fieldErrors.occupation ? "err-occupation" : undefined
+                        }
                       />
+                      {fieldErrors.occupation && (
+                        <p className="err" id="err-occupation" role="alert">
+                          {fieldErrors.occupation}
+                        </p>
+                      )}
                     </div>
 
                     <div className="checks">

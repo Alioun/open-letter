@@ -762,8 +762,9 @@ export default function App() {
                     aria-valuenow={Math.min(100, pct)}
                     aria-valuemin={0}
                     aria-valuemax={100}
+                    style={{ "--progress": pct / 100 }}
                   >
-                    <div style={{ transform: `scaleX(${pct / 100})` }}></div>
+                    <div></div>
                   </div>
                   <div className="goal-meta">
                     <span>{pct}% erreicht</span>
@@ -2014,7 +2015,7 @@ function KreisverbandMap({ kvGroups }) {
           {popup && (
             <div
               className="kv-map-popup"
-              style={{ left: popup.x, top: popup.y }}
+              style={{ "--popup-x": popup.x, "--popup-y": popup.y }}
               onClick={(e) => e.stopPropagation()}
               role="dialog"
               aria-label={`${popup.label}: ${popup.total} Unterschriften`}
