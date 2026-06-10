@@ -140,7 +140,7 @@ export default function UnsubscribeApp() {
     <main className="unsubscribe-shell">
       <section className="section">
         <div className="section-inner unsubscribe-inner">
-          <article className="brief-paper unsubscribe-card">
+          <article className="form-card">
             <h1>E-Mail-Einstellungen</h1>
 
             {state.loading && <p>Link wird geprüft ...</p>}
@@ -164,9 +164,9 @@ export default function UnsubscribeApp() {
                 <p className="anrede">{d.emailMasked}</p>
 
                 {(d.hasSigner || d.hasZoom) && (
-                  <form className="unsubscribe-edit" onSubmit={save} noValidate>
+                  <form onSubmit={save} noValidate>
                     <h2>Deine Angaben</h2>
-                    <p className="unsubscribe-edit-intro">
+                    <p className="sub2">
                       Hier kannst du deine Daten jederzeit anpassen.
                     </p>
 
@@ -176,7 +176,7 @@ export default function UnsubscribeApp() {
                       </div>
                     )}
                     {saved && !saveError && (
-                      <p className="unsubscribe-saved" role="status">
+                      <p className="status-message" role="status">
                         Deine Angaben wurden aktualisiert.
                       </p>
                     )}
@@ -278,11 +278,11 @@ export default function UnsubscribeApp() {
                   </form>
                 )}
 
-                <div className="unsubscribe-divider" />
+                <div className="divider" />
 
                 <p>Wähle, wovon du dich abmelden möchtest:</p>
 
-                <div className="unsubscribe-actions">
+                <div className="button-group">
                   {hasBoth && (
                     <button
                       type="button"
@@ -339,8 +339,8 @@ export default function UnsubscribeApp() {
                 </div>
 
                 {d.canDeleteSigner && (
-                  <div className="unsubscribe-delete">
-                    <p className="unsubscribe-delete-copy">
+                  <div className="form-card-footer">
+                    <p className="sub2">
                       Du kannst auch deine Unterschrift und alle damit
                       verbundenen Daten unwiderruflich löschen:
                     </p>
