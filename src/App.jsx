@@ -596,9 +596,17 @@ export default function App() {
       </div>
 
       <header className="topbar">
-        <div className="wordmark">
+        <a
+          href="#main"
+          className="wordmark"
+          aria-label="Zum Seitenanfang"
+          onClick={(e) => {
+            e.preventDefault();
+            scrollTo("main");
+          }}
+        >
           <span className="dot" aria-hidden="true"></span> Gehaltsdeckel jetzt.
-        </div>
+        </a>
         <nav aria-label="Hauptnavigation">
           <a
             href="#brief"
@@ -840,8 +848,8 @@ export default function App() {
 
         <section className="section" id="brief" aria-label="Der offene Brief">
           <div className="section-inner">
-            <article className="brief-paper">
-              <h2>Ein Brief von Genoss*innen</h2>
+            <article className="brief-paper" aria-labelledby="brief-heading">
+              <h2 id="brief-heading">Ein Brief von Genoss*innen</h2>
               <p className="anrede">Liebe Genoss*innen,</p>
 
               <p className="lead">
@@ -874,11 +882,11 @@ export default function App() {
                 aufgehängt haben.
               </p>
 
-              <div className="pullquote">
+              <blockquote className="pullquote">
                 „Die Linke wurde von uns allen gerettet, und zwar neben Beruf,
                 Familie oder Studium und ohne jegliche öffentliche
                 Aufmerksamkeit."
-              </div>
+              </blockquote>
 
               <p>
                 Wir erwarten, dass Mandate in der Linken anders verstanden

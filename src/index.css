@@ -12,7 +12,7 @@
   --weiss: #ffffff;
   --akzent: #6f003c;
   --fond: #f4f1ec;
-  --grau: #6b6b6b;
+  --grau: #5c5c5c;
   --grau-stark: #4a4a4a;
   --grau-hell: #e6e6e6;
   --erfolg: #0a7a3a;
@@ -132,6 +132,8 @@ button {
   font-weight: 900;
   font-size: 18px;
   letter-spacing: var(--ls-body);
+  text-decoration: none;
+  cursor: pointer;
 }
 
 .wordmark .dot {
@@ -2226,7 +2228,7 @@ footer {
 
 .footer-disclaimer {
   background: var(--fond);
-  border-left: 4px solid var(--rot);
+  border: 1px solid var(--akzent);
   padding: 18px 22px;
   font-size: 13px;
   color: var(--grau);
@@ -2303,8 +2305,7 @@ footer {
 }
 
 .autocomplete-option.active {
-  border-left: 3px solid var(--akzent);
-  padding-left: 11px;
+  padding-left: 14px;
 }
 
 /* ====================================================
@@ -3219,7 +3220,7 @@ footer {
 
 .status-message {
   background: var(--fond);
-  border-left: 3px solid var(--akzent);
+  border: 1px solid var(--akzent);
   color: var(--akzent);
   font-weight: 600;
   font-size: 15px;
@@ -3393,7 +3394,7 @@ footer {
 
 .deletion-sent {
   background: var(--fond);
-  border-left: 4px solid var(--akzent);
+  border: 1px solid var(--akzent);
   padding: 14px 18px;
   font-size: 14px;
   line-height: 1.55;
