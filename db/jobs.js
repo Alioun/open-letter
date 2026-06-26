@@ -27,30 +27,30 @@ let timer = null;
 let booted = false;
 
 // Load the extension into the keyed connection and create Honker's tables.
-export function initJobs() {
+export async function initJobs() {
   if (booted) return;
-  db.loadExtension(EXT);
-  db.run("SELECT honker_bootstrap()");
+  await db.loadExtension(EXT);
+  await db.run("SELECT honker_bootstrap()");
   booted = true;
   console.log(`[jobs] Honker extension loaded (${EXT})`);
 }
 
 // honker_enqueue(queue, payload, delay, runAt, priority, maxAttempts, expires)
-export function enqueue(
+export async function enqueue(
   queue,
   payload,
   { runAt = null, delay = null, priority = 0, maxAttempts = 5, expires = null } = {},
 ) {
-  return db
+  const row = await db
     .query("SELECT honker_enqueue(?, ?, ?, ?, ?, ?, ?) AS id")
-    .get(queue, JSON.stringify(payload), delay, runAt, priority, maxAttempts, expires)
-    .id;
+    .get(queue, JSON.stringify(payload), delay, runAt, priority, maxAttempts, expires);
+  return row.id;
 }
 
 // Register an idempotent recurring task (cron or `@every Ns`) that enqueues
 // `payload` into `queue` when due.
-export function registerSchedule(name, queue, expr, payload = {}, { priority = 0, expires = null } = {}) {
-  db.query("SELECT honker_scheduler_register(?, ?, ?, ?, ?, ?) AS v").get(
+export async function registerSchedule(name, queue, expr, payload = {}, { priority = 0, expires = null } = {}) {
+  await db.query("SELECT honker_scheduler_register(?, ?, ?, ?, ?, ?) AS v").get(
     name,
     queue,
     expr,
@@ -78,11 +78,11 @@ export function startWorker(handlers, {
 
   async function loop() {
     try {
-      tick.get(Math.floor(Date.now() / 1000));
+      await tick.get(Math.floor(Date.now() / 1000));
 
       for (const queue of queues) {
-        sweep.get(queue);
-        const res = claim.get(queue, WORKER_ID, batch, visibilityS);
+        await sweep.get(queue);
+        const res = await claim.get(queue, WORKER_ID, batch, visibilityS);
         const jobs = res?.rows ? JSON.parse(res.rows) : [];
         for (const job of jobs) {
           let payload;
@@ -93,10 +93,10 @@ export function startWorker(handlers, {
           }
           try {
             await handlers[queue](payload, job);
-            ack.get(job.id, WORKER_ID);
+            await ack.get(job.id, WORKER_ID);
           } catch (err) {
             const backoff = Math.min(600, 5 * (job.attempts || 1));
-            retry.get(job.id, WORKER_ID, backoff, String(err?.message || err));
+            await retry.get(job.id, WORKER_ID, backoff, String(err?.message || err));
             console.error(
               `[jobs] ${queue}#${job.id} failed (attempt ${job.attempts}): ${err?.message || err}`,
             );

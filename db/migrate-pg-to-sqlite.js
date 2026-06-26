@@ -63,11 +63,11 @@ async function main() {
     : { rejectUnauthorized: false };
   const sql = postgres(sourceUrl, { ssl });
 
-  const db = openEncrypted(DB_PATH);
+  const db = await openEncrypted(DB_PATH);
   console.log(`[migrate] target: ${DB_PATH}`);
 
   // Apply the SQLite schema first.
-  db.run(readFileSync(join(__dirname, "schema.sql"), "utf-8"));
+  await db.run(readFileSync(join(__dirname, "schema.sql"), "utf-8"));
 
   const report = {};
   let failed = false;
@@ -87,15 +87,14 @@ async function main() {
       const stmt = db.query(
         `INSERT OR REPLACE INTO ${table} (${cols.join(", ")}) VALUES (${placeholders})`,
       );
-      const insertAll = db.transaction((batch) => {
-        for (const row of batch) {
-          stmt.run(...cols.map((c) => conv(row[c])));
+      await db.transaction(async () => {
+        for (const row of rows) {
+          await stmt.run(...cols.map((c) => conv(row[c])));
         }
       });
-      insertAll(rows);
     }
 
-    const dstCount = db.query(`SELECT COUNT(*) AS c FROM ${table}`).get().c;
+    const dstCount = (await db.query(`SELECT COUNT(*) AS c FROM ${table}`).get()).c;
     report[table] = { src: srcCount, dst: dstCount };
     const ok = srcCount === dstCount;
     if (!ok) failed = true;
@@ -105,7 +104,7 @@ async function main() {
   }
 
   await sql.end();
-  db.close();
+  await db.close();
 
   console.log("[migrate] summary:", JSON.stringify(report));
   if (failed) {

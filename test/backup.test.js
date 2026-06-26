@@ -31,15 +31,15 @@ describe("encrypted backup", () => {
   beforeEach(resetDb);
 
   test("exportEncrypted produces a readable, key-matched snapshot", async () => {
-    addVerifiedSigner();
-    addVerifiedSigner();
+    await addVerifiedSigner();
+    await addVerifiedSigner();
     const dest = join(tmp(), "snap.sqlite");
     await exportEncrypted(dest);
     expect(existsSync(dest)).toBe(true);
 
-    const snap = openEncrypted(dest, KEY);
-    expect(snap.query("SELECT COUNT(*) c FROM signers").get().c).toBe(2);
-    snap.close();
+    const snap = await openEncrypted(dest, KEY);
+    expect((await snap.query("SELECT COUNT(*) c FROM signers").get()).c).toBe(2);
+    await snap.close();
   });
 });
 
@@ -62,7 +62,7 @@ describe("backup + restore round-trip (isolated DB, via subprocess)", () => {
       [
         "-e",
         `import {db} from "./db/connection.js";
-         for (let i=0;i<3;i++) db.query("INSERT INTO signers (name,email,verified,created_at) VALUES (?,?,1,?)").run("P"+i,"p"+i+"@x.de",new Date().toISOString());`,
+         for (let i=0;i<3;i++) await db.query("INSERT INTO signers (name,email,verified,created_at) VALUES (?,?,1,?)").run("P"+i,"p"+i+"@x.de",new Date().toISOString());`,
       ],
       env,
     );
@@ -78,7 +78,7 @@ describe("backup + restore round-trip (isolated DB, via subprocess)", () => {
 
     // 3) delete all signers
     const del = run(
-      ["-e", `import {db} from "./db/connection.js"; db.query("DELETE FROM signers").run();`],
+      ["-e", `import {db} from "./db/connection.js"; await db.query("DELETE FROM signers").run();`],
       env,
     );
     expect(del.exitCode).toBe(0);
@@ -95,7 +95,7 @@ describe("backup + restore round-trip (isolated DB, via subprocess)", () => {
     const verify = run(
       [
         "-e",
-        `import {db} from "./db/connection.js"; process.stdout.write(String(db.query("SELECT COUNT(*) c FROM signers").get().c));`,
+        `import {db} from "./db/connection.js"; process.stdout.write(String((await db.query("SELECT COUNT(*) c FROM signers").get()).c));`,
       ],
       env,
     );

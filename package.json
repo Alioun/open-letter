@@ -12,9 +12,13 @@
     "db:restore": "bun db/restore-backup.js",
     "og": "bun scripts/generate-og.js"
   },
+  "trustedDependencies": [
+    "@journeyapps/sqlcipher"
+  ],
   "dependencies": {
     "@fontsource/inter": "^5.2.8",
     "@fontsource/work-sans": "^5.2.8",
+    "@journeyapps/sqlcipher": "^6.0.0",
     "@tiptap/core": "^3.23.4",
     "@tiptap/extension-character-count": "^3.23.4",
     "@tiptap/extension-link": "^3.23.4",

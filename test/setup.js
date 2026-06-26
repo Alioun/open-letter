@@ -25,7 +25,7 @@ if (!process.env.HONKER_EXTENSION_PATH) {
 
 // Open the (now correctly-configured) shared connection and apply the schema.
 const { db } = await import("../db/connection.js");
-db.run(readFileSync(join(repoRoot, "db/schema.sql"), "utf-8"));
+await db.run(readFileSync(join(repoRoot, "db/schema.sql"), "utf-8"));
 
 // Best-effort cleanup of the temp DB dir on exit.
 process.on("exit", () => {

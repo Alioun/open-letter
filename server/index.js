@@ -260,6 +260,21 @@ const { default: admin } = await import("../admin.generated.html");
 const adminRoute = `/${ADMIN_PATH}`;
 const jwtSecret = new TextEncoder().encode(ADMIN_JWT_SECRET);
 
+// Public-API session tokens. The public frontend fetches a short-lived signed
+// token from /api/session and sends it on every public API call, so the
+// endpoints reject direct, token-less access from bots/scrapers. This is a
+// deterrent layer (a determined client can still fetch a token), not a hard
+// boundary — the per-IP rate limits on the endpoints are the real throttle.
+// Separate secret so public tokens can never be confused with admin tokens;
+// falls back to ADMIN_JWT_SECRET so existing deployments keep booting.
+const apiTokenSecret = new TextEncoder().encode(
+  process.env.API_TOKEN_SECRET || ADMIN_JWT_SECRET,
+);
+const PUBLIC_TOKEN_TTL_SECONDS = 30 * 60;
+// Escape hatch: set REQUIRE_API_TOKEN=false to disable the gate (e.g. if a
+// client integration breaks) without redeploying the frontend.
+const REQUIRE_API_TOKEN = process.env.REQUIRE_API_TOKEN !== "false";
+
 function normalizeAdminPath(path) {
   const value = String(path || "")
     .trim()
@@ -401,6 +416,54 @@ async function requireAdmin(req) {
   } catch {
     return false;
   }
+}
+
+async function createPublicToken() {
+  return await new SignJWT({ scope: "public" })
+    .setProtectedHeader({ alg: "HS256" })
+    .setIssuedAt()
+    .setExpirationTime(`${PUBLIC_TOKEN_TTL_SECONDS}s`)
+    .sign(apiTokenSecret);
+}
+
+// True when the request carries a valid, unexpired public (or admin) token.
+// Accepts the token via X-Api-Token or an Authorization: Bearer header.
+async function hasValidPublicToken(req) {
+  const auth = req.headers.get("authorization") || "";
+  const bearer = auth.startsWith("Bearer ") ? auth.slice(7).trim() : "";
+  const token = req.headers.get("x-api-token") || bearer;
+  if (!token) return false;
+  try {
+    const { payload } = await jwtVerify(token, apiTokenSecret);
+    return payload.scope === "public" || payload.scope === "admin";
+  } catch {
+    return false;
+  }
+}
+
+// Guard for public endpoints: enforces a per-IP rate limit, then (unless
+// disabled) requires a valid public session token. Returns an error Response
+// when the request should be rejected, or null when it may proceed.
+async function denyPublic(req, bucket, max, windowMs) {
+  const ip = getClientIp(req);
+  const { allowed, retryAfter } = checkRateLimit(ip, bucket, max, windowMs);
+  if (!allowed) {
+    return json({ error: "Zu viele Anfragen." }, 429, {
+      "Retry-After": String(retryAfter),
+    });
+  }
+  if (REQUIRE_API_TOKEN && !(await hasValidPublicToken(req))) {
+    return json({ error: "Unauthorized" }, 401);
+  }
+  return null;
+}
+
+// Token-only guard for public endpoints that already run their own rate limit.
+async function denyToken(req) {
+  if (REQUIRE_API_TOKEN && !(await hasValidPublicToken(req))) {
+    return json({ error: "Unauthorized" }, 401);
+  }
+  return null;
 }
 
 async function adminJson(req, handler) {
@@ -832,8 +895,34 @@ const server = Bun.serve({
       },
     },
 
+    // Issues a short-lived public session token for the frontend. Rate-limited
+    // per IP so a bot can't farm tokens; the endpoints themselves are also
+    // per-IP rate-limited, which is the actual throttle on data access.
+    "/api/session": {
+      async GET(req) {
+        const ip = getClientIp(req);
+        const { allowed, retryAfter } = checkRateLimit(
+          ip,
+          "session",
+          60,
+          15 * 60 * 1000,
+        );
+        if (!allowed) {
+          return json({ error: "Zu viele Anfragen." }, 429, {
+            "Retry-After": String(retryAfter),
+          });
+        }
+        return json({
+          token: await createPublicToken(),
+          expiresIn: PUBLIC_TOKEN_TTL_SECONDS,
+        });
+      },
+    },
+
     "/api/stats": {
-      async GET() {
+      async GET(req) {
+        const blocked = await denyPublic(req, "public-read", 120, 60 * 1000);
+        if (blocked) return blocked;
         try {
           const [stats, milestones] = await Promise.all([
             getStats(),
@@ -851,7 +940,9 @@ const server = Bun.serve({
     },
 
     "/api/occupations": {
-      async GET() {
+      async GET(req) {
+        const blocked = await denyPublic(req, "public-read", 120, 60 * 1000);
+        if (blocked) return blocked;
         try {
           const occupations = await getOccupations();
           return json(occupations);
@@ -863,7 +954,9 @@ const server = Bun.serve({
     },
 
     "/api/kreisverband-stats": {
-      async GET() {
+      async GET(req) {
+        const blocked = await denyPublic(req, "public-read", 120, 60 * 1000);
+        if (blocked) return blocked;
         try {
           const stats = await getKreisverbandStats();
           return json(stats);
@@ -875,7 +968,9 @@ const server = Bun.serve({
     },
 
     "/api/state-stats": {
-      async GET() {
+      async GET(req) {
+        const blocked = await denyPublic(req, "public-read", 120, 60 * 1000);
+        if (blocked) return blocked;
         try {
           const stats = await getStateStats();
           return json(stats);
@@ -1715,7 +1810,7 @@ const server = Bun.serve({
           });
           if (!campaign) return json({ error: "Template not found" }, 404);
           // Durable send job, delivered at the scheduled time.
-          enqueueJob(
+          await enqueueJob(
             "campaigns",
             { campaignId: campaign.id },
             { runAt: Math.floor(scheduledAt.getTime() / 1000), maxAttempts: 5 },
@@ -2235,7 +2330,7 @@ console.log(
 async function handleMaintenanceJob({ task }) {
   if (task === "campaign-reconcile") {
     const ids = await getDueCampaignIds();
-    for (const id of ids) enqueueJob("campaigns", { campaignId: id }, { maxAttempts: 5 });
+    for (const id of ids) await enqueueJob("campaigns", { campaignId: id }, { maxAttempts: 5 });
   } else if (task === "zoom") {
     await runZoomMailingWorker();
   } else if (task === "backup") {
@@ -2244,11 +2339,11 @@ async function handleMaintenanceJob({ task }) {
 }
 
 try {
-  initJobs();
+  await initJobs();
   // Recurring schedules (persisted in the encrypted DB; survive restarts).
-  registerSchedule("campaign-reconcile", "maintenance", "@every 30s", { task: "campaign-reconcile" });
-  registerSchedule("zoom-mailings", "maintenance", "@every 60s", { task: "zoom" });
-  registerSchedule("hourly-backup", "maintenance", "0 * * * *", { task: "backup" });
+  await registerSchedule("campaign-reconcile", "maintenance", "@every 30s", { task: "campaign-reconcile" });
+  await registerSchedule("zoom-mailings", "maintenance", "@every 60s", { task: "zoom" });
+  await registerSchedule("hourly-backup", "maintenance", "0 * * * *", { task: "backup" });
   startWorker({
     campaigns: handleCampaignJob,
     maintenance: handleMaintenanceJob,

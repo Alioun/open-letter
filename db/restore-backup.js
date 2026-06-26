@@ -38,11 +38,11 @@ const TABLES = [
 
 const sqlQuote = (s) => `'${String(s).replace(/'/g, "''")}'`;
 
-function counts(db) {
+async function counts(db) {
   const out = {};
   for (const t of TABLES) {
     try {
-      out[t] = db.query(`SELECT COUNT(*) AS c FROM ${t}`).get().c;
+      out[t] = (await db.query(`SELECT COUNT(*) AS c FROM ${t}`).get()).c;
     } catch {
       out[t] = "—";
     }
@@ -85,13 +85,13 @@ async function main() {
   }
 
   // Verify the backup opens + integrity.
-  const backupDb = openEncrypted(src, BACKUP_KEY);
-  const integrity = backupDb.query("PRAGMA integrity_check").get();
+  const backupDb = await openEncrypted(src, BACKUP_KEY);
+  const integrity = await backupDb.query("PRAGMA integrity_check").get();
   if (!integrity || integrity.integrity_check !== "ok") {
-    backupDb.close();
+    await backupDb.close();
     throw new Error(`Backup failed integrity_check: ${JSON.stringify(integrity)}`);
   }
-  const srcCounts = counts(backupDb);
+  const srcCounts = await counts(backupDb);
   console.log("[restore] backup row counts:", JSON.stringify(srcCounts));
 
   // Move any existing live DB aside (incl. WAL/SHM sidecars).
@@ -109,21 +109,21 @@ async function main() {
   }
 
   // Rebuild DATABASE_PATH from the backup, re-keyed to the live key.
-  backupDb.run(
+  await backupDb.run(
     `ATTACH DATABASE ${sqlQuote(DB_PATH)} AS live KEY ${sqlQuote(DB_KEY)}`,
   );
   try {
-    backupDb.query("SELECT sqlcipher_export('live')").get();
+    await backupDb.query("SELECT sqlcipher_export('live')").get();
   } finally {
-    backupDb.run("DETACH DATABASE live");
-    backupDb.close();
+    await backupDb.run("DETACH DATABASE live");
+    await backupDb.close();
   }
   if (tmpPlain) await unlink(tmpPlain).catch(() => {});
 
   // Verify the restored DB opens with the live key and matches counts.
-  const liveDb = openEncrypted(DB_PATH, DB_KEY);
-  const dstCounts = counts(liveDb);
-  liveDb.close();
+  const liveDb = await openEncrypted(DB_PATH, DB_KEY);
+  const dstCounts = await counts(liveDb);
+  await liveDb.close();
   console.log("[restore] restored row counts:", JSON.stringify(dstCounts));
 
   const mismatch = TABLES.filter((t) => srcCounts[t] !== dstCounts[t]);

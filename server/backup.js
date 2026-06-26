@@ -23,18 +23,18 @@ const sqlQuote = (s) => `'${String(s).replace(/'/g, "''")}'`;
 
 // Write a consistent encrypted snapshot to `destPath` (a SQLCipher DB file).
 export async function exportEncrypted(destPath) {
-  const db = openEncrypted(DB_PATH);
+  const db = await openEncrypted(DB_PATH);
   try {
-    db.run(
+    await db.run(
       `ATTACH DATABASE ${sqlQuote(destPath)} AS backup KEY ${sqlQuote(BACKUP_KEY)}`,
     );
     try {
-      db.query("SELECT sqlcipher_export('backup')").get();
+      await db.query("SELECT sqlcipher_export('backup')").get();
     } finally {
-      db.run("DETACH DATABASE backup");
+      await db.run("DETACH DATABASE backup");
     }
   } finally {
-    db.close();
+    await db.close();
   }
 }
 

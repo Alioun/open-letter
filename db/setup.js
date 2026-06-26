@@ -18,13 +18,13 @@ const templates = Object.entries(cfg.email.templates).map(([slug, t]) => ({
 
 try {
   const schema = readFileSync(join(__dirname, "schema.sql"), "utf-8");
-  db.run(schema);
+  await db.run(schema);
   const insert = db.query(
     `INSERT INTO email_templates (slug, name, subject, html_body)
      VALUES (?, ?, ?, ?) ON CONFLICT (slug) DO NOTHING`,
   );
   for (const template of templates) {
-    insert.run(
+    await insert.run(
       template.slug,
       template.name,
       template.subject,
@@ -36,5 +36,5 @@ try {
   console.error("Failed to apply database schema:", err.message);
   process.exit(1);
 } finally {
-  db.close();
+  await db.close();
 }

@@ -129,10 +129,10 @@ export async function getSigners({
   const whereSql = conds.join(" AND ");
 
   if (!searchClean) {
-    const { total } = db
+    const { total } = await db
       .query(`SELECT COUNT(*) AS total FROM signers s WHERE ${whereSql}`)
       .get(...params);
-    const signers = db
+    const signers = await db
       .query(
         `SELECT s.id, s.name, s.kreisverband, s.occupation, s.state, s.created_at
          FROM signers s WHERE ${whereSql}
@@ -143,7 +143,7 @@ export async function getSigners({
   }
 
   // Fuzzy search in JS over the candidate set.
-  const rows = db
+  const rows = await db
     .query(
       `SELECT s.id, s.name, s.kreisverband, s.occupation, s.state, s.created_at
        FROM signers s WHERE ${whereSql}`,
@@ -220,10 +220,10 @@ export async function listNewsletterSigners({
     "s.id, s.name, s.email, s.kreisverband, s.occupation, s.state, s.created_at";
 
   if (!searchClean) {
-    const { total } = db
+    const { total } = await db
       .query(`SELECT COUNT(*) AS total FROM signers s WHERE ${whereSql}`)
       .get(...params);
-    const signers = db
+    const signers = await db
       .query(
         `SELECT ${cols} FROM signers s WHERE ${whereSql}
          ORDER BY s.created_at ${sortDir} LIMIT ? OFFSET ?`,
@@ -232,7 +232,7 @@ export async function listNewsletterSigners({
     return { signers, total };
   }
 
-  const rows = db
+  const rows = await db
     .query(
       `SELECT ${cols} FROM signers s WHERE ${whereSql}
        ORDER BY s.created_at ${sortDir}`,
@@ -253,7 +253,7 @@ export async function listNewsletterSignerIds({
 } = {}) {
   const searchClean = search.trim().toLowerCase();
   const { whereSql, params } = newsletterBase({ state, kv, dateFrom, dateTo });
-  let rows = db
+  let rows = await db
     .query(
       `SELECT s.id, s.name, s.email, s.kreisverband FROM signers s
        WHERE ${whereSql} ORDER BY s.created_at DESC`,
@@ -265,14 +265,14 @@ export async function listNewsletterSignerIds({
 }
 
 export async function getNewsletterSignerFilters() {
-  const states = db
+  const states = await db
     .query(
       `SELECT state, COUNT(*) AS count FROM signers
        WHERE verified = 1 AND newsletter = 1 AND state != ''
        GROUP BY state ORDER BY count DESC, state ASC`,
     )
     .all();
-  const kvs = db
+  const kvs = await db
     .query(
       `SELECT kreisverband, COUNT(*) AS count FROM signers
        WHERE verified = 1 AND newsletter = 1 AND kreisverband != ''
@@ -285,7 +285,7 @@ export async function getNewsletterSignerFilters() {
 // ---- stats -----------------------------------------------------------------
 
 export async function getStats() {
-  return db
+  return await db
     .query(
       `SELECT
         COUNT(*) FILTER (WHERE verified) AS total,
@@ -298,7 +298,7 @@ export async function getStats() {
 }
 
 export async function getNewsletterStats() {
-  return db
+  return await db
     .query(
       `SELECT
         COUNT(*) FILTER (WHERE verified) AS "signerCount",
@@ -326,7 +326,7 @@ export async function insertSigner({
   token,
   expiresAt,
 }) {
-  const row = db
+  const row = await db
     .query(
       `INSERT INTO signers
          (name, email, kreisverband, occupation, newsletter, show_publicly, verification_token, token_expires_at)
@@ -357,14 +357,14 @@ export async function insertSigner({
 }
 
 export async function getVerifiedSignerName(email) {
-  const row = db
+  const row = await db
     .query(`SELECT name FROM signers WHERE email = ? AND verified = 1`)
     .get(email);
   return row ? row.name : null;
 }
 
 export async function refreshVerificationToken(email, token, expiresAt) {
-  const row = db
+  const row = await db
     .query(
       `UPDATE signers SET verification_token = ?, token_expires_at = ?
        WHERE email = ? AND verified = 0 RETURNING name`,
@@ -374,7 +374,7 @@ export async function refreshVerificationToken(email, token, expiresAt) {
 }
 
 export async function confirmSigner(token) {
-  const row = db
+  const row = await db
     .query(
       `UPDATE signers
        SET verified = 1, verification_token = NULL, token_expires_at = NULL
@@ -387,7 +387,7 @@ export async function confirmSigner(token) {
 }
 
 export async function createDeletionToken(email, token, expiresAt) {
-  const row = db
+  const row = await db
     .query(
       `UPDATE signers SET deletion_token = ?, deletion_token_expires_at = ?
        WHERE email = ? RETURNING id`,
@@ -397,7 +397,7 @@ export async function createDeletionToken(email, token, expiresAt) {
 }
 
 export async function deleteSigner(token) {
-  const row = db
+  const row = await db
     .query(
       `DELETE FROM signers
        WHERE deletion_token = ? AND deletion_token_expires_at > ? RETURNING id`,
@@ -410,7 +410,7 @@ export async function deleteSigner(token) {
 
 export async function getSignerForZoomInvite(token) {
   return (
-    db
+    await db
       .query(
         `SELECT id, name, email, kreisverband FROM signers
          WHERE unsubscribe_token = ? AND verified = 1`,
@@ -420,7 +420,7 @@ export async function getSignerForZoomInvite(token) {
 }
 
 export async function insertZoomRegistration({ name, email, kv, delegierter }) {
-  const row = db
+  const row = await db
     .query(
       `INSERT INTO zoom_registrations (name, email, kreisverband, delegierter)
        VALUES (?, ?, ?, ?)
@@ -435,12 +435,12 @@ export async function insertZoomRegistration({ name, email, kv, delegierter }) {
 }
 
 export async function getZoomRegistrationCount() {
-  return db.query(`SELECT COUNT(*) AS count FROM zoom_registrations`).get();
+  return await db.query(`SELECT COUNT(*) AS count FROM zoom_registrations`).get();
 }
 
 export async function listZoomRegistrations() {
   return boolifyAll(
-    db
+    await db
       .query(
         `SELECT name, email, kreisverband, delegierter, created_at
          FROM zoom_registrations ORDER BY created_at DESC`,
@@ -451,7 +451,7 @@ export async function listZoomRegistrations() {
 }
 
 export async function getZoomCounts() {
-  return db
+  return await db
     .query(
       `SELECT COUNT(*) AS "zoomCount",
               COUNT(*) FILTER (WHERE delegierter) AS "zoomDelegateCount"
@@ -462,14 +462,14 @@ export async function getZoomCounts() {
 
 export async function getZoomRecipients({ delegatesOnly = false } = {}) {
   if (delegatesOnly) {
-    return db
+    return await db
       .query(
         `SELECT id, name, email, unsubscribe_token FROM zoom_registrations
          WHERE delegierter = 1 ORDER BY created_at ASC`,
       )
       .all();
   }
-  return db
+  return await db
     .query(
       `SELECT id, name, email, unsubscribe_token FROM zoom_registrations
        ORDER BY created_at ASC`,
@@ -479,7 +479,7 @@ export async function getZoomRecipients({ delegatesOnly = false } = {}) {
 
 export async function refreshZoomUnsubscribeToken(id) {
   const token = crypto.randomUUID();
-  const row = db
+  const row = await db
     .query(
       `UPDATE zoom_registrations SET unsubscribe_token = ?
        WHERE id = ? RETURNING unsubscribe_token`,
@@ -489,7 +489,7 @@ export async function refreshZoomUnsubscribeToken(id) {
 }
 
 export async function deleteZoomRegistrationByUnsubscribeToken(token) {
-  const row = db
+  const row = await db
     .query(
       `DELETE FROM zoom_registrations WHERE unsubscribe_token = ? RETURNING id`,
     )
@@ -498,7 +498,7 @@ export async function deleteZoomRegistrationByUnsubscribeToken(token) {
 }
 
 export async function getZoomRegistrationByEmail(email) {
-  const row = db
+  const row = await db
     .query(
       `SELECT id, delegierter, unsubscribe_token FROM zoom_registrations
        WHERE email = ?`,
@@ -509,7 +509,7 @@ export async function getZoomRegistrationByEmail(email) {
 
 // Race-safe claim: returns true only if newly inserted or previously failed.
 export async function claimZoomMailing(kind) {
-  const row = db
+  const row = await db
     .query(
       `INSERT INTO zoom_event_mailings (kind, status, updated_at)
        VALUES (?, 'sending', ?)
@@ -527,7 +527,7 @@ export async function markZoomMailing(kind, status, count = null) {
   const params = [status, count];
   if (status === "sent") params.push(nowIso());
   params.push(nowIso(), kind);
-  db.query(
+  await db.query(
     `UPDATE zoom_event_mailings
      SET status = ?, recipient_count = ?, ${setSent}updated_at = ?
      WHERE kind = ?`,
@@ -535,7 +535,7 @@ export async function markZoomMailing(kind, status, count = null) {
 }
 
 export async function listZoomMailings() {
-  return db
+  return await db
     .query(
       `SELECT kind, status, recipient_count, sent_at, updated_at
        FROM zoom_event_mailings ORDER BY kind ASC`,
@@ -544,11 +544,11 @@ export async function listZoomMailings() {
 }
 
 export async function resetZoomMailings() {
-  db.query(`DELETE FROM zoom_event_mailings`).run();
+  await db.query(`DELETE FROM zoom_event_mailings`).run();
 }
 
 export async function getZoomSettings() {
-  const rows = db
+  const rows = await db
     .query(`SELECT key, value FROM app_settings WHERE key LIKE 'zoom_%'`)
     .all();
   const out = {};
@@ -559,7 +559,7 @@ export async function getZoomSettings() {
 export async function setZoomSettings(partial) {
   const entries = Object.entries(partial).filter(([, v]) => v != null);
   for (const [key, value] of entries) {
-    db.query(
+    await db.query(
       `INSERT INTO app_settings (key, value, updated_at) VALUES (?, ?, ?)
        ON CONFLICT (key) DO UPDATE SET value = excluded.value, updated_at = ?`,
     ).run(key, String(value), nowIso(), nowIso());
@@ -581,7 +581,7 @@ function sanitizeMilestones(arr) {
 }
 
 export async function getMilestones() {
-  const row = db
+  const row = await db
     .query(`SELECT value FROM app_settings WHERE key = 'milestones'`)
     .get();
   if (row?.value) {
@@ -596,7 +596,7 @@ export async function getMilestones() {
 export async function setMilestones(arr) {
   const clean = sanitizeMilestones(arr);
   if (!clean.length) throw new Error("milestones must be positive integers");
-  db.query(
+  await db.query(
     `INSERT INTO app_settings (key, value, updated_at) VALUES ('milestones', ?, ?)
      ON CONFLICT (key) DO UPDATE SET value = excluded.value, updated_at = ?`,
   ).run(JSON.stringify(clean), nowIso(), nowIso());
@@ -610,7 +610,7 @@ const SYSTEM_SLUGS_SQL =
 
 export async function listEmailTemplates() {
   return boolifyAll(
-    db
+    await db
       .query(
         `SELECT id, slug, name, subject, updated_at, ${SYSTEM_SLUGS_SQL} AS system
          FROM email_templates
@@ -622,7 +622,7 @@ export async function listEmailTemplates() {
 }
 
 export async function getEmailTemplate(id) {
-  const row = db
+  const row = await db
     .query(
       `SELECT id, slug, name, subject, html_body, updated_at, ${SYSTEM_SLUGS_SQL} AS system
        FROM email_templates WHERE id = ?`,
@@ -633,7 +633,7 @@ export async function getEmailTemplate(id) {
 
 export async function getEmailTemplateBySlug(slug) {
   return (
-    db
+    await db
       .query(
         `SELECT id, slug, name, subject, html_body, updated_at
          FROM email_templates WHERE slug = ?`,
@@ -655,7 +655,7 @@ export async function createEmailTemplate({ name, subject, htmlBody }) {
     ? `newsletter-${slugBase || "template"}`
     : slugBase || "newsletter";
   const slug = `${safeSlugBase}-${crypto.randomUUID().slice(0, 8)}`;
-  const row = db
+  const row = await db
     .query(
       `INSERT INTO email_templates (slug, name, subject, html_body)
        VALUES (?, ?, ?, ?)
@@ -666,7 +666,7 @@ export async function createEmailTemplate({ name, subject, htmlBody }) {
 }
 
 export async function updateEmailTemplate(id, { subject, htmlBody }) {
-  const row = db
+  const row = await db
     .query(
       `UPDATE email_templates SET subject = ?, html_body = ?, updated_at = ?
        WHERE id = ?
@@ -677,7 +677,7 @@ export async function updateEmailTemplate(id, { subject, htmlBody }) {
 }
 
 export async function deleteEmailTemplate(id) {
-  const row = db
+  const row = await db
     .query(
       `DELETE FROM email_templates
        WHERE id = ? AND slug NOT IN ('verification', 'deletion', 'open-letter-update')
@@ -690,7 +690,7 @@ export async function deleteEmailTemplate(id) {
 // ---- campaigns -------------------------------------------------------------
 
 export async function listCampaigns() {
-  return db
+  return await db
     .query(
       `SELECT c.id, c.template_id, t.name AS template_name, c.subject, c.scheduled_at,
               c.sent_at, c.status, c.recipient_count, c.sent_offset, c.audience,
@@ -713,7 +713,7 @@ export async function createCampaign({
     audience === "selection" && Array.isArray(recipientIds)
       ? JSON.stringify(recipientIds)
       : null;
-  const row = db
+  const row = await db
     .query(
       `INSERT INTO campaigns (template_id, subject, scheduled_at, audience, recipient_ids)
        SELECT id, ?, ?, ?, ? FROM email_templates WHERE id = ?
@@ -725,7 +725,7 @@ export async function createCampaign({
 
 // Load a single campaign (for the job worker), with recipient_ids parsed.
 export async function getCampaignById(id) {
-  const row = db
+  const row = await db
     .query(
       `SELECT id, template_id, subject, scheduled_at, sent_at, status,
               recipient_count, audience, sent_offset, recipient_ids, created_at
@@ -738,7 +738,7 @@ export async function getCampaignById(id) {
 }
 
 export async function cancelCampaign(id) {
-  const row = db
+  const row = await db
     .query(
       `DELETE FROM campaigns WHERE id = ? AND status = 'scheduled' RETURNING id`,
     )
@@ -748,7 +748,7 @@ export async function cancelCampaign(id) {
 
 export async function claimDueCampaigns() {
   // SQLite is a single writer, so no FOR UPDATE SKIP LOCKED is needed.
-  const rows = db
+  const rows = await db
     .query(
       `UPDATE campaigns SET status = 'sending'
        WHERE scheduled_at <= ? AND status IN ('scheduled', 'failed')
@@ -762,7 +762,7 @@ export async function claimDueCampaigns() {
 // Claim a single campaign for sending (used by the Honker job handler).
 // Returns the row (recipient_ids parsed) or null if it isn't due/claimable.
 export async function claimCampaignById(id) {
-  const row = db
+  const row = await db
     .query(
       `UPDATE campaigns SET status = 'sending'
        WHERE id = ? AND status IN ('scheduled', 'failed')
@@ -776,7 +776,7 @@ export async function claimCampaignById(id) {
 
 // Ids of campaigns whose send time has arrived (for the reconciler).
 export async function getDueCampaignIds() {
-  return db
+  return await db
     .query(
       `SELECT id FROM campaigns
        WHERE scheduled_at <= ? AND status IN ('scheduled', 'failed')`,
@@ -786,20 +786,20 @@ export async function getDueCampaignIds() {
 }
 
 export async function markCampaignSent(id, recipientCount) {
-  db.query(
+  await db.query(
     `UPDATE campaigns SET status = 'sent', sent_at = ?, recipient_count = ? WHERE id = ?`,
   ).run(nowIso(), recipientCount, id);
 }
 
 export async function markCampaignFailed(id, recipientCount = null) {
-  db.query(
+  await db.query(
     `UPDATE campaigns SET status = 'failed',
        recipient_count = COALESCE(?, recipient_count) WHERE id = ?`,
   ).run(recipientCount, id);
 }
 
 export async function incrementCampaignOffset(id, count) {
-  db.query(
+  await db.query(
     `UPDATE campaigns SET sent_offset = sent_offset + ?, recipient_count = sent_offset + ?
      WHERE id = ?`,
   ).run(count, count, id);
@@ -809,7 +809,7 @@ export async function incrementCampaignOffset(id, count) {
 
 export async function getNewsletterRecipientByEmail(email) {
   return (
-    db
+    await db
       .query(
         `SELECT id, name, email FROM signers
          WHERE email = ? AND verified = 1 AND newsletter = 1`,
@@ -820,14 +820,14 @@ export async function getNewsletterRecipientByEmail(email) {
 
 export async function getZoomRecipientByEmail(email) {
   return (
-    db
+    await db
       .query(`SELECT id, name, email FROM zoom_registrations WHERE email = ?`)
       .get(email) || null
   );
 }
 
 export async function getNewsletterRecipients() {
-  return db
+  return await db
     .query(
       `SELECT id, name, email, unsubscribe_token FROM signers
        WHERE verified = 1 AND newsletter = 1 ORDER BY created_at ASC`,
@@ -836,7 +836,7 @@ export async function getNewsletterRecipients() {
 }
 
 export async function getNewsletterNotZoomRecipients() {
-  return db
+  return await db
     .query(
       `SELECT id, name, email, unsubscribe_token FROM signers s
        WHERE s.verified = 1 AND s.newsletter = 1
@@ -849,7 +849,7 @@ export async function getNewsletterNotZoomRecipients() {
 export async function getNewsletterRecipientsByIds(ids) {
   if (!Array.isArray(ids) || ids.length === 0) return [];
   const placeholders = ids.map(() => "?").join(", ");
-  return db
+  return await db
     .query(
       `SELECT id, name, email, unsubscribe_token FROM signers
        WHERE verified = 1 AND newsletter = 1 AND id IN (${placeholders})
@@ -862,7 +862,7 @@ export async function getNewsletterRecipientsByIds(ids) {
 
 export async function refreshUnsubscribeToken(id) {
   const token = crypto.randomUUID();
-  const row = db
+  const row = await db
     .query(
       `UPDATE signers SET unsubscribe_token = ?, unsubscribe_token_created_at = ?
        WHERE id = ? RETURNING unsubscribe_token`,
@@ -873,7 +873,7 @@ export async function refreshUnsubscribeToken(id) {
 
 export async function refreshUnsubscribeTokenByEmail(email) {
   const token = crypto.randomUUID();
-  const row = db
+  const row = await db
     .query(
       `UPDATE signers SET unsubscribe_token = ?, unsubscribe_token_created_at = ?
        WHERE email = ? RETURNING unsubscribe_token`,
@@ -883,7 +883,7 @@ export async function refreshUnsubscribeTokenByEmail(email) {
 }
 
 export async function getUnsubscribeState(token) {
-  const row = db
+  const row = await db
     .query(
       `SELECT id, email, newsletter, verified FROM signers
        WHERE unsubscribe_token = ? AND unsubscribe_token_created_at > ?`,
@@ -893,7 +893,7 @@ export async function getUnsubscribeState(token) {
 }
 
 export async function optOutNewsletter(token) {
-  const row = db
+  const row = await db
     .query(
       `UPDATE signers
        SET newsletter = 0, unsubscribe_token = NULL, unsubscribe_token_created_at = NULL
@@ -905,7 +905,7 @@ export async function optOutNewsletter(token) {
 }
 
 export async function deleteSignerByUnsubscribeToken(token) {
-  const row = db
+  const row = await db
     .query(
       `DELETE FROM signers
        WHERE unsubscribe_token = ? AND unsubscribe_token_created_at > ? RETURNING id`,
@@ -917,12 +917,12 @@ export async function deleteSignerByUnsubscribeToken(token) {
 // Resolve email from either a signer or zoom unsubscribe token.
 export async function resolveEmailFromToken(token, source) {
   if (source === "zoom") {
-    const zoom = db
+    const zoom = await db
       .query(`SELECT email FROM zoom_registrations WHERE unsubscribe_token = ?`)
       .get(token);
     if (zoom) return zoom.email;
   }
-  const signer = db
+  const signer = await db
     .query(
       `SELECT email FROM signers
        WHERE unsubscribe_token = ? AND unsubscribe_token_created_at > ?`,
@@ -930,7 +930,7 @@ export async function resolveEmailFromToken(token, source) {
     .get(token, isoAgo(90 * DAY));
   if (signer) return signer.email;
   if (source !== "zoom") {
-    const zoom = db
+    const zoom = await db
       .query(`SELECT email FROM zoom_registrations WHERE unsubscribe_token = ?`)
       .get(token);
     if (zoom) return zoom.email;
@@ -942,13 +942,13 @@ export async function getUnifiedUnsubscribeState(token, source) {
   const email = await resolveEmailFromToken(token, source);
   if (!email) return null;
 
-  const signer = db
+  const signer = await db
     .query(
       `SELECT name, kreisverband, occupation, newsletter, show_publicly, verified
     FROM signers WHERE email = ?`,
     )
     .get(email);
-  const zoom = db
+  const zoom = await db
     .query(
       `SELECT name, kreisverband, delegierter FROM zoom_registrations WHERE email = ?`,
     )
@@ -985,7 +985,7 @@ export async function updateSignerByEmail(
   email,
   { name, kreisverband, occupation, newsletter, showPublicly },
 ) {
-  const row = db
+  const row = await db
     .query(
       `UPDATE signers SET
         name = ?,
@@ -1013,7 +1013,7 @@ export async function updateZoomByEmail(
   email,
   { name, kreisverband, delegierter },
 ) {
-  const row = db
+  const row = await db
     .query(
       `UPDATE zoom_registrations SET
         name = ?,
@@ -1027,14 +1027,14 @@ export async function updateZoomByEmail(
 }
 
 export async function optOutNewsletterByEmail(email) {
-  const row = db
+  const row = await db
     .query(`UPDATE signers SET newsletter = 0 WHERE email = ? RETURNING id`)
     .get(email);
   return Boolean(row);
 }
 
 export async function deleteZoomByEmail(email) {
-  const row = db
+  const row = await db
     .query(`DELETE FROM zoom_registrations WHERE email = ? RETURNING id`)
     .get(email);
   return Boolean(row);
@@ -1078,7 +1078,7 @@ function addGendersternchen(label) {
 }
 
 export async function getOccupations() {
-  const rows = db
+  const rows = await db
     .query(
       `SELECT occupation, COUNT(*) AS count FROM signers
        WHERE verified = 1 AND occupation != '' AND show_publicly = 1
@@ -1113,7 +1113,7 @@ export async function getOccupations() {
 }
 
 export async function getDistinctOccupations() {
-  return db
+  return await db
     .query(
       `SELECT occupation, COUNT(*) AS count FROM signers
        WHERE verified = 1 AND occupation != ''
@@ -1123,7 +1123,7 @@ export async function getDistinctOccupations() {
 }
 
 export async function mergeOccupation(fromOcc, toOcc) {
-  const rows = db
+  const rows = await db
     .query(
       `UPDATE signers SET occupation = ? WHERE occupation = ? RETURNING id`,
     )
@@ -1132,20 +1132,20 @@ export async function mergeOccupation(fromOcc, toOcc) {
 }
 
 export async function insertOccNotTypo(canonical, outlier) {
-  db.query(
+  await db.query(
     `INSERT INTO occupation_not_typo (canonical, outlier) VALUES (?, ?)
      ON CONFLICT DO NOTHING`,
   ).run(canonical, outlier);
 }
 
 export async function loadOccNotTypo() {
-  return db.query(`SELECT canonical, outlier FROM occupation_not_typo`).all();
+  return await db.query(`SELECT canonical, outlier FROM occupation_not_typo`).all();
 }
 
 // ---- kreisverband / state --------------------------------------------------
 
 export async function getKreisverbandStats() {
-  return db
+  return await db
     .query(
       `SELECT
         CASE WHEN kreisverband = '' THEN 'Ohne Kreisverband' ELSE kreisverband END AS kreisverband,
@@ -1160,7 +1160,7 @@ export async function getKreisverbandStats() {
 }
 
 export async function getDistinctKreisverbands() {
-  return db
+  return await db
     .query(
       `SELECT kreisverband, COUNT(*) AS count FROM signers
        WHERE verified = 1 AND kreisverband != ''
@@ -1170,7 +1170,7 @@ export async function getDistinctKreisverbands() {
 }
 
 export async function mergeKreisverband(fromKv, toKv) {
-  const rows = db
+  const rows = await db
     .query(
       `UPDATE signers SET kreisverband = ?, state = '' WHERE kreisverband = ? RETURNING id`,
     )
@@ -1179,12 +1179,12 @@ export async function mergeKreisverband(fromKv, toKv) {
 }
 
 export async function updateSignerState(id, state) {
-  db.query(`UPDATE signers SET state = ? WHERE id = ?`).run(state, id);
+  await db.query(`UPDATE signers SET state = ? WHERE id = ?`).run(state, id);
 }
 
 export async function getSignersNeedingState(limit = null) {
   if (limit) {
-    return db
+    return await db
       .query(
         `SELECT s.id, s.kreisverband FROM signers s
          WHERE s.verified = 1 AND s.kreisverband != '' AND s.state = ''
@@ -1192,7 +1192,7 @@ export async function getSignersNeedingState(limit = null) {
       )
       .all(limit);
   }
-  return db
+  return await db
     .query(
       `SELECT s.id, s.kreisverband FROM signers s
        WHERE s.verified = 1 AND s.kreisverband != '' AND s.state = ''
@@ -1202,7 +1202,7 @@ export async function getSignersNeedingState(limit = null) {
 }
 
 export async function getUnresolvedKvs() {
-  return db
+  return await db
     .query(
       `SELECT kreisverband, COUNT(*) AS count FROM signers
        WHERE verified = 1 AND kreisverband != '' AND state = ''
@@ -1212,7 +1212,7 @@ export async function getUnresolvedKvs() {
 }
 
 export async function getStateStats() {
-  return db
+  return await db
     .query(
       `SELECT
         CASE WHEN state = '' THEN 'Unbekannt' ELSE state END AS state,
@@ -1225,7 +1225,7 @@ export async function getStateStats() {
 }
 
 export async function ensureKvStateCacheTable() {
-  db.run(
+  await db.run(
     `CREATE TABLE IF NOT EXISTS kv_state_cache (
       kreisverband  TEXT PRIMARY KEY,
       state         TEXT NOT NULL DEFAULT '',
@@ -1233,7 +1233,7 @@ export async function ensureKvStateCacheTable() {
       resolved_at   TEXT DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ','now'))
     )`,
   );
-  db.run(
+  await db.run(
     `CREATE TABLE IF NOT EXISTS kv_not_typo (
       canonical     TEXT NOT NULL,
       outlier       TEXT NOT NULL,
@@ -1241,7 +1241,7 @@ export async function ensureKvStateCacheTable() {
       PRIMARY KEY (canonical, outlier)
     )`,
   );
-  db.run(
+  await db.run(
     `CREATE TABLE IF NOT EXISTS occupation_not_typo (
       canonical     TEXT NOT NULL,
       outlier       TEXT NOT NULL,
@@ -1252,14 +1252,14 @@ export async function ensureKvStateCacheTable() {
 }
 
 export async function insertKvNotTypo(canonical, outlier) {
-  db.query(
+  await db.query(
     `INSERT INTO kv_not_typo (canonical, outlier) VALUES (?, ?)
      ON CONFLICT DO NOTHING`,
   ).run(canonical, outlier);
 }
 
 export async function loadKvNotTypo() {
-  return db.query(`SELECT canonical, outlier FROM kv_not_typo`).all();
+  return await db.query(`SELECT canonical, outlier FROM kv_not_typo`).all();
 }
 
 export async function upsertKvStateCache(
@@ -1267,7 +1267,7 @@ export async function upsertKvStateCache(
   state,
   source = "nominatim",
 ) {
-  db.query(
+  await db.query(
     `INSERT INTO kv_state_cache (kreisverband, state, source, resolved_at)
      VALUES (?, ?, ?, ?)
      ON CONFLICT (kreisverband) DO UPDATE
@@ -1276,20 +1276,20 @@ export async function upsertKvStateCache(
 }
 
 export async function clearEmptyKvCacheEntries() {
-  const rows = db
+  const rows = await db
     .query(`DELETE FROM kv_state_cache WHERE state = '' RETURNING kreisverband`)
     .all();
   return rows.length;
 }
 
 export async function loadKvStateCache() {
-  return db
+  return await db
     .query(`SELECT kreisverband, state FROM kv_state_cache WHERE state != ''`)
     .all();
 }
 
 export async function bulkUpdateSignerStateByKv(kreisverband, state) {
-  const rows = db
+  const rows = await db
     .query(
       `UPDATE signers SET state = ? WHERE kreisverband = ? AND state = '' RETURNING id`,
     )
@@ -1298,7 +1298,7 @@ export async function bulkUpdateSignerStateByKv(kreisverband, state) {
 }
 
 export async function getStateResolutionStats() {
-  return db
+  return await db
     .query(
       `SELECT
         COUNT(DISTINCT s.kreisverband) FILTER (WHERE s.state != '') AS "resolvedKvs",
@@ -1315,7 +1315,7 @@ export async function getStateResolutionStats() {
 
 export async function healthCheck() {
   try {
-    db.query("SELECT 1").get();
+    await db.query("SELECT 1").get();
     return true;
   } catch {
     return false;
@@ -1323,5 +1323,5 @@ export async function healthCheck() {
 }
 
 export async function close() {
-  db.close();
+  await db.close();
 }

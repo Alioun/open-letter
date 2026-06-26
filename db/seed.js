@@ -50,14 +50,14 @@ const insert = db.query(
 );
 
 for (const s of batch) {
-  insert.run(s.name, s.email, s.kv, Math.random() > 0.3 ? 1 : 0, s.createdAt.toISOString());
+  await insert.run(s.name, s.email, s.kv, Math.random() > 0.3 ? 1 : 0, s.createdAt.toISOString());
 }
 
 console.log(`Seeded ${INITIAL_COUNT} signers.`);
 console.log(`Trickling new signers every ${TRICKLE_INTERVAL_MS / 1000}s — press Ctrl+C to stop.\n`);
 
-setInterval(() => {
+setInterval(async () => {
   const s = makeSigner(0);
-  insert.run(s.name, s.email, s.kv, Math.random() > 0.3 ? 1 : 0, nowIso());
+  await insert.run(s.name, s.email, s.kv, Math.random() > 0.3 ? 1 : 0, nowIso());
   console.log(`+ ${s.name}${s.kv ? ` (KV ${s.kv})` : ""}`);
 }, TRICKLE_INTERVAL_MS);
