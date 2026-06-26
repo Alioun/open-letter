@@ -152,6 +152,60 @@ function useFocusTrap(active) {
   return ref;
 }
 
+// Public API session token. The public read endpoints (/api/stats, /api/signers,
+// /api/zoom-count, …) require a short-lived token minted by GET /api/session and
+// sent back via the X-Api-Token header (see server/index.js `denyPublic`). We
+// fetch one lazily, cache it, and refresh on expiry or a 401.
+let apiToken = null;
+let apiTokenExpiresAt = 0;
+let apiTokenPromise = null;
+
+function fetchSessionToken() {
+  if (apiTokenPromise) return apiTokenPromise;
+  apiTokenPromise = (async () => {
+    try {
+      const res = await fetch("/api/session");
+      if (!res.ok) throw new Error("session");
+      const { token, expiresIn } = await res.json();
+      apiToken = token;
+      // Refresh a minute before the server-side expiry to avoid edge races.
+      apiTokenExpiresAt = Date.now() + Math.max(0, expiresIn - 60) * 1000;
+      return token;
+    } finally {
+      apiTokenPromise = null;
+    }
+  })();
+  return apiTokenPromise;
+}
+
+function getApiToken() {
+  if (apiToken && Date.now() < apiTokenExpiresAt) return Promise.resolve(apiToken);
+  return fetchSessionToken();
+}
+
+// fetch() wrapper that attaches the public API token and retries once on 401
+// (token expired, or the server restarted with a new secret).
+async function apiFetch(path, opts = {}) {
+  const doFetch = (t) =>
+    fetch(path, { ...opts, headers: { ...(opts.headers || {}), "X-Api-Token": t } });
+  let token;
+  try {
+    token = await getApiToken();
+  } catch {
+    return fetch(path, opts); // token unavailable — let the server decide
+  }
+  let res = await doFetch(token);
+  if (res.status === 401) {
+    apiToken = null;
+    try {
+      res = await doFetch(await fetchSessionToken());
+    } catch {
+      /* keep the original 401 response */
+    }
+  }
+  return res;
+}
+
 export default function App() {
   const [signers, setSigners] = useState([]);
   const [stats, setStats] = useState({
@@ -206,7 +260,7 @@ export default function App() {
 
   const fetchStats = useCallback(async () => {
     try {
-      const res = await fetch("/api/stats");
+      const res = await apiFetch("/api/stats");
       if (res.ok) setStats(await res.json());
     } catch {}
   }, []);
@@ -221,7 +275,7 @@ export default function App() {
         offset: String(o),
         sort: f === "alle" ? "asc" : "desc",
       });
-      const res = await fetch(`/api/signers?${params}`);
+      const res = await apiFetch(`/api/signers?${params}`);
       if (!res.ok) throw new Error();
       const data = await res.json();
       data.signers.forEach((s) => knownIdsRef.current.add(signerKey(s)));
@@ -244,7 +298,7 @@ export default function App() {
 
   const fetchZoomCount = useCallback(async () => {
     try {
-      const res = await fetch("/api/zoom-count");
+      const res = await apiFetch("/api/zoom-count");
       if (res.ok) {
         const data = await res.json();
         setZoomCount(data.count || 0);
@@ -262,7 +316,7 @@ export default function App() {
     (async () => {
       try {
         if (cfg.features.kreisverbandField) {
-          const kvRes = await fetch("/api/kreisverband-stats");
+          const kvRes = await apiFetch("/api/kreisverband-stats");
           if (kvRes.ok) {
             const kvData = await kvRes.json();
             setSignFormKvNames(
@@ -271,7 +325,7 @@ export default function App() {
           }
         }
         if (cfg.features.occupationField) {
-          const occRes = await fetch("/api/occupations");
+          const occRes = await apiFetch("/api/occupations");
           if (occRes.ok) {
             const occData = await occRes.json();
             setSignFormOccNames(occData.map((d) => d.occupation));
@@ -293,7 +347,7 @@ export default function App() {
           offset: "0",
           sort: filter === "alle" ? "asc" : "desc",
         });
-        const res = await fetch(`/api/signers?${params}`);
+        const res = await apiFetch(`/api/signers?${params}`);
         if (!res.ok) return;
         const data = await res.json();
         setSignersTotal(data.total);
@@ -439,7 +493,7 @@ export default function App() {
     if (!showOccupations) return;
     (async () => {
       try {
-        const res = await fetch("/api/occupations");
+        const res = await apiFetch("/api/occupations");
         if (res.ok) setOccupationGroups(await res.json());
       } catch {}
     })();
@@ -449,7 +503,7 @@ export default function App() {
     if (!showKreisverband && !showMap) return;
     (async () => {
       try {
-        const res = await fetch("/api/kreisverband-stats");
+        const res = await apiFetch("/api/kreisverband-stats");
         if (res.ok) setKvGroups(await res.json());
       } catch {}
     })();
@@ -464,7 +518,7 @@ export default function App() {
   const handleSubmit = useCallback(async (data) => {
     setSubmitError(null);
     try {
-      const res = await fetch("/api/sign", {
+      const res = await apiFetch("/api/sign", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(data),
@@ -491,7 +545,7 @@ export default function App() {
     async (data) => {
       setZoomError(null);
       try {
-        const res = await fetch("/api/zoom-register", {
+        const res = await apiFetch("/api/zoom-register", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify(data),
@@ -540,7 +594,7 @@ export default function App() {
     if (resendCooldown > 0) return;
     setResendError(null);
     try {
-      const res = await fetch("/api/resend-verification", {
+      const res = await apiFetch("/api/resend-verification", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ email: emailModal.email }),
@@ -2081,7 +2135,7 @@ function DatenschutzModal({ onClose }) {
     if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(deletionEmail.trim())) return;
     setDeletionStatus("submitting");
     try {
-      await fetch("/api/request-deletion", {
+      await apiFetch("/api/request-deletion", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ email: deletionEmail.trim() }),

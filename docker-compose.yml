@@ -1,9 +1,11 @@
 services:
   app:
     build: .
+    env_file: .env
     environment:
       - DATABASE_PATH=/app/data/diaetendeckel.db
       - DATABASE_ENCRYPTION_KEY=${DATABASE_ENCRYPTION_KEY}
+      - API_TOKEN_SECRET=${API_TOKEN_SECRET}
       - PORT=3000
       - BASE_URL=${BASE_URL:-https://gehaltsdeckel.jetzt}
       - ALLOWED_ORIGINS=${ALLOWED_ORIGINS:-https://gehaltsdeckel.jetzt,https://gehaltsdeckel-jetzt.de}
@@ -16,6 +18,7 @@ services:
       - BACKUP_DIR=/app/backups
       - BACKUP_KEEP=${BACKUP_KEEP:-48}
       - BACKUP_ENCRYPTION_KEY=${BACKUP_ENCRYPTION_KEY}
+      - DATABASE_JOURNAL_MODE=${DATABASE_JOURNAL_MODE:-DELETE}
       - TRUST_PROXY=${TRUST_PROXY:-true}
     volumes:
       - data:/app/data

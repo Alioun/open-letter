@@ -3,11 +3,13 @@ services:
     build:
       context: .
       dockerfile: Dockerfile.dev
+    env_file: .env
     ports:
       - "${PORT:-3000}:3000"
     environment:
       - DATABASE_PATH=/app/data/diaetendeckel.db
       - DATABASE_ENCRYPTION_KEY=${DATABASE_ENCRYPTION_KEY:-devkey-change-me}
+      - API_TOKEN_SECRET=${API_TOKEN_SECRET:-devtoken-change-me}
       - PORT=3000
       - BASE_URL=${BASE_URL:-http://localhost:3000}
       - ADMIN_PATH=${ADMIN_PATH}
@@ -15,6 +17,7 @@ services:
       - ADMIN_JWT_SECRET=${ADMIN_JWT_SECRET}
       - RESEND_API_KEY=${RESEND_API_KEY}
       - RESEND_FROM=${RESEND_FROM:-"Gehaltsdeckel Initiative" <noreply@gehaltsdeckel.jetzt>}
+      - DATABASE_JOURNAL_MODE=${DATABASE_JOURNAL_MODE:-DELETE}
     volumes:
       - data-dev:/app/data
     restart: unless-stopped

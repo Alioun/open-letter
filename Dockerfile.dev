@@ -52,4 +52,4 @@ ENV DATABASE_PATH=/app/data/diaetendeckel.db
 ENV HONKER_EXTENSION_PATH=/app/vendor/libhonker_ext.so
 EXPOSE 3000
 
-CMD ["sh", "-c", "bun db/setup.js && bun db/seed.js & bun server/index.js"]
+CMD ["sh", "-c", "bun db/setup.js && (bun db/seed.js & bun server/index.js)"]

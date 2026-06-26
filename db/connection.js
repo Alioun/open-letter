@@ -19,11 +19,57 @@
 // would silently ignore it and return an empty `cipher_version`, which we treat
 // as a fatal misconfiguration (fail closed).
 import sqlite3 from "@journeyapps/sqlcipher";
-import { mkdirSync } from "node:fs";
-import { dirname } from "node:path";
+import { mkdirSync, readFileSync } from "node:fs";
+import { dirname, join } from "node:path";
+import { fileURLToPath } from "node:url";
 import process from "node:process";
 
+function loadDotEnv() {
+  const root = dirname(fileURLToPath(import.meta.url));
+  const envPath = join(root, "..", ".env");
+  let content;
+  try {
+    content = readFileSync(envPath, "utf8");
+  } catch {
+    return;
+  }
+
+  for (const line of content.split(/\r?\n/)) {
+    const trimmed = line.trim();
+    if (!trimmed || trimmed.startsWith("#")) continue;
+    const idx = trimmed.indexOf("=");
+    if (idx === -1) continue;
+    const key = trimmed.slice(0, idx).trim();
+    let value = trimmed.slice(idx + 1).trim();
+    if (value.startsWith('"') && value.endsWith('"')) {
+      value = value.slice(1, -1).replace(/\\n/g, "\n").replace(/\\"/g, '"');
+    } else if (value.startsWith("'") && value.endsWith("'")) {
+      value = value.slice(1, -1);
+    }
+    if (!(key in process.env)) process.env[key] = value;
+  }
+}
+
+loadDotEnv();
+
 export const DB_PATH = process.env.DATABASE_PATH || "./data/diaetendeckel.db";
+const DB_JOURNAL_MODE = (process.env.DATABASE_JOURNAL_MODE || "WAL")
+  .trim()
+  .toUpperCase();
+const SUPPORTED_JOURNAL_MODES = new Set([
+  "DELETE",
+  "WAL",
+  "TRUNCATE",
+  "PERSIST",
+  "MEMORY",
+  "OFF",
+]);
+if (!SUPPORTED_JOURNAL_MODES.has(DB_JOURNAL_MODE)) {
+  throw new Error(
+    `Unsupported DATABASE_JOURNAL_MODE: ${DB_JOURNAL_MODE}. ` +
+      `Supported modes are: ${[...SUPPORTED_JOURNAL_MODES].join(", ")}`,
+  );
+}
 
 function requireKey(key) {
   const k = key ?? process.env.DATABASE_ENCRYPTION_KEY ?? "";
@@ -45,7 +91,9 @@ function wrap(raw) {
       ),
     all: (...params) =>
       new Promise((resolve, reject) =>
-        raw.all(sql, params, (err, rows) => (err ? reject(err) : resolve(rows))),
+        raw.all(sql, params, (err, rows) =>
+          err ? reject(err) : resolve(rows),
+        ),
       ),
     run: (...params) =>
       new Promise((resolve, reject) =>
@@ -110,7 +158,7 @@ export async function applyKeyAndPragmas(database, key) {
         "not SQLCipher-enabled — encryption at rest cannot be guaranteed.",
     );
   }
-  await database.run("PRAGMA journal_mode = WAL");
+  await database.run(`PRAGMA journal_mode = ${DB_JOURNAL_MODE}`);
   await database.run("PRAGMA foreign_keys = ON");
   await database.run("PRAGMA busy_timeout = 5000");
   return database;
