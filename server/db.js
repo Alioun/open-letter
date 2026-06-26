@@ -134,7 +134,7 @@ export async function getSigners({
       .get(...params);
     const signers = await db
       .query(
-        `SELECT s.id, s.name, s.kreisverband, s.occupation, s.state, s.created_at
+        `SELECT s.name, s.kreisverband, s.state, s.created_at
          FROM signers s WHERE ${whereSql}
          ORDER BY s.created_at ${sortDir} LIMIT ? OFFSET ?`,
       )
@@ -145,7 +145,7 @@ export async function getSigners({
   // Fuzzy search in JS over the candidate set.
   const rows = await db
     .query(
-      `SELECT s.id, s.name, s.kreisverband, s.occupation, s.state, s.created_at
+      `SELECT s.name, s.kreisverband, s.state, s.created_at
        FROM signers s WHERE ${whereSql}`,
     )
     .all(...params);
@@ -410,12 +410,12 @@ export async function deleteSigner(token) {
 
 export async function getSignerForZoomInvite(token) {
   return (
-    await db
+    (await db
       .query(
         `SELECT id, name, email, kreisverband FROM signers
          WHERE unsubscribe_token = ? AND verified = 1`,
       )
-      .get(token) || null
+      .get(token)) || null
   );
 }
 
@@ -435,7 +435,9 @@ export async function insertZoomRegistration({ name, email, kv, delegierter }) {
 }
 
 export async function getZoomRegistrationCount() {
-  return await db.query(`SELECT COUNT(*) AS count FROM zoom_registrations`).get();
+  return await db
+    .query(`SELECT COUNT(*) AS count FROM zoom_registrations`)
+    .get();
 }
 
 export async function listZoomRegistrations() {
@@ -527,11 +529,13 @@ export async function markZoomMailing(kind, status, count = null) {
   const params = [status, count];
   if (status === "sent") params.push(nowIso());
   params.push(nowIso(), kind);
-  await db.query(
-    `UPDATE zoom_event_mailings
+  await db
+    .query(
+      `UPDATE zoom_event_mailings
      SET status = ?, recipient_count = ?, ${setSent}updated_at = ?
      WHERE kind = ?`,
-  ).run(...params);
+    )
+    .run(...params);
 }
 
 export async function listZoomMailings() {
@@ -559,10 +563,12 @@ export async function getZoomSettings() {
 export async function setZoomSettings(partial) {
   const entries = Object.entries(partial).filter(([, v]) => v != null);
   for (const [key, value] of entries) {
-    await db.query(
-      `INSERT INTO app_settings (key, value, updated_at) VALUES (?, ?, ?)
+    await db
+      .query(
+        `INSERT INTO app_settings (key, value, updated_at) VALUES (?, ?, ?)
        ON CONFLICT (key) DO UPDATE SET value = excluded.value, updated_at = ?`,
-    ).run(key, String(value), nowIso(), nowIso());
+      )
+      .run(key, String(value), nowIso(), nowIso());
   }
 }
 
@@ -596,10 +602,12 @@ export async function getMilestones() {
 export async function setMilestones(arr) {
   const clean = sanitizeMilestones(arr);
   if (!clean.length) throw new Error("milestones must be positive integers");
-  await db.query(
-    `INSERT INTO app_settings (key, value, updated_at) VALUES ('milestones', ?, ?)
+  await db
+    .query(
+      `INSERT INTO app_settings (key, value, updated_at) VALUES ('milestones', ?, ?)
      ON CONFLICT (key) DO UPDATE SET value = excluded.value, updated_at = ?`,
-  ).run(JSON.stringify(clean), nowIso(), nowIso());
+    )
+    .run(JSON.stringify(clean), nowIso(), nowIso());
   return clean;
 }
 
@@ -633,12 +641,12 @@ export async function getEmailTemplate(id) {
 
 export async function getEmailTemplateBySlug(slug) {
   return (
-    await db
+    (await db
       .query(
         `SELECT id, slug, name, subject, html_body, updated_at
          FROM email_templates WHERE slug = ?`,
       )
-      .get(slug) || null
+      .get(slug)) || null
   );
 }
 
@@ -776,53 +784,59 @@ export async function claimCampaignById(id) {
 
 // Ids of campaigns whose send time has arrived (for the reconciler).
 export async function getDueCampaignIds() {
-  return await db
+  const rows = await db
     .query(
       `SELECT id FROM campaigns
        WHERE scheduled_at <= ? AND status IN ('scheduled', 'failed')`,
     )
-    .all(nowIso())
-    .map((r) => r.id);
+    .all(nowIso());
+  return rows.map((r) => r.id);
 }
 
 export async function markCampaignSent(id, recipientCount) {
-  await db.query(
-    `UPDATE campaigns SET status = 'sent', sent_at = ?, recipient_count = ? WHERE id = ?`,
-  ).run(nowIso(), recipientCount, id);
+  await db
+    .query(
+      `UPDATE campaigns SET status = 'sent', sent_at = ?, recipient_count = ? WHERE id = ?`,
+    )
+    .run(nowIso(), recipientCount, id);
 }
 
 export async function markCampaignFailed(id, recipientCount = null) {
-  await db.query(
-    `UPDATE campaigns SET status = 'failed',
+  await db
+    .query(
+      `UPDATE campaigns SET status = 'failed',
        recipient_count = COALESCE(?, recipient_count) WHERE id = ?`,
-  ).run(recipientCount, id);
+    )
+    .run(recipientCount, id);
 }
 
 export async function incrementCampaignOffset(id, count) {
-  await db.query(
-    `UPDATE campaigns SET sent_offset = sent_offset + ?, recipient_count = sent_offset + ?
+  await db
+    .query(
+      `UPDATE campaigns SET sent_offset = sent_offset + ?, recipient_count = sent_offset + ?
      WHERE id = ?`,
-  ).run(count, count, id);
+    )
+    .run(count, count, id);
 }
 
 // ---- newsletter / zoom recipients ------------------------------------------
 
 export async function getNewsletterRecipientByEmail(email) {
   return (
-    await db
+    (await db
       .query(
         `SELECT id, name, email FROM signers
          WHERE email = ? AND verified = 1 AND newsletter = 1`,
       )
-      .get(email) || null
+      .get(email)) || null
   );
 }
 
 export async function getZoomRecipientByEmail(email) {
   return (
-    await db
+    (await db
       .query(`SELECT id, name, email FROM zoom_registrations WHERE email = ?`)
-      .get(email) || null
+      .get(email)) || null
   );
 }
 
@@ -1132,14 +1146,18 @@ export async function mergeOccupation(fromOcc, toOcc) {
 }
 
 export async function insertOccNotTypo(canonical, outlier) {
-  await db.query(
-    `INSERT INTO occupation_not_typo (canonical, outlier) VALUES (?, ?)
+  await db
+    .query(
+      `INSERT INTO occupation_not_typo (canonical, outlier) VALUES (?, ?)
      ON CONFLICT DO NOTHING`,
-  ).run(canonical, outlier);
+    )
+    .run(canonical, outlier);
 }
 
 export async function loadOccNotTypo() {
-  return await db.query(`SELECT canonical, outlier FROM occupation_not_typo`).all();
+  return await db
+    .query(`SELECT canonical, outlier FROM occupation_not_typo`)
+    .all();
 }
 
 // ---- kreisverband / state --------------------------------------------------
@@ -1252,10 +1270,12 @@ export async function ensureKvStateCacheTable() {
 }
 
 export async function insertKvNotTypo(canonical, outlier) {
-  await db.query(
-    `INSERT INTO kv_not_typo (canonical, outlier) VALUES (?, ?)
+  await db
+    .query(
+      `INSERT INTO kv_not_typo (canonical, outlier) VALUES (?, ?)
      ON CONFLICT DO NOTHING`,
-  ).run(canonical, outlier);
+    )
+    .run(canonical, outlier);
 }
 
 export async function loadKvNotTypo() {
@@ -1267,12 +1287,14 @@ export async function upsertKvStateCache(
   state,
   source = "nominatim",
 ) {
-  await db.query(
-    `INSERT INTO kv_state_cache (kreisverband, state, source, resolved_at)
+  await db
+    .query(
+      `INSERT INTO kv_state_cache (kreisverband, state, source, resolved_at)
      VALUES (?, ?, ?, ?)
      ON CONFLICT (kreisverband) DO UPDATE
        SET state = excluded.state, source = excluded.source, resolved_at = ?`,
-  ).run(kreisverband, state, source, nowIso(), nowIso());
+    )
+    .run(kreisverband, state, source, nowIso(), nowIso());
 }
 
 export async function clearEmptyKvCacheEntries() {

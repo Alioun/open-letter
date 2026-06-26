@@ -219,6 +219,11 @@ if (!isDev && !TRUST_PROXY) {
     "[security] TRUST_PROXY is not set — set TRUST_PROXY=true when running behind a reverse proxy for accurate IP rate-limiting.",
   );
 }
+if (!isDev && (!API_TOKEN_SECRET || API_TOKEN_SECRET === ADMIN_JWT_SECRET)) {
+  console.warn(
+    "[security] API_TOKEN_SECRET is not set or equals ADMIN_JWT_SECRET — set a distinct API_TOKEN_SECRET for public API tokens.",
+  );
+}
 
 // Generate the homepage + admin HTML from the active letter config, then let
 // Bun bundle them. Writing only on change keeps git clean for the default
@@ -235,7 +240,10 @@ function writeIfChanged(relPath, content) {
     writeFileSync(path, content);
   } catch (err) {
     if (existing == null) throw err;
-    console.warn(`[html] could not regenerate ${relPath}, using existing:`, err.message);
+    console.warn(
+      `[html] could not regenerate ${relPath}, using existing:`,
+      err.message,
+    );
   }
 }
 
@@ -267,8 +275,9 @@ const jwtSecret = new TextEncoder().encode(ADMIN_JWT_SECRET);
 // boundary — the per-IP rate limits on the endpoints are the real throttle.
 // Separate secret so public tokens can never be confused with admin tokens;
 // falls back to ADMIN_JWT_SECRET so existing deployments keep booting.
+const API_TOKEN_SECRET = process.env.API_TOKEN_SECRET;
 const apiTokenSecret = new TextEncoder().encode(
-  process.env.API_TOKEN_SECRET || ADMIN_JWT_SECRET,
+  API_TOKEN_SECRET || ADMIN_JWT_SECRET,
 );
 const PUBLIC_TOKEN_TTL_SECONDS = 30 * 60;
 // Escape hatch: set REQUIRE_API_TOKEN=false to disable the gate (e.g. if a
@@ -368,11 +377,20 @@ const securityHeaders = {
 
 function getClientIp(req) {
   if (TRUST_PROXY) {
-    return (
-      req.headers.get("x-forwarded-for")?.split(",")[0]?.trim() ||
-      req.headers.get("x-real-ip") ||
-      "unknown"
-    );
+    // When behind a single trusted reverse proxy, prefer X-Real-IP first.
+    // Fall back to the right-most X-Forwarded-For address (the proxy-added hop)
+    // to avoid trusting a client-supplied left-most value.
+    const real = req.headers.get("x-real-ip");
+    if (real) return real.trim();
+    const xff = req.headers.get("x-forwarded-for");
+    if (xff) {
+      const parts = xff
+        .split(",")
+        .map((s) => s.trim())
+        .filter(Boolean);
+      return parts[parts.length - 1] || "unknown";
+    }
+    return "unknown";
   }
   return req.headers.get("x-real-ip") || "unknown";
 }
@@ -454,6 +472,21 @@ async function denyPublic(req, bucket, max, windowMs) {
   }
   if (REQUIRE_API_TOKEN && !(await hasValidPublicToken(req))) {
     return json({ error: "Unauthorized" }, 401);
+  }
+  return null;
+}
+
+function denyRate(req, bucket, max, windowMs) {
+  const { allowed, retryAfter } = checkRateLimit(
+    getClientIp(req),
+    bucket,
+    max,
+    windowMs,
+  );
+  if (!allowed) {
+    return json({ error: "Zu viele Anfragen." }, 429, {
+      "Retry-After": String(retryAfter),
+    });
   }
   return null;
 }
@@ -983,6 +1016,8 @@ const server = Bun.serve({
 
     "/api/signers": {
       async GET(req) {
+        const blocked = await denyPublic(req, "public-read", 120, 60 * 1000);
+        if (blocked) return blocked;
         try {
           const url = new URL(req.url);
           const filter = url.searchParams.get("filter") || "alle";
@@ -1172,7 +1207,9 @@ const server = Bun.serve({
     },
 
     "/api/zoom-count": {
-      async GET() {
+      async GET(req) {
+        const blocked = await denyPublic(req, "public-read", 120, 60 * 1000);
+        if (blocked) return blocked;
         try {
           const [countRow, cfg] = await Promise.all([
             getZoomRegistrationCount(),
@@ -1187,7 +1224,9 @@ const server = Bun.serve({
     },
 
     "/api/zoom-termin.ics": {
-      async GET() {
+      async GET(req) {
+        const blocked = denyRate(req, "ics", 60, 15 * 60 * 1000);
+        if (blocked) return blocked;
         const cfg = await getZoomConfig();
         const linkWindowOpen =
           cfg.link &&
@@ -1265,6 +1304,8 @@ const server = Bun.serve({
 
     "/api/confirm/:token": {
       async GET(req) {
+        const blocked = denyRate(req, "token-link", 120, 15 * 60 * 1000);
+        if (blocked) return blocked;
         try {
           const { token } = req.params;
           const signer = await confirmSigner(token);
@@ -1345,6 +1386,8 @@ const server = Bun.serve({
 
     "/api/delete/:token": {
       async GET(req) {
+        const blocked = denyRate(req, "token-link", 120, 15 * 60 * 1000);
+        if (blocked) return blocked;
         try {
           const { token } = req.params;
           const deleted = await deleteSigner(token);
@@ -1367,6 +1410,8 @@ const server = Bun.serve({
 
     "/api/unsubscribe/:token": {
       async GET(req) {
+        const blocked = denyRate(req, "unsub", 120, 15 * 60 * 1000);
+        if (blocked) return blocked;
         try {
           const url = new URL(req.url);
           const source =
@@ -1387,6 +1432,8 @@ const server = Bun.serve({
     // One-click List-Unsubscribe for newsletter (RFC 8058, no UI)
     "/api/unsubscribe/:token/opt-out": {
       async POST(req) {
+        const blocked = denyRate(req, "unsub", 120, 15 * 60 * 1000);
+        if (blocked) return blocked;
         try {
           const ok = await optOutNewsletter(req.params.token);
           if (!ok) return json({ ok: false }, 404);
@@ -1401,6 +1448,8 @@ const server = Bun.serve({
     // Granular actions via the unified page
     "/api/unsubscribe/:token/newsletter-opt-out": {
       async POST(req) {
+        const blocked = denyRate(req, "unsub", 120, 15 * 60 * 1000);
+        if (blocked) return blocked;
         try {
           const email = await resolveEmailFromToken(req.params.token);
           if (!email) return json({ ok: false }, 404);
@@ -1415,6 +1464,8 @@ const server = Bun.serve({
 
     "/api/unsubscribe/:token/zoom-opt-out": {
       async POST(req) {
+        const blocked = denyRate(req, "unsub", 120, 15 * 60 * 1000);
+        if (blocked) return blocked;
         try {
           const email = await resolveEmailFromToken(req.params.token);
           if (!email) return json({ ok: false }, 404);
@@ -1429,6 +1480,8 @@ const server = Bun.serve({
 
     "/api/unsubscribe/:token/all": {
       async POST(req) {
+        const blocked = denyRate(req, "unsub", 120, 15 * 60 * 1000);
+        if (blocked) return blocked;
         try {
           const email = await resolveEmailFromToken(req.params.token);
           if (!email) return json({ ok: false }, 404);
@@ -1516,6 +1569,8 @@ const server = Bun.serve({
 
     "/api/unsubscribe/:token/delete": {
       async POST(req) {
+        const blocked = denyRate(req, "unsub", 120, 15 * 60 * 1000);
+        if (blocked) return blocked;
         try {
           const ok = await deleteSignerByUnsubscribeToken(req.params.token);
           if (!ok) return json({ ok: false }, 404);
@@ -1530,6 +1585,8 @@ const server = Bun.serve({
     // Redirect old zoom unsubscribe links to the unified page
     "/api/zoom-abmelden/:token": {
       GET(req) {
+        const blocked = denyRate(req, "token-link", 120, 15 * 60 * 1000);
+        if (blocked) return blocked;
         const token = encodeURIComponent(req.params.token);
         return Response.redirect(
           `${getBaseUrl(req)}/abmelden/${token}?from=zoom`,
@@ -1544,6 +1601,8 @@ const server = Bun.serve({
     // ?delegiert=1 → registers as delegate, ?delegiert=0 (default) → non-delegate.
     "/api/zoom-anmelden/:token": {
       async GET(req) {
+        const blocked = denyRate(req, "token-link", 120, 15 * 60 * 1000);
+        if (blocked) return blocked;
         const { token } = req.params;
         const delegiert = req.url.includes("delegiert=1");
         const force = req.url.includes("force=1");
@@ -1653,6 +1712,8 @@ const server = Bun.serve({
     // One-click List-Unsubscribe for zoom (RFC 8058, no UI)
     "/api/zoom-abmelden/:token/opt-out": {
       async POST(req) {
+        const blocked = denyRate(req, "unsub", 120, 15 * 60 * 1000);
+        if (blocked) return blocked;
         try {
           await deleteZoomRegistrationByUnsubscribeToken(req.params.token);
           return json({ ok: true });
@@ -2330,7 +2391,8 @@ console.log(
 async function handleMaintenanceJob({ task }) {
   if (task === "campaign-reconcile") {
     const ids = await getDueCampaignIds();
-    for (const id of ids) await enqueueJob("campaigns", { campaignId: id }, { maxAttempts: 5 });
+    for (const id of ids)
+      await enqueueJob("campaigns", { campaignId: id }, { maxAttempts: 5 });
   } else if (task === "zoom") {
     await runZoomMailingWorker();
   } else if (task === "backup") {
@@ -2341,9 +2403,15 @@ async function handleMaintenanceJob({ task }) {
 try {
   await initJobs();
   // Recurring schedules (persisted in the encrypted DB; survive restarts).
-  await registerSchedule("campaign-reconcile", "maintenance", "@every 30s", { task: "campaign-reconcile" });
-  await registerSchedule("zoom-mailings", "maintenance", "@every 60s", { task: "zoom" });
-  await registerSchedule("hourly-backup", "maintenance", "0 * * * *", { task: "backup" });
+  await registerSchedule("campaign-reconcile", "maintenance", "@every 30s", {
+    task: "campaign-reconcile",
+  });
+  await registerSchedule("zoom-mailings", "maintenance", "@every 60s", {
+    task: "zoom",
+  });
+  await registerSchedule("hourly-backup", "maintenance", "0 * * * *", {
+    task: "backup",
+  });
   startWorker({
     campaigns: handleCampaignJob,
     maintenance: handleMaintenanceJob,

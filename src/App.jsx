@@ -169,6 +169,8 @@ export default function App() {
   const knownIdsRef = useRef(new Set());
   const visitStartRef = useRef(Date.now());
 
+  const signerKey = useCallback((s) => `${s.created_at}|${s.name}`, []);
+
   const [emailModal, setEmailModal] = useState(null);
   const [resendCooldown, setResendCooldown] = useState(0);
   const [resendSent, setResendSent] = useState(false);
@@ -222,7 +224,7 @@ export default function App() {
       const res = await fetch(`/api/signers?${params}`);
       if (!res.ok) throw new Error();
       const data = await res.json();
-      data.signers.forEach((s) => knownIdsRef.current.add(s.id));
+      data.signers.forEach((s) => knownIdsRef.current.add(signerKey(s)));
       setSigners((prev) =>
         append ? [...prev, ...data.signers] : data.signers,
       );
@@ -298,12 +300,12 @@ export default function App() {
         const newOnes = data.signers
           .filter(
             (s) =>
-              !knownIdsRef.current.has(s.id) &&
+              !knownIdsRef.current.has(signerKey(s)) &&
               new Date(s.created_at).getTime() > visitStartRef.current,
           )
           .map((s) => ({ ...s, _isNew: true }));
         if (newOnes.length > 0) {
-          newOnes.forEach((s) => knownIdsRef.current.add(s.id));
+          newOnes.forEach((s) => knownIdsRef.current.add(signerKey(s)));
           setSigners((prev) =>
             filter === "alle" ? [...prev, ...newOnes] : [...newOnes, ...prev],
           );
@@ -638,7 +640,8 @@ export default function App() {
             </a>
           ))}
           {
-            /* zoom module — toggle via features.zoomEvent */ cfg.features.zoomEvent &&
+            /* zoom module — toggle via features.zoomEvent */ cfg.features
+              .zoomEvent &&
               zoomOpen && (
                 <a
                   href="#zoom"
@@ -691,7 +694,8 @@ export default function App() {
           </a>
         ))}
         {
-          /* zoom module — toggle via features.zoomEvent */ cfg.features.zoomEvent && (
+          /* zoom module — toggle via features.zoomEvent */ cfg.features
+            .zoomEvent && (
             <a
               href="#zoom"
               onClick={(e) => {
@@ -773,7 +777,8 @@ export default function App() {
                 </div>
 
                 {
-                  /* zoom module — toggle via features.zoomEvent */ cfg.features.zoomEvent &&
+                  /* zoom module — toggle via features.zoomEvent */ cfg.features
+                    .zoomEvent &&
                     total >= 2000 &&
                     zoomOpen && (
                       <button
@@ -1046,7 +1051,7 @@ export default function App() {
                 <div className="signers-grid">
                   {signers.map((s) => (
                     <SignerRow
-                      key={s.id}
+                      key={signerKey(s)}
                       name={s.name}
                       kreisverband={s.kreisverband}
                       createdAt={s.created_at}
@@ -1069,18 +1074,15 @@ export default function App() {
           </div>
         </section>
 
-        <section
-          className="section faq-section"
-          id="faq"
-          aria-label="FAQ"
-        >
+        <section className="section faq-section" id="faq" aria-label="FAQ">
           <div className="section-inner">
             <FaqContent />
           </div>
         </section>
 
         {
-          /* zoom module — toggle via features.zoomEvent */ cfg.features.zoomEvent &&
+          /* zoom module — toggle via features.zoomEvent */ cfg.features
+            .zoomEvent &&
             zoomOpen && (
               <section
                 className="section sign-section zoom-section"
@@ -1499,163 +1501,176 @@ const SignForm = memo(function SignForm({
       </div>
 
       {cfg.features.kreisverbandField && (
-      <div className="field field--relative">
-        <label htmlFor="sign-kv">
-          {cfg.sign.fields.kreisverband.label}{" "}
-          <span className="opt">{cfg.sign.fields.kreisverband.optionalLabel}</span>
-        </label>
-        <input
-          id="sign-kv"
-          ref={kvInputRef}
-          type="text"
-          value={kv}
-          onChange={(e) => {
-            setKv(e.target.value);
-            setShowSuggest(true);
-            setKvActiveIndex(-1);
-          }}
-          onFocus={() => setShowSuggest(true)}
-          onBlur={() => {
-            setTimeout(() => {
-              setShowSuggest(false);
+        <div className="field field--relative">
+          <label htmlFor="sign-kv">
+            {cfg.sign.fields.kreisverband.label}{" "}
+            <span className="opt">
+              {cfg.sign.fields.kreisverband.optionalLabel}
+            </span>
+          </label>
+          <input
+            id="sign-kv"
+            ref={kvInputRef}
+            type="text"
+            value={kv}
+            onChange={(e) => {
+              setKv(e.target.value);
+              setShowSuggest(true);
               setKvActiveIndex(-1);
-            }, 150);
-            setKv((v) => v.replace(/^KV\s*/i, ""));
-          }}
-          onKeyDown={(e) => {
-            if (!showSuggest || !kvMatches.length) return;
-            if (e.key === "ArrowDown") {
-              e.preventDefault();
-              setKvActiveIndex((i) => Math.min(i + 1, kvMatches.length - 1));
-            } else if (e.key === "ArrowUp") {
-              e.preventDefault();
-              setKvActiveIndex((i) => Math.max(i - 1, 0));
-            } else if (e.key === "Enter" && kvActiveIndex >= 0) {
-              e.preventDefault();
-              setKv(kvMatches[kvActiveIndex]);
-              setShowSuggest(false);
-              setKvActiveIndex(-1);
-            } else if (e.key === "Escape") {
-              setShowSuggest(false);
-              setKvActiveIndex(-1);
-              kvInputRef.current?.focus();
+            }}
+            onFocus={() => setShowSuggest(true)}
+            onBlur={() => {
+              setTimeout(() => {
+                setShowSuggest(false);
+                setKvActiveIndex(-1);
+              }, 150);
+              setKv((v) => v.replace(/^KV\s*/i, ""));
+            }}
+            onKeyDown={(e) => {
+              if (!showSuggest || !kvMatches.length) return;
+              if (e.key === "ArrowDown") {
+                e.preventDefault();
+                setKvActiveIndex((i) => Math.min(i + 1, kvMatches.length - 1));
+              } else if (e.key === "ArrowUp") {
+                e.preventDefault();
+                setKvActiveIndex((i) => Math.max(i - 1, 0));
+              } else if (e.key === "Enter" && kvActiveIndex >= 0) {
+                e.preventDefault();
+                setKv(kvMatches[kvActiveIndex]);
+                setShowSuggest(false);
+                setKvActiveIndex(-1);
+              } else if (e.key === "Escape") {
+                setShowSuggest(false);
+                setKvActiveIndex(-1);
+                kvInputRef.current?.focus();
+              }
+            }}
+            placeholder={cfg.sign.fields.kreisverband.placeholder}
+            autoComplete="off"
+            role="combobox"
+            aria-expanded={showSuggest && kv && kvMatches.length > 0}
+            aria-autocomplete="list"
+            aria-controls="kv-listbox"
+            aria-activedescendant={
+              kvActiveIndex >= 0 ? `kv-option-${kvActiveIndex}` : undefined
             }
-          }}
-          placeholder={cfg.sign.fields.kreisverband.placeholder}
-          autoComplete="off"
-          role="combobox"
-          aria-expanded={showSuggest && kv && kvMatches.length > 0}
-          aria-autocomplete="list"
-          aria-controls="kv-listbox"
-          aria-activedescendant={
-            kvActiveIndex >= 0 ? `kv-option-${kvActiveIndex}` : undefined
-          }
-        />
-        {showSuggest && kv && kvMatches.length > 0 && (
-          <div id="kv-listbox" role="listbox" className="autocomplete-dropdown">
-            {kvMatches.map((k, i) => (
-              <div
-                key={k}
-                id={`kv-option-${i}`}
-                role="option"
-                aria-selected={i === kvActiveIndex}
-                onMouseDown={() => {
-                  setKv(k);
-                  setShowSuggest(false);
-                  setKvActiveIndex(-1);
-                }}
-                className={
-                  "autocomplete-option" + (i === kvActiveIndex ? " active" : "")
-                }
-              >
-                {k}
-              </div>
-            ))}
-          </div>
-        )}
-      </div>
+          />
+          {showSuggest && kv && kvMatches.length > 0 && (
+            <div
+              id="kv-listbox"
+              role="listbox"
+              className="autocomplete-dropdown"
+            >
+              {kvMatches.map((k, i) => (
+                <div
+                  key={k}
+                  id={`kv-option-${i}`}
+                  role="option"
+                  aria-selected={i === kvActiveIndex}
+                  onMouseDown={() => {
+                    setKv(k);
+                    setShowSuggest(false);
+                    setKvActiveIndex(-1);
+                  }}
+                  className={
+                    "autocomplete-option" +
+                    (i === kvActiveIndex ? " active" : "")
+                  }
+                >
+                  {k}
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
       )}
 
       {cfg.features.occupationField && (
-      <div className="field field--relative">
-        <label htmlFor="sign-occupation">
-          {cfg.sign.fields.occupation.label}{" "}
-          <span className="opt">{cfg.sign.fields.occupation.optionalLabel}</span>
-        </label>
-        <input
-          id="sign-occupation"
-          ref={occInputRef}
-          type="text"
-          value={occupation}
-          onChange={(e) => {
-            setOccupation(e.target.value);
-            setShowOccSuggest(true);
-            setOccActiveIndex(-1);
-          }}
-          onFocus={() => setShowOccSuggest(true)}
-          onBlur={() => {
-            setTimeout(() => {
-              setShowOccSuggest(false);
+        <div className="field field--relative">
+          <label htmlFor="sign-occupation">
+            {cfg.sign.fields.occupation.label}{" "}
+            <span className="opt">
+              {cfg.sign.fields.occupation.optionalLabel}
+            </span>
+          </label>
+          <input
+            id="sign-occupation"
+            ref={occInputRef}
+            type="text"
+            value={occupation}
+            onChange={(e) => {
+              setOccupation(e.target.value);
+              setShowOccSuggest(true);
               setOccActiveIndex(-1);
-            }, 150);
-          }}
-          onKeyDown={(e) => {
-            if (!showOccSuggest || !occMatches.length) return;
-            if (e.key === "ArrowDown") {
-              e.preventDefault();
-              setOccActiveIndex((i) => Math.min(i + 1, occMatches.length - 1));
-            } else if (e.key === "ArrowUp") {
-              e.preventDefault();
-              setOccActiveIndex((i) => Math.max(i - 1, 0));
-            } else if (e.key === "Enter" && occActiveIndex >= 0) {
-              e.preventDefault();
-              setOccupation(occMatches[occActiveIndex]);
-              setShowOccSuggest(false);
-              setOccActiveIndex(-1);
-            } else if (e.key === "Escape") {
-              setShowOccSuggest(false);
-              setOccActiveIndex(-1);
-              occInputRef.current?.focus();
+            }}
+            onFocus={() => setShowOccSuggest(true)}
+            onBlur={() => {
+              setTimeout(() => {
+                setShowOccSuggest(false);
+                setOccActiveIndex(-1);
+              }, 150);
+            }}
+            onKeyDown={(e) => {
+              if (!showOccSuggest || !occMatches.length) return;
+              if (e.key === "ArrowDown") {
+                e.preventDefault();
+                setOccActiveIndex((i) =>
+                  Math.min(i + 1, occMatches.length - 1),
+                );
+              } else if (e.key === "ArrowUp") {
+                e.preventDefault();
+                setOccActiveIndex((i) => Math.max(i - 1, 0));
+              } else if (e.key === "Enter" && occActiveIndex >= 0) {
+                e.preventDefault();
+                setOccupation(occMatches[occActiveIndex]);
+                setShowOccSuggest(false);
+                setOccActiveIndex(-1);
+              } else if (e.key === "Escape") {
+                setShowOccSuggest(false);
+                setOccActiveIndex(-1);
+                occInputRef.current?.focus();
+              }
+            }}
+            placeholder={cfg.sign.fields.occupation.placeholder}
+            autoComplete="off"
+            role="combobox"
+            aria-expanded={
+              showOccSuggest && occupation && occMatches.length > 0
             }
-          }}
-          placeholder={cfg.sign.fields.occupation.placeholder}
-          autoComplete="off"
-          role="combobox"
-          aria-expanded={showOccSuggest && occupation && occMatches.length > 0}
-          aria-autocomplete="list"
-          aria-controls="occ-listbox"
-          aria-activedescendant={
-            occActiveIndex >= 0 ? `occ-option-${occActiveIndex}` : undefined
-          }
-        />
-        {showOccSuggest && occupation && occMatches.length > 0 && (
-          <div
-            id="occ-listbox"
-            role="listbox"
-            className="autocomplete-dropdown"
-          >
-            {occMatches.map((o, i) => (
-              <div
-                key={o}
-                id={`occ-option-${i}`}
-                role="option"
-                aria-selected={i === occActiveIndex}
-                onMouseDown={() => {
-                  setOccupation(o);
-                  setShowOccSuggest(false);
-                  setOccActiveIndex(-1);
-                }}
-                className={
-                  "autocomplete-option" +
-                  (i === occActiveIndex ? " active" : "")
-                }
-              >
-                {o}
-              </div>
-            ))}
-          </div>
-        )}
-      </div>
+            aria-autocomplete="list"
+            aria-controls="occ-listbox"
+            aria-activedescendant={
+              occActiveIndex >= 0 ? `occ-option-${occActiveIndex}` : undefined
+            }
+          />
+          {showOccSuggest && occupation && occMatches.length > 0 && (
+            <div
+              id="occ-listbox"
+              role="listbox"
+              className="autocomplete-dropdown"
+            >
+              {occMatches.map((o, i) => (
+                <div
+                  key={o}
+                  id={`occ-option-${i}`}
+                  role="option"
+                  aria-selected={i === occActiveIndex}
+                  onMouseDown={() => {
+                    setOccupation(o);
+                    setShowOccSuggest(false);
+                    setOccActiveIndex(-1);
+                  }}
+                  className={
+                    "autocomplete-option" +
+                    (i === occActiveIndex ? " active" : "")
+                  }
+                >
+                  {o}
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
       )}
 
       <div className="checks">
@@ -1667,7 +1682,8 @@ const SignForm = memo(function SignForm({
           />
           <span>
             Mein <strong>Name{visibilityExtra}</strong> darf öffentlich auf
-            dieser Seite angezeigt werden. <span className="opt">(optional)</span>
+            dieser Seite angezeigt werden.{" "}
+            <span className="opt">(optional)</span>
           </span>
         </label>
         <label className="check">
