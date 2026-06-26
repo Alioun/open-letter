@@ -216,6 +216,7 @@ async function getZoomConfig() {
 const ADMIN_PATH = normalizeAdminPath(process.env.ADMIN_PATH);
 const ADMIN_PASSWORD = process.env.ADMIN_PASSWORD || "";
 const ADMIN_JWT_SECRET = process.env.ADMIN_JWT_SECRET || "";
+const API_TOKEN_SECRET = process.env.API_TOKEN_SECRET;
 
 if (!ADMIN_PATH || !ADMIN_PASSWORD || !ADMIN_JWT_SECRET) {
   throw new Error(
@@ -291,7 +292,6 @@ const jwtSecret = new TextEncoder().encode(ADMIN_JWT_SECRET);
 // boundary — the per-IP rate limits on the endpoints are the real throttle.
 // Separate secret so public tokens can never be confused with admin tokens;
 // falls back to ADMIN_JWT_SECRET so existing deployments keep booting.
-const API_TOKEN_SECRET = process.env.API_TOKEN_SECRET;
 const apiTokenSecret = new TextEncoder().encode(
   API_TOKEN_SECRET || ADMIN_JWT_SECRET,
 );
