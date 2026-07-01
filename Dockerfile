@@ -35,6 +35,12 @@ RUN mkdir -p /app/data /app/backups
 ENV NODE_ENV=production
 ENV DATABASE_PATH=/app/data/diaetendeckel.db
 ENV HONKER_EXTENSION_PATH=/app/vendor/libhonker_ext.so
+
+# Bake the deployed commit so GET /api/version can report what's actually live.
+# Pass at build time: docker build --build-arg GIT_COMMIT=$(git rev-parse HEAD) .
+# (.git is dockerignored, so the app can't read it at runtime.)
+ARG GIT_COMMIT=unknown
+ENV GIT_COMMIT=${GIT_COMMIT}
 EXPOSE 3000
 
 CMD ["sh", "-c", "bun db/setup.js && bun server/index.js"]

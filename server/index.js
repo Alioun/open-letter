@@ -1002,6 +1002,32 @@ async function runZoomMailingWorker() {
 
 // runZoomMailingWorker is invoked by the Honker `maintenance` queue (see boot).
 
+// Build/version info for GET /api/version — lets you confirm which commit is
+// actually live after a deploy (staging vs prod). The commit is baked at build
+// time via GIT_COMMIT (see Dockerfile), with common platform env fallbacks, then
+// a local `git` fallback for non-container runs; "unknown" if none resolve.
+const SERVER_STARTED_AT = new Date().toISOString();
+function resolveCommit() {
+  const fromEnv =
+    process.env.GIT_COMMIT ||
+    process.env.SOURCE_COMMIT ||
+    process.env.SOURCE_VERSION ||
+    process.env.RENDER_GIT_COMMIT ||
+    process.env.RAILWAY_GIT_COMMIT_SHA ||
+    process.env.VERCEL_GIT_COMMIT_SHA ||
+    process.env.COMMIT_SHA ||
+    process.env.GIT_SHA;
+  if (fromEnv) return String(fromEnv).trim();
+  try {
+    const out = Bun.spawnSync(["git", "rev-parse", "HEAD"], {
+      cwd: fileURLToPath(new URL("..", import.meta.url)),
+    });
+    if (out.success) return out.stdout.toString().trim();
+  } catch {}
+  return "unknown";
+}
+const GIT_COMMIT = resolveCommit();
+
 const server = Bun.serve({
   port: PORT,
   development: isDev,
@@ -1027,6 +1053,24 @@ const server = Bun.serve({
         } catch {
           return new Response("", { status: 404 });
         }
+      },
+    },
+
+    "/api/version": {
+      GET(req) {
+        const blocked = denyRate(req, "version", 60, 60 * 1000);
+        if (blocked) return blocked;
+        return json(
+          {
+            commit: GIT_COMMIT,
+            letter: LETTER_NAME,
+            env: process.env.NODE_ENV || "development",
+            runtime: `bun ${Bun.version}`,
+            startedAt: SERVER_STARTED_AT,
+          },
+          200,
+          { "Cache-Control": "no-store" },
+        );
       },
     },
 
