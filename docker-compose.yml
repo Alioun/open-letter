@@ -1,6 +1,7 @@
 services:
   app:
     build: .
+    command: sh -c "bun db/setup.js && bun db/migrate-pg-to-sqlite.js && bun server/index.js"
     env_file: .env
     environment:
       - DATABASE_PATH=/app/data/diaetendeckel.db
