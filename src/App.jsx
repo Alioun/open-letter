@@ -2420,6 +2420,46 @@ function DatenschutzModal({ onClose }) {
             . Du kannst diese Einwilligung jederzeit widerrufen - über das
             Löschformular unten oder durch Antwort auf eine Kampagnen-E-Mail.
           </p>
+          {cfg.email?.provider === "resend" && (
+            <p>
+              <strong>d) E-Mail-Versand über Resend</strong>
+              <br />
+              Für den Versand von E-Mails (Bestätigungs-, Lösch- und
+              Kampagnen-E-Mails) nutzen wir den Dienst Resend der Resend, Inc.
+              Dabei werden deine E-Mail-Adresse und der Inhalt der jeweiligen
+              E-Mail an Resend übermittelt und auf Servern in Irland (EU) zum
+              Zweck des Versands verarbeitet und gespeichert. Resend ist als
+              Auftragsverarbeiter nach Art. 28 DS-GVO vertraglich gebunden (
+              <a
+                href="https://resend.com/legal/dpa"
+                target="_blank"
+                rel="noopener noreferrer"
+              >
+                Auftragsverarbeitungsvertrag
+              </a>
+              ). Die Verarbeitung erfolgt auf Servern innerhalb der EU. Soweit
+              es im Einzelfall dennoch zu einem Zugriff aus einem Drittland
+              (z. B. durch die US-Muttergesellschaft) kommen kann, ist dieser
+              durch geeignete Garantien abgesichert (Art. 44 ff. DS-GVO).
+              Weitere Informationen findest du in der{" "}
+              <a
+                href="https://resend.com/legal/privacy-policy"
+                target="_blank"
+                rel="noopener noreferrer"
+              >
+                Datenschutzerklärung von Resend
+              </a>{" "}
+              sowie in der{" "}
+              <a
+                href="https://resend.com/legal/subprocessors"
+                target="_blank"
+                rel="noopener noreferrer"
+              >
+                Liste der Unterauftragsverarbeiter
+              </a>
+              . Rechtsgrundlage ist Art. 6 Abs. 1 lit. a und lit. f DS-GVO.
+            </p>
+          )}
 
           <h5>3. Deine Rechte</h5>
           <p>
