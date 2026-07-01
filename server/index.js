@@ -153,7 +153,7 @@ const ZOOM_EVENT_DURATION_MIN_DEFAULT = parseInt(
   process.env.ZOOM_EVENT_DURATION_MIN || String(cfg.zoom?.durationMin || 90),
   10,
 );
-const ZOOM_ICS_URL = `${BASE_URL}/api/zoom-termin.ics`;
+const ZOOM_ICS_URL = `${BASE_URL}/api/termin.ics`;
 
 // Human German label for the event date/time, e.g. "9. Juni, 20:00 Uhr".
 function formatZoomLabel(date) {
@@ -614,10 +614,22 @@ async function sleep(ms) {
   await new Promise((resolve) => setTimeout(resolve, ms));
 }
 
+// Whether the join link may be surfaced yet: only once the link window has
+// opened (eventAt − linkOffsetHours). Guards against a TBD date (eventAt is an
+// epoch fallback then, so a naive comparison would always be "open").
+function isLinkWindowOpen(zc) {
+  if (!zc?.dateSet) return false;
+  const eventMs = zc.eventAt?.getTime?.();
+  if (!eventMs || Number.isNaN(eventMs)) return false;
+  const linkMs = (zc.linkOffsetHours || 0) * 60 * 60 * 1000;
+  return Date.now() >= eventMs - linkMs;
+}
+
 // The mode-aware {{linkInfo}} block for meeting emails. For online meetings it
-// shows the join link (or, when `pending`, that the link follows by email); for
-// in-person meetings it shows the location/address. Always appends the calendar
-// button. `zc` is the getZoomConfig() result.
+// shows the join link — but only once the link window has opened (before that,
+// or when `pending`, it says the link follows by email); for in-person meetings
+// it shows the location/address. Always appends the calendar button. `zc` is the
+// getZoomConfig() result.
 function buildMeetingInfo(zc, { pending = false, timingText = "vor dem Termin" } = {}) {
   const calBtn = zoomCalendarButton(ZOOM_ICS_URL);
   if (zc?.mode === "inperson") {
@@ -639,9 +651,12 @@ function buildMeetingInfo(zc, { pending = false, timingText = "vor dem Termin" }
     );
   }
   const safeLink = sanitizeUrl(zc?.link || "");
-  const linkPart = safeLink
-    ? `<p>Hier geht's direkt zum Treffen: <a href="${escapeHtml(safeLink)}">${escapeHtml(safeLink)}</a></p>`
-    : `<p>Den Einwahllink schicken wir dir rechtzeitig vor dem Termin per E-Mail.</p>`;
+  // Only reveal the actual link once the link window has opened; otherwise the
+  // invite email (sent well ahead) would leak the link before it's time.
+  const linkPart =
+    safeLink && isLinkWindowOpen(zc)
+      ? `<p>Hier geht's direkt zum Treffen: <a href="${escapeHtml(safeLink)}">${escapeHtml(safeLink)}</a></p>`
+      : `<p>Den Einwahllink schicken wir dir rechtzeitig vor dem Termin per E-Mail.</p>`;
   return linkPart + calBtn;
 }
 
@@ -766,12 +781,7 @@ async function sendCampaign(campaign) {
             eventWhen: zoomCfg?.whenPhrase || "",
             linkInfo: zoomLinkInfo,
             unsubscribeUrl,
-            zoomJaUrl: `${BASE_URL}/api/zoom-anmelden/${token}?delegiert=0`,
-            // Empty when the delegate field is off → the {{#zoomJaDelegiertUrl}}
-            // section in the template is stripped, hiding the delegate button.
-            zoomJaDelegiertUrl: zoomCfg?.showDelegierter
-              ? `${BASE_URL}/api/zoom-anmelden/${token}?delegiert=1`
-              : "",
+            ...treffenSignupUrls(token, zoomCfg?.showDelegierter),
           };
         }
         payloads.push({
@@ -863,7 +873,7 @@ async function buildZoomMailPayload(kind, recipient, token, cfg) {
     ).toString("base64");
     payload.attachments = [
       {
-        filename: "zoom-termin.ics",
+        filename: "termin.ics",
         content: icsB64,
         content_type: "text/calendar; method=PUBLISH; charset=utf-8",
       },
@@ -880,8 +890,12 @@ async function sendZoomSignupEmail({ regId, name, email, cfg }) {
   const linkSent = mailings.some(
     (m) => m.kind === "link" && m.status === "sent",
   );
+  // If the link window is already open, a fresh signup would otherwise get the
+  // "link comes later" confirmation and never receive the link (the scheduled
+  // link mail already went out). Send them the link mail right away instead.
+  const windowOpen = isLinkWindowOpen(cfg) && Boolean(cfg.link);
 
-  if (reminderSent || linkSent) {
+  if (reminderSent || linkSent || windowOpen) {
     const kind = reminderSent ? "reminder" : "link";
     const unsubToken = await refreshZoomUnsubscribeToken(regId);
     const payload = await buildZoomMailPayload(
@@ -1027,6 +1041,19 @@ function resolveCommit() {
   return "unknown";
 }
 const GIT_COMMIT = resolveCommit();
+
+// One-click Treffen-signup links for invite emails. When the delegate field is
+// off we drop the ?delegiert query entirely (the endpoint defaults to
+// non-delegate); when it's on we keep explicit ?delegiert=0 / =1 so the two
+// buttons register the right status. `zoomJaDelegiertUrl` is "" when off so the
+// {{#zoomJaDelegiertUrl}} section in the template is stripped.
+function treffenSignupUrls(idOrToken, showDelegierter) {
+  const base = `${BASE_URL}/api/treffen-anmelden/${idOrToken}`;
+  return {
+    zoomJaUrl: showDelegierter ? `${base}?delegiert=0` : base,
+    zoomJaDelegiertUrl: showDelegierter ? `${base}?delegiert=1` : "",
+  };
+}
 
 const server = Bun.serve({
   port: PORT,
@@ -1424,7 +1451,7 @@ const server = Bun.serve({
       },
     },
 
-    "/api/zoom-termin.ics": {
+    "/api/termin.ics": {
       async GET(req) {
         const blocked = denyRate(req, "ics", 60, 15 * 60 * 1000);
         if (blocked) return blocked;
@@ -1432,17 +1459,13 @@ const server = Bun.serve({
         if (!cfg.dateSet) {
           return new Response("Termin noch nicht festgelegt.", { status: 404 });
         }
-        const linkWindowOpen =
-          cfg.link &&
-          Date.now() >=
-            cfg.eventAt.getTime() - cfg.linkOffsetHours * 60 * 60 * 1000;
         const ics = buildZoomEventIcs(cfg, {
-          includeLink: Boolean(linkWindowOpen),
+          includeLink: Boolean(cfg.link) && isLinkWindowOpen(cfg),
         });
         return new Response(ics, {
           headers: {
             "Content-Type": "text/calendar; charset=utf-8",
-            "Content-Disposition": 'attachment; filename="zoom-termin.ics"',
+            "Content-Disposition": 'attachment; filename="termin.ics"',
             "Cache-Control": "public, max-age=300",
           },
         });
@@ -1801,11 +1824,27 @@ const server = Bun.serve({
       },
     },
 
-    // One-click zoom registration from newsletter invite email.
-    // The token is the signer's unsubscribe_token (fresh per campaign send).
-    // These zoom signup links do not expire based on the token age.
-    // ?delegiert=1 → registers as delegate, ?delegiert=0 (default) → non-delegate.
+    // Back-compat: invite emails sent before the rename used /api/zoom-anmelden.
+    // Redirect (preserving any ?delegiert query) to the current path.
     "/api/zoom-anmelden/:token": {
+      GET(req) {
+        const u = new URL(req.url);
+        const dest =
+          u.origin +
+          u.pathname.replace(
+            "/api/zoom-anmelden/",
+            "/api/treffen-anmelden/",
+          ) +
+          u.search;
+        return Response.redirect(dest, 301);
+      },
+    },
+
+    // One-click Treffen registration from newsletter invite email.
+    // The token is the signer's unsubscribe_token (fresh per campaign send).
+    // These signup links do not expire based on the token age.
+    // ?delegiert=1 → registers as delegate, ?delegiert=0 (or omitted) → non-delegate.
+    "/api/treffen-anmelden/:token": {
       async GET(req) {
         const blocked = denyRate(req, "token-link", 120, 15 * 60 * 1000);
         if (blocked) return blocked;
@@ -1846,7 +1885,7 @@ const server = Bun.serve({
               const toggleLabel = existing.delegierter
                 ? "Nicht als Delegierte*r anmelden"
                 : "Als Delegierte*r anmelden";
-              const toggleUrl = `${BASE_URL}/api/zoom-anmelden/${encodeURIComponent(token)}?delegiert=${existing.delegierter ? 0 : 1}&force=1`;
+              const toggleUrl = `${BASE_URL}/api/treffen-anmelden/${encodeURIComponent(token)}?delegiert=${existing.delegierter ? 0 : 1}&force=1`;
               toggleBlock = `<p><a href="${toggleUrl}" style="color:#e8001c;">${toggleLabel}</a></p>`;
             }
             const unsubUrl = existing.unsubscribe_token
@@ -1887,7 +1926,7 @@ const server = Bun.serve({
               });
             } catch (mailErr) {
               console.error(
-                "[zoom-anmelden] confirmation email failed:",
+                "[treffen-anmelden] confirmation email failed:",
                 mailErr,
               );
             }
@@ -1911,7 +1950,7 @@ const server = Bun.serve({
             },
           );
         } catch (err) {
-          console.error("GET /api/zoom-anmelden error:", err);
+          console.error("GET /api/treffen-anmelden error:", err);
           return new Response(
             zoomUnsubPage(
               `<h1>Fehler</h1><p>Etwas ist schiefgelaufen. Bitte versuche es sp\u00e4ter erneut oder melde dich direkt auf <a href="${BASE_URL}/#zoom">gehaltsdeckel.jetzt</a> an.</p>`,
@@ -2338,10 +2377,7 @@ const server = Bun.serve({
               eventLabel: cfg.label,
               zoomLink: cfg.link,
               linkInfo: buildMeetingInfo(cfg),
-              zoomJaUrl: `${BASE_URL}/api/zoom-anmelden/beispiel?delegiert=0`,
-              zoomJaDelegiertUrl: cfg.showDelegierter
-                ? `${BASE_URL}/api/zoom-anmelden/beispiel?delegiert=1`
-                : "",
+              ...treffenSignupUrls("beispiel", cfg.showDelegierter),
             }),
           });
         });
@@ -2408,10 +2444,7 @@ const server = Bun.serve({
                 eventLabel: zoomCfg?.label || "",
                 linkInfo: buildMeetingInfo(zoomCfg),
                 unsubscribeUrl,
-                zoomJaUrl: `${BASE_URL}/api/zoom-anmelden/${token}?delegiert=0`,
-                zoomJaDelegiertUrl: zoomCfg?.showDelegierter
-                  ? `${BASE_URL}/api/zoom-anmelden/${token}?delegiert=1`
-                  : "",
+                ...treffenSignupUrls(token, zoomCfg?.showDelegierter),
               };
             }
           } else {
@@ -2434,10 +2467,7 @@ const server = Bun.serve({
                   eventLabel: zoomCfg?.label || "",
                   linkInfo: buildMeetingInfo(zoomCfg),
                   unsubscribeUrl: `${BASE_URL}/abmelden/test`,
-                  zoomJaUrl: `${BASE_URL}/api/zoom-anmelden/test?delegiert=0`,
-                  zoomJaDelegiertUrl: zoomCfg?.showDelegierter
-                    ? `${BASE_URL}/api/zoom-anmelden/test?delegiert=1`
-                    : "",
+                  ...treffenSignupUrls("test", zoomCfg?.showDelegierter),
                 };
           }
           const html = renderEmailHtml(template.html_body, vars);
