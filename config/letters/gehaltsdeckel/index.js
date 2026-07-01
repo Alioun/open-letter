@@ -68,7 +68,7 @@ export default {
       "data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect x='6' y='6' width='20' height='20' rx='3' fill='%23ff0000' transform='rotate(8 16 16)'/%3E%3C/svg%3E",
     // schema.org JSON-LD "about" entity.
     schemaAbout: {
-      name: "Diätendeckel",
+      name: "Gehaltsdeckel jetzt",
       description:
         "Initiative für eine Gehaltsobergrenze für Abgeordnete der Partei Die Linke",
     },
@@ -333,11 +333,11 @@ export default {
   // Shown at the top of the page once the campaign goal is reached. All copy is
   // config-driven so any letter can reuse this without touching src/App.jsx.
   success: {
-    kicker: "Geschafft.",
-    headline: "Der Gehaltsdeckel ist beschlossen.",
-    body: "Danke an alle, die mitgezeichnet haben: Auf dem Bundesparteitag in Potsdam wurde der Antrag zur Begrenzung der Diäten von Mandatsträger*innen beschlossen. Jetzt werten wir die Aktion gemeinsam aus.",
-    // TODO: echte URL zum beschlossenen Antrag / Beschluss eintragen.
-    antragUrl: "TODO-ANTRAG-URL",
+    kicker: "Geschafft!",
+    headline: "Hurra, hurra, der Gehaltsdeckel ist da!",
+    body: "Danke an alle, die mitgezeichnet haben: Auf dem Bundesparteitag in Potsdam wurde der Antrag zum Gehaltsdeckel beschlossen. Jetzt werten wir die Aktion gemeinsam aus.",
+    antragUrl:
+      "https://www.die-linke.de/partei/parteidemokratie/parteitag/potsdamer-parteitag/potsdamer-parteitag/beschluesse/detail/news/gehaltsdeckel-fuer-abgeordnete-der-linken/",
     antragLabel: "Zum beschlossenen Antrag",
     ctaZoom: "Zum Auswertungstreffen anmelden",
     // Kept in the accomplished hero as a proof-of-impact stat. The live verified
@@ -379,7 +379,7 @@ export default {
     // new letter can relabel the button and messages without touching code.
     form: {
       badge: "Anmeldung",
-      title: "Anmelden in 30 Sekunden",
+      title: "Anmelden zum Auswertungstreffen",
       subtitle: "Alle Infos zum Treffen bekommst du per E-Mail.",
       submitLabel: "Zum Auswertungstreffen anmelden",
       submittingLabel: "Wird gesendet…",

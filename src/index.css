@@ -3428,7 +3428,7 @@ footer {
    ========================================================================== */
 
 .hero-success {
-  max-width: 40ch;
+  max-width: 74ch;
   position: relative;
   z-index: 3;
 }
@@ -3474,31 +3474,15 @@ footer {
   font-family: var(--font-display);
   font-weight: 300;
   font-size: clamp(18px, 2vw, 24px);
-  line-height: 1.4;
+  line-height: 1.55;
   color: var(--akzent);
   background: var(--weiss);
   display: inline-block;
-  padding: 18px 24px;
+  max-width: 72ch;
+  padding: 22px 28px;
   border: 1.5px solid var(--akzent);
   box-shadow: var(--shadow-md) var(--shadow-md) 0 var(--rot);
   margin: 0 0 24px;
-}
-
-.hero-success-link {
-  margin: 0 0 28px;
-}
-
-.hero-success-link a {
-  font-family: var(--font-display);
-  font-weight: 700;
-  font-size: 16px;
-  color: var(--rot-text);
-  text-decoration: underline;
-  text-underline-offset: 4px;
-}
-
-.hero-success-link a:hover {
-  color: var(--akzent);
 }
 
 /* Collapsed content sections (config-driven) merge into one contiguous block:

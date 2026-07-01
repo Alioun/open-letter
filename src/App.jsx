@@ -1222,18 +1222,6 @@ export default function App() {
                 {cfg.success?.body && (
                   <p className="hero-success-body">{cfg.success.body}</p>
                 )}
-                {antragUrlValid && (
-                  <p className="hero-success-link">
-                    <a
-                      href={antragUrl}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                    >
-                      {cfg.success?.antragLabel || "Mehr erfahren"}{" "}
-                      <span aria-hidden="true">→</span>
-                    </a>
-                  </p>
-                )}
                 <div className="hero-actions">
                   {zoomEnabled && zoomOpen && (
                     <button
@@ -1243,6 +1231,17 @@ export default function App() {
                       {cfg.success?.ctaZoom || "Anmelden"}{" "}
                       <span aria-hidden="true">→</span>
                     </button>
+                  )}
+                  {antragUrlValid && (
+                    <a
+                      className="scrollcta scrollcta--secondary"
+                      href={antragUrl}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                    >
+                      {cfg.success?.antragLabel || "Mehr erfahren"}{" "}
+                      <span aria-hidden="true">→</span>
+                    </a>
                   )}
                   <button
                     className="scrollcta scrollcta--secondary"
