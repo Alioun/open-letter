@@ -2584,6 +2584,20 @@ footer {
   outline: none;
 }
 
+/* Labeled toggle in an admin card. The generic `.admin-card input { width:100% }`
+   above would stretch a custom (appearance:none) checkbox into a full-width bar,
+   so pin it back to its 20px box; the row lays out as [box] label. */
+.admin-check {
+  margin: 4px 0 16px;
+}
+
+.admin-check input[type="checkbox"] {
+  width: 20px;
+  height: 20px;
+  min-height: 0;
+  padding: 0;
+}
+
 .admin-card .cta,
 .admin-login .cta,
 .campaign-form .cta {

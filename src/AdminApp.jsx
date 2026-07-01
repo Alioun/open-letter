@@ -1796,16 +1796,14 @@ export default function AdminApp() {
                   />
                 </div>
               </div>
-              <div className="field">
-                <label className="check">
-                  <input
-                    type="checkbox"
-                    checked={zoomShowDelegierter}
-                    onChange={(e) => setZoomShowDelegierter(e.target.checked)}
-                  />
-                  <span>Delegierte*r-Feld anzeigen</span>
-                </label>
-              </div>
+              <label className="check admin-check">
+                <input
+                  type="checkbox"
+                  checked={zoomShowDelegierter}
+                  onChange={(e) => setZoomShowDelegierter(e.target.checked)}
+                />
+                <span>Delegierte*r-Feld anzeigen</span>
+              </label>
 
               <p className="admin-muted">
                 Einstellungen werden zusammen mit dem Termin gespeichert – bitte
