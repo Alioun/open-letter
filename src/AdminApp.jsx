@@ -64,6 +64,7 @@ const variables = [
   "signerCount",
   "unsubscribeUrl",
   "eventLabel",
+  "eventWhen",
   "zoomJaUrl",
   "zoomJaDelegiertUrl",
 ];
@@ -464,6 +465,7 @@ export default function AdminApp() {
   const [zoomMailings, setZoomMailings] = useState(null);
   const [zoomTestEmail, setZoomTestEmail] = useState("");
   const [zoomTestStatus, setZoomTestStatus] = useState(null);
+  const [zoomClearStatus, setZoomClearStatus] = useState(null);
   const [zoomEventAtInput, setZoomEventAtInput] = useState("");
   const [zoomLinkInput, setZoomLinkInput] = useState("");
   const [zoomLinkOffset, setZoomLinkOffset] = useState(24);
@@ -1005,6 +1007,29 @@ export default function AdminApp() {
     } else {
       const data = await res.json().catch(() => ({}));
       setZoomTestStatus(data.error || "Fehler beim Senden");
+    }
+  }
+
+  async function clearZoomRegs() {
+    if (
+      !confirm(
+        `Wirklich ALLE ${zoomRegs.length} Zoom-Anmeldungen unwiderruflich löschen? ` +
+          "Nutze das, um den Zoom für eine neue Runde (z. B. Auswertungszoom) freizuräumen.",
+      )
+    )
+      return;
+    setZoomClearStatus("clearing");
+    const res = await api("/api/admin/zoom-registrations/clear", {
+      method: "POST",
+    });
+    if (res.ok) {
+      const data = await res.json().catch(() => ({}));
+      setZoomRegs([]);
+      setZoomClearStatus(`ok:${data.removed ?? 0}`);
+      setTimeout(() => setZoomClearStatus(null), 5000);
+    } else {
+      const data = await res.json().catch(() => ({}));
+      setZoomClearStatus(data.error || "Fehler beim Löschen");
     }
   }
 
@@ -1791,10 +1816,47 @@ export default function AdminApp() {
                 )}
             </div>
 
-            <div className="admin-card-title" style={{ marginBottom: 8 }}>
-              Zoom-Anmeldungen · {zoomRegs.length} gesamt ·{" "}
-              {zoomRegs.filter((r) => r.delegierter).length} Delegierte
+            <div
+              className="admin-card-title"
+              style={{
+                marginBottom: 8,
+                display: "flex",
+                alignItems: "center",
+                justifyContent: "space-between",
+                gap: 12,
+                flexWrap: "wrap",
+              }}
+            >
+              <span>
+                Zoom-Anmeldungen · {zoomRegs.length} gesamt ·{" "}
+                {zoomRegs.filter((r) => r.delegierter).length} Delegierte
+              </span>
+              <button
+                type="button"
+                className="admin-danger"
+                onClick={clearZoomRegs}
+                disabled={
+                  zoomRegs.length === 0 || zoomClearStatus === "clearing"
+                }
+              >
+                {zoomClearStatus === "clearing"
+                  ? "Wird gelöscht…"
+                  : "Alle Zoom-Anmeldungen löschen"}
+              </button>
             </div>
+            {zoomClearStatus && zoomClearStatus.startsWith("ok:") && (
+              <p className="admin-test-feedback admin-test-ok">
+                {zoomClearStatus.slice(3)} Anmeldungen gelöscht. Der Zoom ist
+                jetzt frei für eine neue Runde.
+              </p>
+            )}
+            {zoomClearStatus &&
+              zoomClearStatus !== "clearing" &&
+              !zoomClearStatus.startsWith("ok:") && (
+                <p className="admin-test-feedback admin-test-error">
+                  {zoomClearStatus}
+                </p>
+              )}
             {zoomRegs.length === 0 ? (
               <p>Noch keine Anmeldungen.</p>
             ) : (

@@ -200,11 +200,68 @@ export default {
     germanyMap: false,
     stateResolution: false,
     zoomEvent: false,
+    // "Accomplished" / wind-down mode. When true, the hero shows the `success`
+    // announcement instead of the counter + sign CTA, the sign form is removed,
+    // and the signer list + FAQ render collapsed. Enable once the goal is met.
+    successMode: false,
+    // Which main content sections render folded into a single shared accordion
+    // block (one bordered list) instead of full height. Valid ids: "brief",
+    // "unterzeichnen", "liste", "faq". Empty = nothing collapsed.
+    collapsedSections: [],
+  },
+
+  // Success / accomplished announcement (only read when features.successMode).
+  success: {
+    kicker: "Done.",
+    headline: "We reached our goal.",
+    body: "Thank you to everyone who signed. The campaign was a success.",
+    // Optional: link to the result/decision. Leave empty to hide the link.
+    antragUrl: "",
+    antragLabel: "Read the outcome",
+    // Only used when features.zoomEvent is also on; otherwise the button is hidden.
+    ctaZoom: "Join the follow-up call",
+    // Kept in the accomplished hero as a proof-of-impact stat (live verified
+    // total is prepended). Set to "" to hide it.
+    countLabel: "people signed",
   },
 
   zoom: {
     eventLabel: "",
     eventAt: "2026-01-01T20:00:00+01:00",
     durationMin: 90,
+    // "online" = video call with a join link; "inperson" = physical location.
+    mode: "online",
+    // Shown to attendees when mode === "inperson".
+    location: { name: "", address: "", mapsUrl: "" },
+    // Label for the meeting link in the nav and CTA (config-driven, per letter).
+    navLabel: "Meeting",
+    // On-page copy for the #zoom section (config-driven so App.jsx stays generic).
+    section: {
+      sectionNum: "02 / Meeting",
+      headingHtml: 'Join our<br /><span class="rot">meeting.</span>',
+      whenText: "Date to be announced",
+      bullets: [
+        "We look back at the campaign together.",
+        "We discuss possible next steps.",
+      ],
+      privacy:
+        "We'll email you the join link before the call. Your details are used only to organise the meeting.",
+    },
+    // Copy for the signup form (src/ZoomForm.jsx), fully config-driven.
+    form: {
+      badge: "Sign up",
+      title: "Sign up in 30 seconds",
+      subtitle: "We'll email you the link.",
+      submitLabel: "Join the call",
+      submittingLabel: "Sending…",
+      legal:
+        "We use your details only to organise the meeting and will email you the join link in time.",
+      showDelegierter: false,
+      delegierterLabel: "I'm a delegate.",
+      doneBadge: "Registered",
+      doneTitle: "You're in.",
+      doneText:
+        "We've emailed you a confirmation. You'll get the join link before the call.",
+    },
   },
 };

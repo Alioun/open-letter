@@ -5,13 +5,13 @@ services:
       dockerfile: Dockerfile.dev
     env_file: .env
     ports:
-      - "${PORT:-3000}:3000"
+      - "${PORT:-3000}:${PORT:-3000}"
     environment:
       - DATABASE_PATH=/app/data/diaetendeckel.db
       - DATABASE_ENCRYPTION_KEY=${DATABASE_ENCRYPTION_KEY:-devkey-change-me}
       - API_TOKEN_SECRET=${API_TOKEN_SECRET:-devtoken-change-me}
-      - PORT=3000
-      - BASE_URL=${BASE_URL:-http://localhost:3000}
+      - PORT=${PORT:-3000}
+      - BASE_URL=${BASE_URL:-http://localhost:${PORT:-3000}}
       - ADMIN_PATH=${ADMIN_PATH}
       - ADMIN_PASSWORD=${ADMIN_PASSWORD}
       - ADMIN_JWT_SECRET=${ADMIN_JWT_SECRET}
@@ -27,7 +27,7 @@ services:
           "CMD",
           "bun",
           "-e",
-          "fetch('http://localhost:3000/api/health').then(r => process.exit(r.ok ? 0 : 1))",
+          "fetch('http://localhost:' + (process.env.PORT || 3000) + '/api/health').then(r => process.exit(r.ok ? 0 : 1))",
         ]
       interval: 30s
       timeout: 5s

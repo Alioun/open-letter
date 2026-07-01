@@ -6,7 +6,7 @@ services:
       - DATABASE_PATH=/app/data/diaetendeckel.db
       - DATABASE_ENCRYPTION_KEY=${DATABASE_ENCRYPTION_KEY}
       - API_TOKEN_SECRET=${API_TOKEN_SECRET}
-      - PORT=3000
+      - PORT=${PORT:-3000}
       - BASE_URL=${BASE_URL:-https://gehaltsdeckel.jetzt}
       - ALLOWED_ORIGINS=${ALLOWED_ORIGINS:-https://gehaltsdeckel.jetzt,https://gehaltsdeckel-jetzt.de}
       - NODE_ENV=production
@@ -30,7 +30,7 @@ services:
           "CMD",
           "bun",
           "-e",
-          "fetch('http://localhost:3000/api/health').then(r => process.exit(r.ok ? 0 : 1))",
+          "fetch('http://localhost:' + (process.env.PORT || 3000) + '/api/health').then(r => process.exit(r.ok ? 0 : 1))",
         ]
       interval: 30s
       timeout: 5s

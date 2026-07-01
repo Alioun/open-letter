@@ -226,46 +226,47 @@ export default {
     `,
       },
       zoom_confirmation: {
-        name: "Zoom-Anmeldung Bestatigung",
-        subject: "Du bist dabei — Zoom am {{eventLabel}} — Gehaltsdeckel jetzt",
+        name: "Treffen-Anmeldung Bestatigung",
+        subject:
+          "Du bist dabei — Auswertungstreffen{{eventWhen}} — Gehaltsdeckel jetzt",
         htmlBody: `
       <p>Hallo {{firstName}},</p>
-      <p>danke für deine Anmeldung zum Zoom-Treffen der Unterzeichner*innen am <strong>{{eventLabel}}</strong>.</p>
-      <p>Wir sprechen gemeinsam über die öffentliche Übergabe und eine Choreografie auf dem Parteitag und planen die nächsten Schritte.</p>
+      <p>danke für deine Anmeldung zum Auswertungstreffen der Unterzeichner*innen<strong>{{eventWhen}}</strong>.</p>
+      <p>Wir schauen gemeinsam zurück auf die Aktion und den Parteitag, ziehen ein Fazit und besprechen mögliche nächste Schritte.</p>
       {{linkInfo}}
       <p>Bis dann und mit solidarischen Grüßen<br>Initiative Gehaltsdeckel</p>
     `,
       },
       zoom_link: {
-        name: "Zoom-Link (1 Tag vorher)",
-        subject: "Dein Zoom-Link für das Treffen am {{eventLabel}}",
+        name: "Treffen-Infos (1 Tag vorher)",
+        subject: "Infos zum Auswertungstreffen am {{eventLabel}}",
         htmlBody: `
       <p>Hallo {{firstName}},</p>
-      <p>morgen ist es so weit — unser Zoom-Treffen am <strong>{{eventLabel}}</strong>. Hier ist dein Einwahllink:</p>
+      <p>morgen ist es so weit — unser Auswertungstreffen am <strong>{{eventLabel}}</strong>. Hier sind alle Infos:</p>
       {{linkInfo}}
       <p>Den passenden Kalendereintrag findest du im Anhang (.ics) oder über den Button oben.</p>
       <p>Bis morgen und mit solidarischen Grüßen<br>Initiative Gehaltsdeckel</p>
     `,
       },
       zoom_reminder: {
-        name: "Zoom-Erinnerung (2 Std. vorher)",
-        subject: "Gleich geht's los — Zoom-Treffen in 2 Stunden",
+        name: "Treffen-Erinnerung (2 Std. vorher)",
+        subject: "Gleich geht's los — Auswertungstreffen in 2 Stunden",
         htmlBody: `
       <p>Hallo {{firstName}},</p>
-      <p>kleine Erinnerung: In rund 2 Stunden startet unser Zoom-Treffen am <strong>{{eventLabel}}</strong>.</p>
+      <p>kleine Erinnerung: In rund 2 Stunden startet unser Auswertungstreffen am <strong>{{eventLabel}}</strong>.</p>
       {{linkInfo}}
       <p>Wir freuen uns auf dich!<br>Initiative Gehaltsdeckel</p>
     `,
       },
       zoom_newsletter_invite: {
-        name: "Newsletter → Zoom-Einladung",
+        name: "Newsletter → Treffen-Einladung",
         subject:
-          "Bist du dabei? Zoom-Treffen am {{eventLabel}} — Gehaltsdeckel jetzt",
+          "Bist du dabei? Auswertungstreffen{{eventWhen}} — Gehaltsdeckel jetzt",
         htmlBody: `
       <div class="email-shell">
         <p class="anrede">Hallo {{firstName}},</p>
-        <p>wir planen unser erstes gemeinsames Zoom-Treffen am <strong>{{eventLabel}}</strong> und würden uns freuen, wenn du dabei bist.</p>
-        <p>In dem Treffen wollen wir gemeinsam die nächsten Schritte besprechen — die öffentliche Übergabe des Briefes, eine Choreografie auf dem Parteitag und mehr.</p>
+        <p>die Aktion war erfolgreich — auf dem Bundesparteitag wurde der Gehaltsdeckel beschlossen. Zeit, gemeinsam auszuwerten: Wir laden dich herzlich zum Auswertungstreffen<strong>{{eventWhen}}</strong> ein.</p>
+        <p>In dem Treffen schauen wir zurück auf die Aktion und den Parteitag, ziehen ein Fazit und besprechen mögliche nächste Schritte.</p>
         <p><strong>Melde dich jetzt mit einem Klick an:</strong></p>
         <p>
           <a href="{{zoomJaUrl}}" style="display:inline-block;background:#ff0000;color:#ffffff;font-family:'Work Sans',Arial,sans-serif;font-weight:700;font-size:15px;text-decoration:none;padding:13px 22px;border:2px solid #6f003c;">Ja, ich bin dabei</a>
@@ -313,14 +314,86 @@ export default {
     germanyMap: true,
     stateResolution: true,
     // The Zoom-event signup module (nav link, störer, registration form,
-    // reminder mails). Disabled — kept available behind this flag.
-    zoomEvent: false,
+    // reminder mails). Read the `zoom` block below when enabled.
+    zoomEvent: true,
+    // "Accomplished" / wind-down mode. When true, the hero shows the `success`
+    // announcement (instead of the counter + primary sign CTA), the sign form is
+    // removed, and the signer list + FAQ are rendered collapsed. The letter body
+    // stays open. Reversible: set false to restore the live campaign page.
+    successMode: true,
+    // Which main content sections render folded into a single shared accordion
+    // block (one bordered list, like the FAQ's own items) instead of full
+    // height. Valid ids: "brief", "unterzeichnen", "liste", "faq". Consecutive
+    // collapsed sections merge; a non-collapsed one between them splits the
+    // group. When omitted, successMode defaults this to ["liste", "faq"].
+    collapsedSections: ["liste", "faq"],
   },
 
-  // ---- Zoom event (only read when features.zoomEvent) -------------------------
+  // ---- Success / accomplished announcement (only read when features.successMode)
+  // Shown at the top of the page once the campaign goal is reached. All copy is
+  // config-driven so any letter can reuse this without touching src/App.jsx.
+  success: {
+    kicker: "Geschafft.",
+    headline: "Der Gehaltsdeckel ist beschlossen.",
+    body: "Danke an alle, die mitgezeichnet haben: Auf dem Bundesparteitag in Potsdam wurde der Antrag zur Begrenzung der Diäten von Mandatsträger*innen beschlossen. Jetzt werten wir die Aktion gemeinsam aus.",
+    // TODO: echte URL zum beschlossenen Antrag / Beschluss eintragen.
+    antragUrl: "TODO-ANTRAG-URL",
+    antragLabel: "Zum beschlossenen Antrag",
+    ctaZoom: "Zum Auswertungstreffen anmelden",
+    // Kept in the accomplished hero as a proof-of-impact stat. The live verified
+    // signature total is prepended. Set to "" to hide the stat entirely.
+    countLabel: "Genoss*innen haben unterzeichnet",
+  },
+
+  // ---- Treffen / event (only read when features.zoomEvent) -------------------
+  // A "Treffen" (meeting) that can be online (video/Zoom link) or in person
+  // (physical location) — see `mode` below. eventAt/link/label are admin-editable
+  // at runtime (app_settings); for online meetings the join link is set in the
+  // admin. `section`/`form` hold the on-page copy (kept out of src/App.jsx so
+  // every letter is fully config-driven). Internally this still uses the
+  // "zoom_*" table/endpoints — only the user-facing wording is "Treffen".
   zoom: {
-    eventLabel: "9. Juni, 20 Uhr",
-    eventAt: "2026-06-09T20:00:00+02:00",
+    eventLabel: "Termin folgt",
+    eventAt: null,
     durationMin: 90,
+    // "online" = video call with a join link; "inperson" = physical location.
+    mode: "online",
+    // Shown to attendees when mode === "inperson" (on the page, in emails and
+    // the calendar file). mapsUrl is an optional link to a map.
+    location: { name: "", address: "", mapsUrl: "" },
+    // Label for the Treffen link in the nav and CTA (config-driven, per letter).
+    navLabel: "Auswertungstreffen",
+    section: {
+      sectionNum: "02 / Auswertungstreffen",
+      headingHtml: 'Wir werten<br /><span class="rot">gemeinsam aus.</span>',
+      whenText: "Termin wird noch bekanntgegeben",
+      bullets: [
+        "Wir schauen gemeinsam zurück auf die Aktion und den Parteitag.",
+        "Wir besprechen, was gut lief und was wir daraus mitnehmen.",
+        "Wir verabreden mögliche nächste gemeinsame Schritte.",
+      ],
+      privacy:
+        "Alle Infos zum Treffen schicken wir dir vor dem Termin per E-Mail. Deine Angaben nutzen wir ausschließlich für die Organisation des Treffens.",
+    },
+    // Copy for the signup form itself (src/ZoomForm.jsx). All config-driven so a
+    // new letter can relabel the button and messages without touching code.
+    form: {
+      badge: "Anmeldung",
+      title: "Anmelden in 30 Sekunden",
+      subtitle: "Alle Infos zum Treffen bekommst du per E-Mail.",
+      submitLabel: "Zum Auswertungstreffen anmelden",
+      submittingLabel: "Wird gesendet…",
+      legal:
+        "Wir nutzen deine Angaben nur zur Organisation des Treffens und schicken dir alle Infos rechtzeitig per E-Mail.",
+      // Delegierte*r checkbox: only relevant while a Parteitag is upcoming.
+      // Turned off for the Auswertungstreffen (the Parteitag has happened).
+      showDelegierter: false,
+      delegierterLabel: "Ich bin Delegierte*r.",
+      // Success/confirmation panel after submitting.
+      doneBadge: "Angemeldet",
+      doneTitle: "Du bist dabei.",
+      doneText:
+        "Wir haben dir eine Bestätigung per E-Mail geschickt. Alle Infos zum Treffen bekommst du rechtzeitig vor dem Termin.",
+    },
   },
 };

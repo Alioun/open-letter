@@ -600,6 +600,12 @@ h1.headline .banner {
   margin-bottom: 8px;
 }
 
+.zoom-where {
+  font-family: var(--font-body);
+  color: var(--akzent);
+  margin: 0 0 12px;
+}
+
 .zoom-count {
   font-family: var(--font-display);
   margin-top: 4px;
@@ -3413,4 +3419,160 @@ footer {
   font-size: 14px;
   line-height: 1.55;
   margin-top: 12px;
+}
+
+/* ==========================================================================
+   Accomplished / success mode (features.successMode)
+   Hero announcement shown once the campaign goal is reached, plus the
+   collapsed-section wrapper used to fold away the signer list & FAQ.
+   ========================================================================== */
+
+.hero-success {
+  max-width: 40ch;
+  position: relative;
+  z-index: 3;
+}
+
+.success-kicker {
+  display: inline-block;
+  font-family: var(--font-display);
+  font-weight: 900;
+  font-size: 14px;
+  letter-spacing: var(--ls-caps);
+  text-transform: uppercase;
+  color: var(--weiss);
+  background: var(--akzent);
+  padding: 6px 12px;
+  margin-bottom: 18px;
+}
+
+.hero-success .headline {
+  font-size: clamp(40px, 6vw, 88px);
+  max-width: 18ch;
+  margin-bottom: 22px;
+}
+
+.hero-success-count {
+  font-family: var(--font-display);
+  font-weight: 400;
+  font-size: clamp(18px, 2vw, 24px);
+  line-height: 1.2;
+  color: var(--akzent);
+  margin: 0 0 24px;
+}
+
+.hero-success-count strong {
+  display: block;
+  font-weight: 900;
+  font-size: clamp(48px, 9vw, 96px);
+  line-height: 0.95;
+  letter-spacing: var(--ls-tight);
+  color: var(--rot-text);
+}
+
+.hero-success-body {
+  font-family: var(--font-display);
+  font-weight: 300;
+  font-size: clamp(18px, 2vw, 24px);
+  line-height: 1.4;
+  color: var(--akzent);
+  background: var(--weiss);
+  display: inline-block;
+  padding: 18px 24px;
+  border: 1.5px solid var(--akzent);
+  box-shadow: var(--shadow-md) var(--shadow-md) 0 var(--rot);
+  margin: 0 0 24px;
+}
+
+.hero-success-link {
+  margin: 0 0 28px;
+}
+
+.hero-success-link a {
+  font-family: var(--font-display);
+  font-weight: 700;
+  font-size: 16px;
+  color: var(--rot-text);
+  text-decoration: underline;
+  text-underline-offset: 4px;
+}
+
+.hero-success-link a:hover {
+  color: var(--akzent);
+}
+
+/* Collapsed content sections (config-driven) merge into one contiguous block:
+   the group owns the outer border, and stacked items share a single divider —
+   the same "one bordered list" look as the FAQ's own items. */
+.section-collapse-group {
+  border: 1.5px solid var(--akzent);
+  background: var(--weiss);
+}
+
+.section-collapse-group > .section-collapse {
+  border: 0;
+}
+
+.section-collapse-group > .section-collapse + .section-collapse {
+  border-top: 1.5px solid var(--akzent);
+}
+
+/* Collapsed section wrapper (signer list / FAQ) in success mode. */
+.section-collapse {
+  border: 1.5px solid var(--akzent);
+  background: var(--weiss);
+}
+
+/* The horizontal gutter normally comes from .section's padding; inside the
+   collapse box the content needs its own inset so it lines up with the summary
+   label and isn't flush against the box edge. */
+.section-collapse[open] > .section-inner {
+  padding: 16px 24px 32px;
+}
+
+.section-collapse-summary {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 18px;
+  padding: 20px 24px;
+  cursor: pointer;
+  font-family: var(--font-display);
+  font-weight: 700;
+  font-size: 18px;
+  color: var(--akzent);
+  letter-spacing: var(--ls-body);
+  list-style: none;
+}
+
+.section-collapse-summary::-webkit-details-marker {
+  display: none;
+}
+
+.section-collapse-summary::after {
+  content: "+";
+  flex: none;
+  font-family: var(--font-display);
+  font-weight: 900;
+  font-size: 24px;
+  line-height: 1;
+  color: var(--rot-text);
+}
+
+.section-collapse[open] > .section-collapse-summary {
+  background: var(--fond);
+  border-bottom: 1px solid var(--akzent);
+}
+
+.section-collapse[open] > .section-collapse-summary::after {
+  content: "−";
+}
+
+.section-collapse-summary:hover {
+  background: var(--fond);
+}
+
+.section-collapse-summary:focus-visible {
+  outline: 2px solid var(--rot);
+  outline-offset: -2px;
 }

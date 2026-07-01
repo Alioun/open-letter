@@ -9,12 +9,7 @@ import {
 } from "react";
 import cfg from "../config/letter.config.js";
 import { LetterArticle, FaqContent } from "../config/content.jsx";
-
-// ZOOM-DISABLED: the Zoom meeting signup (nav links, störer, registration form)
-// is hidden by a literal `false &&` guard at each render site, which Bun strips
-// from the production bundle (verified: markup absent from the built chunk).
-// To re-enable, grep for "ZOOM-DISABLED" and flip each `false` back to `true`
-// (the original event-time conditions after it are left intact).
+import { ZoomForm } from "./ZoomForm";
 
 const MAP_VB = { x: -60, y: -10, w: 520, h: 520 };
 
@@ -401,6 +396,39 @@ export default function App() {
     !zoomEventAt ||
     Date.now() < new Date(zoomEventAt).getTime() + 2 * 60 * 60 * 1000;
 
+  // "Accomplished" wind-down mode (config-driven, generic across letters).
+  const successMode = Boolean(cfg.features?.successMode);
+  const zoomEnabled = Boolean(cfg.features?.zoomEvent);
+  // Only link to the outcome once a real URL is set (hide the config placeholder).
+  const antragUrl = cfg.success?.antragUrl || "";
+  const antragUrlValid = antragUrl && !antragUrl.startsWith("TODO");
+  // Collapsed-section summary text, derived from the letter's own nav labels.
+  const navLabel = (id) => cfg.nav.find((n) => n.id === id)?.label || id;
+  // Which main content sections render folded into a shared <details> block
+  // instead of full-height. Config-driven and independent of successMode; when
+  // unset, success mode still defaults to folding the list & FAQ (backward
+  // compatible). Valid ids: "brief", "unterzeichnen", "liste", "faq".
+  const collapsedSections =
+    cfg.features?.collapsedSections ?? (successMode ? ["liste", "faq"] : []);
+  const isCollapsed = (id) => collapsedSections.includes(id);
+  // In success mode the sign form is gone, so drop its nav entry and repoint the
+  // primary CTA at the Zoom signup (all config-driven, generic across letters).
+  const navItems = successMode
+    ? cfg.nav.filter((n) => n.id !== "unterzeichnen")
+    : cfg.nav;
+  const zoomNavLabel = cfg.zoom?.navLabel || "Treffen";
+  const showZoomNav = zoomEnabled && zoomOpen;
+  // In-person meeting location (shown in the #zoom section when mode is inperson).
+  const zoomInPerson = cfg.zoom?.mode === "inperson";
+  const zoomLocationText = [cfg.zoom?.location?.name, cfg.zoom?.location?.address]
+    .filter(Boolean)
+    .join(", ");
+  const ctaToZoom = successMode && showZoomNav;
+  const ctaLabel = ctaToZoom ? cfg.success?.ctaZoom || zoomNavLabel : null;
+  // Hide the header/menu CTA in success mode when there's nothing to sign up for
+  // (form removed and Zoom not open); otherwise it would scroll to a gone anchor.
+  const showCta = !successMode || ctaToZoom;
+
   // Persists deliberate user scroll so layout shifts never yank them back.
   const hashScrollAbortedRef = useRef(false);
 
@@ -653,6 +681,400 @@ export default function App() {
   const rawPct = Math.round((total / ZIEL) * 100);
   const pct = nextMilestone ? Math.min(100, rawPct) : rawPct;
 
+  // The Treffen signup section. In success mode it is rendered first (right after
+  // the hero); otherwise it stays at the bottom of the page.
+  const zoomSection =
+    zoomEnabled && zoomOpen ? (
+      <section
+        className="section sign-section zoom-section"
+        id="zoom"
+        aria-label="Anmeldung zum Treffen"
+      >
+        <div className="section-inner">
+          <div className="sign-grid">
+            <div className="sign-intro">
+              {cfg.zoom?.section?.sectionNum && (
+                <span className="section-num">
+                  {cfg.zoom.section.sectionNum}
+                </span>
+              )}
+              <h2
+                dangerouslySetInnerHTML={{
+                  __html: cfg.zoom?.section?.headingHtml || "",
+                }}
+              />
+              {cfg.zoom?.section?.whenText && (
+                <p className="zoom-when">
+                  <strong>{cfg.zoom.section.whenText}</strong>
+                </p>
+              )}
+              {zoomInPerson && zoomLocationText && (
+                <p className="zoom-where">
+                  <strong>Ort:</strong> {zoomLocationText}
+                  {cfg.zoom?.location?.mapsUrl && (
+                    <>
+                      {" · "}
+                      <a
+                        href={cfg.zoom.location.mapsUrl}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                      >
+                        Karte
+                      </a>
+                    </>
+                  )}
+                </p>
+              )}
+              <ul>
+                {(cfg.zoom?.section?.bullets || []).map((b, i) => (
+                  <li key={i}>{b}</li>
+                ))}
+              </ul>
+              {cfg.zoom?.section?.privacy && (
+                <p className="privacy">{cfg.zoom.section.privacy}</p>
+              )}
+            </div>
+
+            <ZoomForm
+              onSubmit={handleZoomSubmit}
+              serverError={zoomError}
+              kvNames={signFormKvNames}
+            />
+          </div>
+        </div>
+      </section>
+    ) : null;
+
+  // --- Main content sections (config-driven collapse) -----------------------
+  // Each section can render full-height, or fold into a shared <details> block.
+  // The body is the exact section-inner content; collapsing only swaps the
+  // shell around it. Consecutive collapsed sections merge into one bordered
+  // group (like the FAQ's own stacked items); a non-collapsed section between
+  // them splits the group.
+  const briefBody = (
+    <div className="section-inner">
+      <LetterArticle total={total} />
+    </div>
+  );
+
+  const signBody = (
+    <div className="section-inner">
+      <div className="sign-grid">
+        <div className="sign-intro">
+          <span className="section-num">{cfg.sign.sectionNum}</span>
+          <h2 dangerouslySetInnerHTML={{ __html: cfg.sign.headingHtml }} />
+          <ul>
+            {cfg.sign.criteria.map((c, i) => (
+              <li key={i}>{c}</li>
+            ))}
+          </ul>
+          <p className="privacy">{cfg.sign.privacyNote}</p>
+        </div>
+
+        <SignForm
+          onSubmit={handleSubmit}
+          serverError={submitError}
+          kvNames={signFormKvNames}
+          occNames={signFormOccNames}
+        />
+      </div>
+    </div>
+  );
+
+  const listeBody = (
+    <div className="section-inner">
+      <div className="signers-head">
+        <div>
+          <span className="section-num">{cfg.list.sectionNum}</span>
+          <h2
+            dangerouslySetInnerHTML={{
+              __html: cfg.list.headingHtml.replace(
+                "{count}",
+                total.toLocaleString(locale),
+              ),
+            }}
+          />
+        </div>
+        <div className="total">
+          <b>+{stats.today}</b> in den letzten 24 Stunden
+        </div>
+      </div>
+
+      <div className="stats-row">
+        <div className="stat">
+          <div className="v">{total.toLocaleString("de-DE")}</div>
+          <div className="k">Gesamt verifiziert</div>
+        </div>
+        <div className="stat">
+          <div className="v">+{stats.today}</div>
+          <div className="k">Heute</div>
+        </div>
+        <div className="stat">
+          <div className="v">+{stats.week}</div>
+          <div className="k">Diese Woche</div>
+        </div>
+        {cfg.features.kreisverbandField && (
+          <div className="stat">
+            <div className="v">{stats.kvCount}</div>
+            <div className="k">Kreisverbände</div>
+          </div>
+        )}
+      </div>
+
+      <div className="filters" role="group" aria-label="Filter">
+        <button
+          className={
+            "filter-chip " +
+            (!showOccupations &&
+            !showKreisverband &&
+            !showMap &&
+            filter === "alle"
+              ? "active"
+              : "")
+          }
+          aria-pressed={
+            !showOccupations &&
+            !showKreisverband &&
+            !showMap &&
+            filter === "alle"
+          }
+          onClick={() => {
+            setShowOccupations(false);
+            setShowKreisverband(false);
+            setShowMap(false);
+            setFilter("alle");
+          }}
+        >
+          Alle
+        </button>
+        <button
+          className={
+            "filter-chip " +
+            (!showOccupations &&
+            !showKreisverband &&
+            !showMap &&
+            filter === "neueste"
+              ? "active"
+              : "")
+          }
+          aria-pressed={
+            !showOccupations &&
+            !showKreisverband &&
+            !showMap &&
+            filter === "neueste"
+          }
+          onClick={() => {
+            setShowOccupations(false);
+            setShowKreisverband(false);
+            setShowMap(false);
+            setFilter("neueste");
+          }}
+        >
+          Neueste
+        </button>
+        {cfg.features.germanyMap && (
+          <button
+            className={"filter-chip " + (showMap ? "active" : "")}
+            aria-pressed={showMap}
+            onClick={() => {
+              setShowOccupations(false);
+              setShowKreisverband(false);
+              setShowMap((v) => !v);
+            }}
+          >
+            Karte
+          </button>
+        )}
+        {cfg.features.kreisverbandField && (
+          <button
+            className={"filter-chip " + (showKreisverband ? "active" : "")}
+            onClick={() => {
+              setShowOccupations(false);
+              setShowMap(false);
+              setShowKreisverband((v) => !v);
+            }}
+            aria-pressed={showKreisverband}
+          >
+            Kreisverbände
+          </button>
+        )}
+        {cfg.features.occupationField && (
+          <button
+            className={"filter-chip " + (showOccupations ? "active" : "")}
+            onClick={() => {
+              setShowKreisverband(false);
+              setShowMap(false);
+              setShowOccupations((v) => !v);
+            }}
+            aria-pressed={showOccupations}
+          >
+            Berufe
+          </button>
+        )}
+        {!showOccupations && !showKreisverband && !showMap && (
+          <>
+            <label htmlFor="signer-search" className="sr-only">
+              Suche nach Name oder Kreisverband
+            </label>
+            <input
+              id="signer-search"
+              className="search"
+              placeholder="Suchen nach Name oder Kreisverband…"
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+            />
+          </>
+        )}
+      </div>
+
+      {error && (
+        <p className="alert-error" role="alert">
+          {error}
+        </p>
+      )}
+
+      {showMap ? (
+        kvGroups.length === 0 ? (
+          <div className="empty-state">Lade Karte…</div>
+        ) : (
+          <KreisverbandMap kvGroups={kvGroups} />
+        )
+      ) : showKreisverband ? (
+        kvGroups.length === 0 ? (
+          <div className="empty-state">Noch keine Kreisverbände.</div>
+        ) : (
+          <div className="occupation-grid">
+            {kvGroups.map((g) => (
+              <div key={g.kreisverband} className="occupation-chip">
+                <span className="occupation-name">{g.kreisverband}</span>
+                <span className="occupation-count">{g.count}</span>
+              </div>
+            ))}
+          </div>
+        )
+      ) : showOccupations ? (
+        occupationGroups.length === 0 ? (
+          <div className="empty-state">Noch keine Berufe angegeben.</div>
+        ) : (
+          <div className="occupation-grid">
+            {occupationGroups.map((g) => (
+              <div key={g.occupation} className="occupation-chip">
+                <span className="occupation-name">{g.occupation}</span>
+                <span className="occupation-count">{g.count}</span>
+              </div>
+            ))}
+          </div>
+        )
+      ) : loading && signers.length === 0 ? (
+        <div className="empty-state">Lade Unterschriften…</div>
+      ) : (
+        <>
+          <div className="signers-grid">
+            {signers.map((s) => (
+              <SignerRow
+                key={signerKey(s)}
+                name={s.name}
+                kreisverband={s.kreisverband}
+                createdAt={s.created_at}
+                isNew={s._isNew}
+              />
+            ))}
+          </div>
+
+          <div className="signers-foot">
+            <span>
+              {signers.length} von {signersTotal.toLocaleString("de-DE")}{" "}
+              angezeigt
+            </span>
+            {signers.length < signersTotal && (
+              <button onClick={handleLoadMore}>Weitere laden</button>
+            )}
+          </div>
+        </>
+      )}
+    </div>
+  );
+
+  const faqBody = (
+    <div className="section-inner">
+      <FaqContent />
+    </div>
+  );
+
+  const contentSectionDefs = [
+    {
+      id: "brief",
+      shouldRender: true,
+      sectionClass: "",
+      ariaLabel: "Der offene Brief",
+      body: briefBody,
+    },
+    {
+      id: "unterzeichnen",
+      shouldRender: !successMode,
+      sectionClass: "sign-section",
+      ariaLabel: "Unterschriftenformular",
+      body: signBody,
+    },
+    {
+      id: "liste",
+      shouldRender: true,
+      sectionClass: "signers-section",
+      ariaLabel: "Liste der Unterstützer*innen",
+      body: listeBody,
+    },
+    {
+      id: "faq",
+      shouldRender: true,
+      sectionClass: "faq-section",
+      ariaLabel: "FAQ",
+      body: faqBody,
+    },
+  ];
+
+  const contentSections = (() => {
+    const out = [];
+    let run = [];
+    const flushRun = () => {
+      if (run.length === 0) return;
+      out.push(
+        <section className="section" key={"collapsed-" + run[0].id}>
+          <div className="section-collapse-group">
+            {run.map((s) => (
+              <details className="section-collapse" id={s.id} key={s.id}>
+                <summary className="section-collapse-summary">
+                  {navLabel(s.id)}
+                </summary>
+                {s.body}
+              </details>
+            ))}
+          </div>
+        </section>,
+      );
+      run = [];
+    };
+    for (const s of contentSectionDefs) {
+      if (!s.shouldRender) continue;
+      if (isCollapsed(s.id)) {
+        run.push(s);
+      } else {
+        flushRun();
+        out.push(
+          <section
+            className={"section" + (s.sectionClass ? " " + s.sectionClass : "")}
+            id={s.id}
+            aria-label={s.ariaLabel}
+            key={s.id}
+          >
+            {s.body}
+          </section>,
+        );
+      }
+    }
+    flushRun();
+    return out;
+  })();
+
   return (
     <>
       <a href="#main" className="skip-link">
@@ -681,7 +1103,7 @@ export default function App() {
           <span className="dot" aria-hidden="true"></span> {cfg.brand.wordmark}
         </a>
         <nav aria-label="Hauptnavigation">
-          {cfg.nav.map((n) => (
+          {navItems.map((n) => (
             <a
               key={n.id}
               href={`#${n.id}`}
@@ -694,27 +1116,27 @@ export default function App() {
             </a>
           ))}
           {
-            /* zoom module — toggle via features.zoomEvent */ cfg.features
-              .zoomEvent &&
-              zoomOpen && (
-                <a
-                  href="#zoom"
-                  onClick={(e) => {
-                    e.preventDefault();
-                    scrollTo("zoom");
-                  }}
-                >
-                  Zoom-Treffen
-                </a>
-              )
+            /* zoom module — toggle via features.zoomEvent */ showZoomNav && (
+              <a
+                href="#zoom"
+                onClick={(e) => {
+                  e.preventDefault();
+                  scrollTo("zoom");
+                }}
+              >
+                {zoomNavLabel}
+              </a>
+            )
           }
         </nav>
-        <button
-          className="cta topbar-cta"
-          onClick={() => scrollTo("unterzeichnen")}
-        >
-          {cfg.navCta} <span aria-hidden="true">→</span>
-        </button>
+        {showCta && (
+          <button
+            className="cta topbar-cta"
+            onClick={() => scrollTo(ctaToZoom ? "zoom" : "unterzeichnen")}
+          >
+            {ctaToZoom ? ctaLabel : cfg.navCta} <span aria-hidden="true">→</span>
+          </button>
+        )}
         <button
           className={"hamburger" + (navOpen ? " open" : "")}
           aria-label={navOpen ? "Menü schließen" : "Menü öffnen"}
@@ -734,7 +1156,7 @@ export default function App() {
         aria-label="Mobilnavigation"
         aria-hidden={!navOpen}
       >
-        {cfg.nav.map((n) => (
+        {navItems.map((n) => (
           <a
             key={n.id}
             href={`#${n.id}`}
@@ -748,8 +1170,7 @@ export default function App() {
           </a>
         ))}
         {
-          /* zoom module — toggle via features.zoomEvent */ cfg.features
-            .zoomEvent && (
+          /* zoom module — toggle via features.zoomEvent */ showZoomNav && (
             <a
               href="#zoom"
               onClick={(e) => {
@@ -758,433 +1179,181 @@ export default function App() {
                 scrollTo("zoom");
               }}
             >
-              Zoom-Treffen
+              {zoomNavLabel}
             </a>
           )
         }
-        <a
-          href="#unterzeichnen"
-          className="mobile-nav-cta"
-          onClick={(e) => {
-            e.preventDefault();
-            setNavOpen(false);
-            scrollTo("unterzeichnen");
-          }}
-        >
-          {cfg.hero.ctaPrimary} <span aria-hidden="true">→</span>
-        </a>
+        {showCta && (
+          <a
+            href={ctaToZoom ? "#zoom" : "#unterzeichnen"}
+            className="mobile-nav-cta"
+            onClick={(e) => {
+              e.preventDefault();
+              setNavOpen(false);
+              scrollTo(ctaToZoom ? "zoom" : "unterzeichnen");
+            }}
+          >
+            {ctaToZoom ? ctaLabel : cfg.hero.ctaPrimary}{" "}
+            <span aria-hidden="true">→</span>
+          </a>
+        )}
       </nav>
 
       <main id="main">
         <section
           className="hero"
-          aria-label="Titelbild und Unterschriftenzähler"
+          aria-label={
+            successMode ? "Ankündigung" : "Titelbild und Unterschriftenzähler"
+          }
         >
           <div className="hero-inner">
-            <h1 className="headline">
-              {cfg.hero.headlineLines.map((line, i) => (
-                <Fragment key={i}>
-                  {i > 0 && <br />}
-                  <span className={line.style}>{line.text}</span>
-                </Fragment>
-              ))}
-            </h1>
-
-            <div className="hero-row">
-              <div className="counter-wrap">
-                <div
-                  className="counter-card"
-                  aria-label={`${total.toLocaleString("de-DE")} von ${ZIEL.toLocaleString("de-DE")} Unterschriften`}
-                >
-                  <div className="label">{cfg.hero.counterLabel}</div>
-                  <div className="num">
-                    {total.toLocaleString("de-DE")}
-                    <span className="unit">
-                      / {ZIEL.toLocaleString("de-DE")}
-                    </span>
-                  </div>
-                  <div className="meta">
-                    {cfg.hero.goalLabelPrefix} {ZIEL.toLocaleString(locale)}{" "}
-                    {cfg.hero.goalMetaLabel}
-                  </div>
-                  <div
-                    className="goal-bar"
-                    role="progressbar"
-                    aria-label="Fortschritt zum Unterschriftenziel"
-                    aria-valuenow={Math.min(100, pct)}
-                    aria-valuemin={0}
-                    aria-valuemax={100}
-                    style={{ "--progress": pct / 100 }}
+            {successMode ? (
+              <div className="hero-success">
+                {cfg.success?.kicker && (
+                  <span className="success-kicker">{cfg.success.kicker}</span>
+                )}
+                <h1 className="headline">{cfg.success?.headline}</h1>
+                {cfg.success?.countLabel && (
+                  <p className="hero-success-count">
+                    <strong>{total.toLocaleString(locale)}</strong>{" "}
+                    {cfg.success.countLabel}
+                  </p>
+                )}
+                {cfg.success?.body && (
+                  <p className="hero-success-body">{cfg.success.body}</p>
+                )}
+                {antragUrlValid && (
+                  <p className="hero-success-link">
+                    <a
+                      href={antragUrl}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                    >
+                      {cfg.success?.antragLabel || "Mehr erfahren"}{" "}
+                      <span aria-hidden="true">→</span>
+                    </a>
+                  </p>
+                )}
+                <div className="hero-actions">
+                  {zoomEnabled && zoomOpen && (
+                    <button
+                      className="scrollcta"
+                      onClick={() => scrollTo("zoom")}
+                    >
+                      {cfg.success?.ctaZoom || "Anmelden"}{" "}
+                      <span aria-hidden="true">→</span>
+                    </button>
+                  )}
+                  <button
+                    className="scrollcta scrollcta--secondary"
+                    onClick={() => scrollTo("brief")}
                   >
-                    <div></div>
-                  </div>
-                  <div className="goal-meta">
-                    <span>{pct}% erreicht</span>
-                    <span>
-                      Aktualisiert{" "}
-                      {new Date().toLocaleTimeString("de-DE", {
-                        hour: "2-digit",
-                        minute: "2-digit",
-                      })}
-                    </span>
-                  </div>
+                    {cfg.hero.ctaSecondary}
+                  </button>
                 </div>
-
-                {
-                  /* zoom module — toggle via features.zoomEvent */ cfg.features
-                    .zoomEvent &&
-                    total >= 2000 &&
-                    zoomOpen && (
-                      <button
-                        className="stoerer"
-                        onClick={() => scrollTo("zoom")}
-                        aria-label="Wir sind 2000 — jetzt zum Zoom-Treffen anmelden"
-                      >
-                        <span className="stoerer-head">Wir sind 2000!</span>
-                        <span className="stoerer-body">
-                          Jetzt treffen wir uns zum Zoom und planen die nächsten
-                          Schritte.
-                        </span>
-                        <span className="stoerer-date">9.6. · 20 Uhr</span>
-                        <span className="stoerer-cta">
-                          Sei dabei! <span aria-hidden="true">→</span>
-                        </span>
-                      </button>
-                    )
-                }
               </div>
-
-              <div className="hero-actions">
-                <button
-                  className="scrollcta"
-                  onClick={() => scrollTo("unterzeichnen")}
-                >
-                  {cfg.hero.ctaPrimary} <span aria-hidden="true">→</span>
-                </button>
-                <button
-                  className="scrollcta scrollcta--secondary"
-                  onClick={() => scrollTo("brief")}
-                >
-                  {cfg.hero.ctaSecondary}
-                </button>
-              </div>
-            </div>
-          </div>
-        </section>
-
-        <section className="section" id="brief" aria-label="Der offene Brief">
-          <div className="section-inner">
-            <LetterArticle total={total} />
-          </div>
-        </section>
-
-        <section
-          className="section sign-section"
-          id="unterzeichnen"
-          aria-label="Unterschriftenformular"
-        >
-          <div className="section-inner">
-            <div className="sign-grid">
-              <div className="sign-intro">
-                <span className="section-num">{cfg.sign.sectionNum}</span>
-                <h2
-                  dangerouslySetInnerHTML={{ __html: cfg.sign.headingHtml }}
-                />
-                <ul>
-                  {cfg.sign.criteria.map((c, i) => (
-                    <li key={i}>{c}</li>
-                  ))}
-                </ul>
-                <p className="privacy">{cfg.sign.privacyNote}</p>
-              </div>
-
-              <SignForm
-                onSubmit={handleSubmit}
-                serverError={submitError}
-                kvNames={signFormKvNames}
-                occNames={signFormOccNames}
-              />
-            </div>
-          </div>
-        </section>
-
-        <section
-          className="section signers-section"
-          id="liste"
-          aria-label="Liste der Unterstützer*innen"
-        >
-          <div className="section-inner">
-            <div className="signers-head">
-              <div>
-                <span className="section-num">{cfg.list.sectionNum}</span>
-                <h2
-                  dangerouslySetInnerHTML={{
-                    __html: cfg.list.headingHtml.replace(
-                      "{count}",
-                      total.toLocaleString(locale),
-                    ),
-                  }}
-                />
-              </div>
-              <div className="total">
-                <b>+{stats.today}</b> in den letzten 24 Stunden
-              </div>
-            </div>
-
-            <div className="stats-row">
-              <div className="stat">
-                <div className="v">{total.toLocaleString("de-DE")}</div>
-                <div className="k">Gesamt verifiziert</div>
-              </div>
-              <div className="stat">
-                <div className="v">+{stats.today}</div>
-                <div className="k">Heute</div>
-              </div>
-              <div className="stat">
-                <div className="v">+{stats.week}</div>
-                <div className="k">Diese Woche</div>
-              </div>
-              {cfg.features.kreisverbandField && (
-                <div className="stat">
-                  <div className="v">{stats.kvCount}</div>
-                  <div className="k">Kreisverbände</div>
-                </div>
-              )}
-            </div>
-
-            <div className="filters" role="group" aria-label="Filter">
-              <button
-                className={
-                  "filter-chip " +
-                  (!showOccupations &&
-                  !showKreisverband &&
-                  !showMap &&
-                  filter === "alle"
-                    ? "active"
-                    : "")
-                }
-                aria-pressed={
-                  !showOccupations &&
-                  !showKreisverband &&
-                  !showMap &&
-                  filter === "alle"
-                }
-                onClick={() => {
-                  setShowOccupations(false);
-                  setShowKreisverband(false);
-                  setShowMap(false);
-                  setFilter("alle");
-                }}
-              >
-                Alle
-              </button>
-              <button
-                className={
-                  "filter-chip " +
-                  (!showOccupations &&
-                  !showKreisverband &&
-                  !showMap &&
-                  filter === "neueste"
-                    ? "active"
-                    : "")
-                }
-                aria-pressed={
-                  !showOccupations &&
-                  !showKreisverband &&
-                  !showMap &&
-                  filter === "neueste"
-                }
-                onClick={() => {
-                  setShowOccupations(false);
-                  setShowKreisverband(false);
-                  setShowMap(false);
-                  setFilter("neueste");
-                }}
-              >
-                Neueste
-              </button>
-              {cfg.features.germanyMap && (
-                <button
-                  className={"filter-chip " + (showMap ? "active" : "")}
-                  aria-pressed={showMap}
-                  onClick={() => {
-                    setShowOccupations(false);
-                    setShowKreisverband(false);
-                    setShowMap((v) => !v);
-                  }}
-                >
-                  Karte
-                </button>
-              )}
-              {cfg.features.kreisverbandField && (
-                <button
-                  className={
-                    "filter-chip " + (showKreisverband ? "active" : "")
-                  }
-                  onClick={() => {
-                    setShowOccupations(false);
-                    setShowMap(false);
-                    setShowKreisverband((v) => !v);
-                  }}
-                  aria-pressed={showKreisverband}
-                >
-                  Kreisverbände
-                </button>
-              )}
-              {cfg.features.occupationField && (
-                <button
-                  className={"filter-chip " + (showOccupations ? "active" : "")}
-                  onClick={() => {
-                    setShowKreisverband(false);
-                    setShowMap(false);
-                    setShowOccupations((v) => !v);
-                  }}
-                  aria-pressed={showOccupations}
-                >
-                  Berufe
-                </button>
-              )}
-              {!showOccupations && !showKreisverband && !showMap && (
-                <>
-                  <label htmlFor="signer-search" className="sr-only">
-                    Suche nach Name oder Kreisverband
-                  </label>
-                  <input
-                    id="signer-search"
-                    className="search"
-                    placeholder="Suchen nach Name oder Kreisverband…"
-                    value={search}
-                    onChange={(e) => setSearch(e.target.value)}
-                  />
-                </>
-              )}
-            </div>
-
-            {error && (
-              <p className="alert-error" role="alert">
-                {error}
-              </p>
-            )}
-
-            {showMap ? (
-              kvGroups.length === 0 ? (
-                <div className="empty-state">Lade Karte…</div>
-              ) : (
-                <KreisverbandMap kvGroups={kvGroups} />
-              )
-            ) : showKreisverband ? (
-              kvGroups.length === 0 ? (
-                <div className="empty-state">Noch keine Kreisverbände.</div>
-              ) : (
-                <div className="occupation-grid">
-                  {kvGroups.map((g) => (
-                    <div key={g.kreisverband} className="occupation-chip">
-                      <span className="occupation-name">{g.kreisverband}</span>
-                      <span className="occupation-count">{g.count}</span>
-                    </div>
-                  ))}
-                </div>
-              )
-            ) : showOccupations ? (
-              occupationGroups.length === 0 ? (
-                <div className="empty-state">Noch keine Berufe angegeben.</div>
-              ) : (
-                <div className="occupation-grid">
-                  {occupationGroups.map((g) => (
-                    <div key={g.occupation} className="occupation-chip">
-                      <span className="occupation-name">{g.occupation}</span>
-                      <span className="occupation-count">{g.count}</span>
-                    </div>
-                  ))}
-                </div>
-              )
-            ) : loading && signers.length === 0 ? (
-              <div className="empty-state">Lade Unterschriften…</div>
             ) : (
               <>
-                <div className="signers-grid">
-                  {signers.map((s) => (
-                    <SignerRow
-                      key={signerKey(s)}
-                      name={s.name}
-                      kreisverband={s.kreisverband}
-                      createdAt={s.created_at}
-                      isNew={s._isNew}
-                    />
+                <h1 className="headline">
+                  {cfg.hero.headlineLines.map((line, i) => (
+                    <Fragment key={i}>
+                      {i > 0 && <br />}
+                      <span className={line.style}>{line.text}</span>
+                    </Fragment>
                   ))}
-                </div>
+                </h1>
 
-                <div className="signers-foot">
-                  <span>
-                    {signers.length} von {signersTotal.toLocaleString("de-DE")}{" "}
-                    angezeigt
-                  </span>
-                  {signers.length < signersTotal && (
-                    <button onClick={handleLoadMore}>Weitere laden</button>
-                  )}
+                <div className="hero-row">
+                  <div className="counter-wrap">
+                    <div
+                      className="counter-card"
+                      aria-label={`${total.toLocaleString("de-DE")} von ${ZIEL.toLocaleString("de-DE")} Unterschriften`}
+                    >
+                      <div className="label">{cfg.hero.counterLabel}</div>
+                      <div className="num">
+                        {total.toLocaleString("de-DE")}
+                        <span className="unit">
+                          / {ZIEL.toLocaleString("de-DE")}
+                        </span>
+                      </div>
+                      <div className="meta">
+                        {cfg.hero.goalLabelPrefix}{" "}
+                        {ZIEL.toLocaleString(locale)}{" "}
+                        {cfg.hero.goalMetaLabel}
+                      </div>
+                      <div
+                        className="goal-bar"
+                        role="progressbar"
+                        aria-label="Fortschritt zum Unterschriftenziel"
+                        aria-valuenow={Math.min(100, pct)}
+                        aria-valuemin={0}
+                        aria-valuemax={100}
+                        style={{ "--progress": pct / 100 }}
+                      >
+                        <div></div>
+                      </div>
+                      <div className="goal-meta">
+                        <span>{pct}% erreicht</span>
+                        <span>
+                          Aktualisiert{" "}
+                          {new Date().toLocaleTimeString("de-DE", {
+                            hour: "2-digit",
+                            minute: "2-digit",
+                          })}
+                        </span>
+                      </div>
+                    </div>
+
+                    {
+                      /* zoom module — toggle via features.zoomEvent */ zoomEnabled &&
+                        total >= 2000 &&
+                        zoomOpen && (
+                          <button
+                            className="stoerer"
+                            onClick={() => scrollTo("zoom")}
+                            aria-label="Jetzt zum Treffen anmelden"
+                          >
+                            <span className="stoerer-head">Wir sind 2000!</span>
+                            <span className="stoerer-body">
+                              Jetzt treffen wir uns und planen die nächsten
+                              Schritte.
+                            </span>
+                            <span className="stoerer-cta">
+                              Sei dabei! <span aria-hidden="true">→</span>
+                            </span>
+                          </button>
+                        )
+                    }
+                  </div>
+
+                  <div className="hero-actions">
+                    <button
+                      className="scrollcta"
+                      onClick={() => scrollTo("unterzeichnen")}
+                    >
+                      {cfg.hero.ctaPrimary} <span aria-hidden="true">→</span>
+                    </button>
+                    <button
+                      className="scrollcta scrollcta--secondary"
+                      onClick={() => scrollTo("brief")}
+                    >
+                      {cfg.hero.ctaSecondary}
+                    </button>
+                  </div>
                 </div>
               </>
             )}
           </div>
         </section>
 
-        <section className="section faq-section" id="faq" aria-label="FAQ">
-          <div className="section-inner">
-            <FaqContent />
-          </div>
-        </section>
+        {/* Success mode: signup is the first thing, right after the hero. */}
+        {successMode && zoomSection}
 
-        {
-          /* zoom module — toggle via features.zoomEvent */ cfg.features
-            .zoomEvent &&
-            zoomOpen && (
-              <section
-                className="section sign-section zoom-section"
-                id="zoom"
-                aria-label="Anmeldung zum Zoom-Treffen"
-              >
-                <div className="section-inner">
-                  <div className="sign-grid">
-                    <div className="sign-intro">
-                      <span className="section-num">04 / Zoom-Treffen</span>
-                      <h2>
-                        Wir treffen uns
-                        <br />
-                        <span className="rot">am 9. Juni.</span>
-                      </h2>
-                      <p className="zoom-when">
-                        <strong>Montag, 9. Juni · 20 Uhr · per Zoom</strong>
-                      </p>
-                      <ul>
-                        <li>
-                          Wir planen die öffentliche Übergabe des offenen
-                          Briefes.
-                        </li>
-                        <li>
-                          Wir sprechen über eine Choreografie auf dem Parteitag.
-                        </li>
-                        <li>
-                          Wir verabreden die nächsten gemeinsamen Schritte.
-                        </li>
-                      </ul>
-                      <p className="privacy">
-                        Den Einwahllink schicken wir dir vor dem Termin per
-                        E-Mail. Deine Angaben nutzen wir ausschließlich für die
-                        Organisation des Treffens.
-                      </p>
-                    </div>
+        {contentSections}
 
-                    {/* ZOOM-DISABLED: re-enable by restoring this <ZoomForm/> (def below) */}
-                    {/* <ZoomForm
-                  onSubmit={handleZoomSubmit}
-                  serverError={zoomError}
-                  kvNames={signFormKvNames}
-                /> */}
-                  </div>
-                </div>
-              </section>
-            )
-        }
+        {/* In the live campaign the signup stays at the bottom; in success
+            mode it is moved up right after the hero (see above). */}
+        {!successMode && zoomSection}
       </main>
 
       <footer>
@@ -1767,9 +1936,8 @@ const SignForm = memo(function SignForm({
   );
 });
 
-// ZOOM-DISABLED: the ZoomForm component was moved to ./ZoomForm.jsx and is
-// intentionally not imported, so it is excluded from the production bundle.
-// See src/ZoomForm.jsx for the component and re-enable instructions.
+// The ZoomForm component lives in ./ZoomForm.jsx and is imported at the top of
+// this file; it renders in the #zoom section when features.zoomEvent is on.
 
 const STATE_CLUSTERS = [
   { id: "nrw", label: "NRW", state: "Nordrhein-Westfalen", center: [55, 230] },

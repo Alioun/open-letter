@@ -17,36 +17,17 @@ RUN git clone --depth 1 --branch "${HONKER_REF}" https://github.com/russellromne
     && cargo build --release -p honker-extension \
     && cp "$(find target/release -maxdepth 1 -name 'libhonker_ext.so' | head -1)" /libhonker_ext.so
 
-# Build SQLCipher from source. The Debian libsqlcipher0 package applies ELF
-# symbol versioning (sqlite3_open@@SQLCIPHER_…) so Bun's dlsym("sqlite3_open")
-# returns NULL and setCustomSQLite silently falls back to built-in SQLite.
-# A from-source build without a version script exports plain sqlite3_* symbols
-# that dlsym can resolve correctly on all architectures.
-FROM debian:bookworm-slim AS sqlcipher
-ARG SQLCIPHER_VERSION=4.6.1
-RUN apt-get update && apt-get install -y --no-install-recommends \
-    build-essential libssl-dev ca-certificates wget tcl \
-    && wget -qO /tmp/sqlcipher.tar.gz \
-        "https://github.com/sqlcipher/sqlcipher/archive/refs/tags/v${SQLCIPHER_VERSION}.tar.gz" \
-    && tar -xf /tmp/sqlcipher.tar.gz -C /tmp \
-    && cd "/tmp/sqlcipher-${SQLCIPHER_VERSION}" \
-    && ./configure --enable-tempstore=yes --disable-tcl \
-        CFLAGS="-DSQLITE_HAS_CODEC" \
-        LDFLAGS="-lcrypto" \
-    && make \
-    && cp "$(find .libs -name 'libsqlcipher.so.0.*.*' | head -1)" /libsqlcipher.so
-
 FROM base AS runner
 WORKDIR /app
 
-# OpenSSL runtime required by the from-source SQLCipher build.
+# OpenSSL runtime (libcrypto): @journeyapps/sqlcipher bundles the SQLCipher
+# amalgamation but links OpenSSL for its crypto provider on Linux.
 RUN apt-get update \
     && apt-get install -y --no-install-recommends libssl3 \
     && rm -rf /var/lib/apt/lists/*
 
 COPY --from=deps /app/node_modules ./node_modules
 COPY --from=honker /libhonker_ext.so /app/vendor/libhonker_ext.so
-COPY --from=sqlcipher /libsqlcipher.so /usr/lib/libsqlcipher.so
 COPY . .
 
 RUN mkdir -p /app/data /app/backups

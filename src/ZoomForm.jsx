@@ -1,15 +1,13 @@
-// ZOOM-DISABLED: This component is intentionally NOT imported anywhere, so the
-// bundler excludes it from the production build (its markup must not ship to the
-// live site). It is kept here, intact, for easy re-enabling.
-//
-// To re-enable the Zoom meeting signup:
-//   1. In App.jsx, `import { ZoomForm } from "./ZoomForm";`
-//   2. Uncomment the <ZoomForm/> usage in the #zoom section.
-//   3. Flip each `false &&` guard marked "ZOOM-DISABLED" back to `true &&`
-//      (the original event-time conditions are preserved after it).
-//   4. Re-enable the /api/zoom-count poll in the mount effect.
+// Zoom event signup form, rendered in the #zoom section of App.jsx when
+// features.zoomEvent is enabled. If a letter has the feature off and nothing
+// imports this file, the bundler excludes it from that build automatically.
 
 import { useState, useMemo, useRef, memo } from "react";
+import cfg from "../config/letter.config.js";
+
+// Config-driven form copy, with fallbacks so a letter that omits zoom.form still
+// renders sensible defaults.
+const F = cfg.zoom?.form || {};
 
 export const ZoomForm = memo(function ZoomForm({
   onSubmit,
@@ -71,7 +69,7 @@ export const ZoomForm = memo(function ZoomForm({
   if (done) {
     return (
       <div className="form-card zoom-done" role="status">
-        <span className="badge">Angemeldet</span>
+        <span className="badge">{F.doneBadge || "Angemeldet"}</span>
         <div className="check-anim">
           <svg
             viewBox="0 0 24 24"
@@ -85,10 +83,10 @@ export const ZoomForm = memo(function ZoomForm({
             <polyline points="20 6 9 17 4 12"></polyline>
           </svg>
         </div>
-        <h3>Du bist dabei.</h3>
+        <h3>{F.doneTitle || "Du bist dabei."}</h3>
         <p className="sub2">
-          Wir haben dir eine Bestätigung per E-Mail geschickt. Den Einwahllink
-          bekommst du rechtzeitig vor dem Termin am 9. Juni, 20 Uhr.
+          {F.doneText ||
+            "Wir haben dir eine Bestätigung per E-Mail geschickt. Den Einwahllink bekommst du rechtzeitig vor dem Termin."}
         </p>
       </div>
     );
@@ -96,9 +94,11 @@ export const ZoomForm = memo(function ZoomForm({
 
   return (
     <form className="form-card" onSubmit={submit} noValidate>
-      <span className="badge">Zoom-Anmeldung</span>
-      <h3>Anmelden in 30 Sekunden</h3>
-      <div className="sub2">Den Link schicken wir dir per E-Mail.</div>
+      <span className="badge">{F.badge || "Zoom-Anmeldung"}</span>
+      <h3>{F.title || "Anmelden in 30 Sekunden"}</h3>
+      <div className="sub2">
+        {F.subtitle || "Den Link schicken wir dir per E-Mail."}
+      </div>
 
       {serverError && (
         <div className="err" role="alert">
@@ -130,7 +130,7 @@ export const ZoomForm = memo(function ZoomForm({
       <div className="field">
         <label htmlFor="zoom-email">
           E-Mail{" "}
-          <span className="opt"> für die Bestätigung und den Zoom-Link</span>
+          <span className="opt"> für die Bestätigung und alle Infos</span>
         </label>
         <input
           id="zoom-email"
@@ -230,29 +230,33 @@ export const ZoomForm = memo(function ZoomForm({
         )}
       </div>
 
-      <div className="checks">
-        <label className="check">
-          <input
-            type="checkbox"
-            checked={delegierter}
-            onChange={(e) => setDelegierter(e.target.checked)}
-          />
-          <span>
-            Ich bin <strong>Delegierte*r zum Parteitag.</strong>{" "}
-            <span className="opt">(optional)</span>
-          </span>
-        </label>
-      </div>
+      {F.showDelegierter && (
+        <div className="checks">
+          <label className="check">
+            <input
+              type="checkbox"
+              checked={delegierter}
+              onChange={(e) => setDelegierter(e.target.checked)}
+            />
+            <span>
+              <strong>{F.delegierterLabel || "Ich bin Delegierte*r."}</strong>{" "}
+              <span className="opt">(optional)</span>
+            </span>
+          </label>
+        </div>
+      )}
 
       <button type="submit" className="submit" disabled={submitting}>
-        {submitting ? "Wird gesendet…" : "Zum Zoom anmelden"}{" "}
+        {submitting
+          ? F.submittingLabel || "Wird gesendet…"
+          : F.submitLabel || "Zum Zoom anmelden"}{" "}
         <span className="arrow" aria-hidden="true">
           →
         </span>
       </button>
       <p className="form-legal">
-        Wir nutzen deine Angaben nur zur Organisation des Treffens und schicken
-        dir den Einwahllink rechtzeitig per E-Mail.
+        {F.legal ||
+          "Wir nutzen deine Angaben nur zur Organisation des Treffens und schicken dir den Einwahllink rechtzeitig per E-Mail."}
       </p>
     </form>
   );

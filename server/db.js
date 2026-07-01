@@ -551,6 +551,18 @@ export async function resetZoomMailings() {
   await db.query(`DELETE FROM zoom_event_mailings`).run();
 }
 
+// Wipes all Zoom registrations and resets the mailing state, so the same Zoom
+// event/list can be reused for a fresh round of signups (e.g. repurposing the
+// original meeting for an Auswertungszoom). Returns the number of rows removed.
+export async function clearZoomRegistrations() {
+  const { count } = await db
+    .query(`SELECT COUNT(*) AS count FROM zoom_registrations`)
+    .get();
+  await db.query(`DELETE FROM zoom_registrations`).run();
+  await resetZoomMailings();
+  return count;
+}
+
 export async function getZoomSettings() {
   const rows = await db
     .query(`SELECT key, value FROM app_settings WHERE key LIKE 'zoom_%'`)

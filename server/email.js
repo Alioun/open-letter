@@ -142,7 +142,7 @@ const URL_VARIABLES = new Set([
 
 export function interpolateTemplate(value, variables = {}) {
   return String(value || "").replace(
-    /\{\{\s*(name|firstName|confirmUrl|deleteUrl|signerCount|unsubscribeUrl|eventLabel|linkInfo|zoomJaUrl|zoomJaDelegiertUrl)\s*\}\}/g,
+    /\{\{\s*(name|firstName|confirmUrl|deleteUrl|signerCount|unsubscribeUrl|eventLabel|eventWhen|linkInfo|zoomJaUrl|zoomJaDelegiertUrl)\s*\}\}/g,
     (_, key) => {
       const raw = String(variables[key] ?? "");
       return URL_VARIABLES.has(key) ? raw : escapeHtml(raw);
@@ -407,18 +407,16 @@ export async function sendZoomConfirmationEmail({
   to,
   name,
   eventLabel,
-  icsUrl,
-  linkTimingText = "einen Tag",
+  eventWhen = "",
+  linkInfo = "",
 }) {
   console.log(`[email] zoom confirmation toDomain=${getEmailDomain(to)}`);
   const firstName = name.split(/\s/)[0];
-  const linkInfo =
-    `<p>Den <strong>Zoom-Link bekommst du ${linkTimingText} vor dem Termin</strong> per E-Mail.</p>` +
-    (icsUrl ? zoomCalendarButton(icsUrl) : "");
   const rendered = await renderTemplateBySlug("zoom_confirmation", {
     name,
     firstName,
     eventLabel,
+    eventWhen,
     linkInfo,
   });
 

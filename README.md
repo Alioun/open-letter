@@ -47,7 +47,7 @@ The admin dashboard (served at the secret `/${ADMIN_PATH}` route) can edit, at r
 - **Runtime**: [Bun](https://bun.sh) — package manager, bundler, HTTP server (no Vite, no framework)
 - **Frontend**: React 18, vanilla CSS
 - **Backend**: `Bun.serve()` with route handlers
-- **Database**: SQLite via Bun's built-in `bun:sqlite`, **encrypted at rest with [SQLCipher](https://www.zetetic.net/sqlcipher/)** (loaded through `Database.setCustomSQLite`)
+- **Database**: SQLite, **encrypted at rest with [SQLCipher](https://www.zetetic.net/sqlcipher/)** via [`@journeyapps/sqlcipher`](https://www.npmjs.com/package/@journeyapps/sqlcipher) — a node-sqlite3 / N-API build that bundles SQLCipher (async, promise-based access)
 - **Jobs**: [Honker](https://honker.dev) durable queues + cron scheduler (campaign sends, zoom mailings, backups, state resolution) — persisted inside the same SQLite file
 - **Email**: Resend HTTP API or any SMTP server (nodemailer) for transactional mail
 
@@ -74,7 +74,7 @@ diaetendeckel/
 ├── docker-compose.yml         # Production (encrypted SQLite on a volume)
 ├── docker-compose.dev.yml     # Dev/demo (SQLite + seed data + trickle)
 ├── db/
-│   ├── connection.js          # Shared SQLCipher-keyed bun:sqlite connection
+│   ├── connection.js          # Shared SQLCipher-keyed connection (@journeyapps/sqlcipher, async)
 │   ├── schema.sql             # Tables + indexes (SQLite)
 │   ├── setup.js               # Idempotent schema application
 │   ├── seed.js                # Dev: 200 demo signers + live trickle
@@ -83,7 +83,7 @@ diaetendeckel/
 │   └── restore-backup.js      # Restore an encrypted backup into DATABASE_PATH
 ├── server/
 │   ├── index.js               # Bun.serve() — routes + security headers
-│   ├── db.js                  # Parameterized bun:sqlite queries
+│   ├── db.js                  # Parameterized queries (async, promise-returning)
 │   ├── email.js               # Email templates + Resend/SMTP transport
 │   └── ratelimit.js           # In-memory sliding window rate limiter
 ├── src/
@@ -96,8 +96,10 @@ diaetendeckel/
 
 ## Quick Start (local)
 
-Prerequisites: [Bun](https://bun.sh) installed, SQLCipher installed
-(`brew install sqlcipher` on macOS, `apt-get install libsqlcipher0` on Debian).
+Prerequisites: [Bun](https://bun.sh) installed. SQLCipher itself is bundled by
+the `@journeyapps/sqlcipher` native module and compiled during `bun install`
+(it links OpenSSL for crypto) — you do **not** need to install SQLCipher or
+`libsqlcipher` separately.
 
 ```bash
 git clone <repo-url> && cd diaetendeckel
@@ -108,8 +110,7 @@ bun run dev                    # → http://localhost:3000 (HMR enabled)
 ```
 
 The database is encrypted at rest with SQLCipher. `DATABASE_ENCRYPTION_KEY` is
-**required** — the app refuses to start without it. If `libsqlcipher` is not on
-the default path, set `SQLCIPHER_LIB`.
+**required** — the app refuses to start without it.
 
 To populate with demo data in a second terminal:
 
@@ -134,7 +135,6 @@ This creates the encrypted SQLite database, seeds 200 verified signers, trickles
 | `LETTER_CONFIG`    | No         | `gehaltsdeckel`         | Which open letter to serve — a directory name under `config/letters/`                                                |
 | `DATABASE_PATH`    | No         | `./data/diaetendeckel.db` | Path to the encrypted SQLite database file                                                                          |
 | `DATABASE_ENCRYPTION_KEY` | Yes | —                       | SQLCipher passphrase. The app fails closed (won't start) without it.                                                 |
-| `SQLCIPHER_LIB`    | No         | platform default        | Path to `libsqlcipher` (`.dylib`/`.so`) loaded via `setCustomSQLite`                                                 |
 | `HONKER_EXTENSION_PATH` | No    | platform default        | Path to the Honker SQLite extension (`libhonker_ext.{dylib,so}`) for durable jobs                                    |
 | `SOURCE_DATABASE_URL` | Migration only | —                | Old Postgres connection string, read by `db:migrate`                                                                |
 | `PORT`             | No         | `3000`                  | Server port                                                                                                           |
@@ -220,10 +220,15 @@ Verifies a signature if the token is valid and not expired. Redirects to `/?conf
 
 ## Database
 
-SQLite, encrypted at rest with SQLCipher. `bun:sqlite` loads `libsqlcipher` via
-`Database.setCustomSQLite()` and applies `PRAGMA key` as the first statement on
+SQLite, encrypted at rest with SQLCipher via `@journeyapps/sqlcipher` — a
+node-sqlite3 build that bundles the SQLCipher amalgamation and loads over N-API.
+(`bun:sqlite` can't be used for this: its `Database.setCustomSQLite()` is a
+silent no-op on Bun's Linux builds, so `PRAGMA key` would be ignored and the
+database left unencrypted.) `PRAGMA key` is applied as the first statement on
 every connection; the app verifies `PRAGMA cipher_version` is active and fails
-closed otherwise. The file, its WAL, and all backups are encrypted.
+closed otherwise. The driver's API is asynchronous, so database access is
+promise-based (`await`ed) throughout. The file, its WAL, and all backups are
+encrypted.
 
 Core table `signers` (`id`, `name`, `email` unique, `kreisverband`, `occupation`,
 `state`, `newsletter`, `show_publicly`, `verified`, token columns, `created_at`),

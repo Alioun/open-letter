@@ -47,7 +47,7 @@ export function buildZoomIcs({
   summary,
   description = "",
   url = "",
-  location = "Zoom",
+  location = "",
   uid,
 }) {
   const startDate = start instanceof Date ? start : new Date(start);
@@ -56,7 +56,7 @@ export function buildZoomIcs({
   const lines = [
     "BEGIN:VCALENDAR",
     "VERSION:2.0",
-    "PRODID:-//Gehaltsdeckel jetzt//Zoom-Treffen//DE",
+    "PRODID:-//Gehaltsdeckel jetzt//Treffen//DE",
     "CALSCALE:GREGORIAN",
     "METHOD:PUBLISH",
     "BEGIN:VEVENT",
