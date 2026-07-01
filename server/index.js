@@ -62,6 +62,7 @@ import {
   refreshUnsubscribeTokenByEmail,
   getUnsubscribeState,
   getUnifiedUnsubscribeState,
+  getShowDelegierter,
   resolveEmailFromToken,
   optOutNewsletter,
   optOutNewsletterByEmail,
@@ -209,6 +210,8 @@ async function getZoomConfig() {
   );
   const linkOffsetHours = parseInt(s.zoom_link_offset_hours || "24", 10);
   const reminderOffsetHours = parseInt(s.zoom_reminder_offset_hours || "2", 10);
+  // Runtime-editable event fallback label (shown when no date is set yet).
+  const eventLabelFallback = s.zoom_event_label || cfg.zoom?.eventLabel || "";
   return {
     eventAt,
     eventAtIso: dateSet ? eventAt.toISOString() : null,
@@ -217,17 +220,28 @@ async function getZoomConfig() {
     linkOffsetHours,
     reminderOffsetHours,
     link: s.zoom_link || ZOOM_LINK,
-    label: dateSet ? formatZoomLabel(eventAt) : cfg.zoom?.eventLabel || "",
+    label: dateSet ? formatZoomLabel(eventAt) : eventLabelFallback,
+    // Raw fallback label, exposed to the admin form so it can be edited.
+    eventLabelFallback,
     // Date phrase for email copy: " am 12. Juli, 19 Uhr" when a date is set, or
     // "" when it's still TBD — so templates read cleanly either way.
     whenPhrase: dateSet ? ` am ${formatZoomLabel(eventAt)}` : "",
     icsUrl: ZOOM_ICS_URL,
-    // Meeting mode + in-person location, from the active letter config.
-    mode: cfg.zoom?.mode === "inperson" ? "inperson" : "online",
+    // Nav/CTA label for the Treffen (admin-editable, falls back to config).
+    navLabel: s.zoom_nav_label || cfg.zoom?.navLabel || "Treffen",
+    // Delegate field toggle — admin-editable, seeded from the letter config.
+    showDelegierter:
+      s.zoom_show_delegierter != null
+        ? s.zoom_show_delegierter === "1"
+        : Boolean(cfg.zoom?.form?.showDelegierter),
+    // Meeting mode + in-person location, admin-editable over the letter config.
+    mode: (s.zoom_mode || cfg.zoom?.mode) === "inperson" ? "inperson" : "online",
     location: {
-      name: cfg.zoom?.location?.name || "",
-      address: cfg.zoom?.location?.address || "",
-      mapsUrl: sanitizeUrl(cfg.zoom?.location?.mapsUrl || ""),
+      name: s.zoom_location_name ?? cfg.zoom?.location?.name ?? "",
+      address: s.zoom_location_address ?? cfg.zoom?.location?.address ?? "",
+      mapsUrl: sanitizeUrl(
+        s.zoom_location_maps_url ?? cfg.zoom?.location?.mapsUrl ?? "",
+      ),
     },
   };
 }
@@ -753,7 +767,11 @@ async function sendCampaign(campaign) {
             linkInfo: zoomLinkInfo,
             unsubscribeUrl,
             zoomJaUrl: `${BASE_URL}/api/zoom-anmelden/${token}?delegiert=0`,
-            zoomJaDelegiertUrl: `${BASE_URL}/api/zoom-anmelden/${token}?delegiert=1`,
+            // Empty when the delegate field is off → the {{#zoomJaDelegiertUrl}}
+            // section in the template is stripped, hiding the delegate button.
+            zoomJaDelegiertUrl: zoomCfg?.showDelegierter
+              ? `${BASE_URL}/api/zoom-anmelden/${token}?delegiert=1`
+              : "",
           };
         }
         payloads.push({
@@ -1297,7 +1315,11 @@ const server = Bun.serve({
           const name = sanitize(body.name);
           const email = sanitizeEmail(body.email);
           const kv = sanitize(body.kv || "").replace(/^KV\s*/i, "");
-          const delegierter = Boolean(body.delegierter);
+          const zoomCfg = await getZoomConfig();
+          // Never accept a delegate flag while the field is turned off, even if a
+          // crafted request sends one.
+          const delegierter =
+            zoomCfg.showDelegierter && Boolean(body.delegierter);
 
           if (name.length < 2) {
             return json(
@@ -1320,8 +1342,7 @@ const server = Bun.serve({
           });
 
           try {
-            const cfg = await getZoomConfig();
-            await sendZoomSignupEmail({ regId: reg.id, name, email, cfg });
+            await sendZoomSignupEmail({ regId: reg.id, name, email, cfg: zoomCfg });
           } catch (mailErr) {
             console.error("zoom registration email failed:", mailErr);
           }
@@ -1343,7 +1364,15 @@ const server = Bun.serve({
             getZoomRegistrationCount(),
             getZoomConfig(),
           ]);
-          return json({ ...countRow, eventAt: cfg.eventAtIso });
+          return json({
+            ...countRow,
+            eventAt: cfg.eventAtIso,
+            showDelegierter: cfg.showDelegierter,
+            mode: cfg.mode,
+            location: cfg.location,
+            navLabel: cfg.navLabel,
+            label: cfg.label,
+          });
         } catch (err) {
           console.error("GET /api/zoom-count error:", err);
           return json({ error: "Internal server error" }, 500);
@@ -1661,7 +1690,9 @@ const server = Bun.serve({
           const occupation = sanitize(body.occupation || "");
           const newsletter = Boolean(body.newsletter);
           const showPublicly = Boolean(body.showPublicly);
-          const delegierter = Boolean(body.delegierter);
+          // Only honor the delegate flag while the field is enabled.
+          const delegierter =
+            (await getShowDelegierter()) && Boolean(body.delegierter);
 
           if (name.length < 2) {
             return json(
@@ -1735,8 +1766,12 @@ const server = Bun.serve({
         const blocked = denyRate(req, "token-link", 120, 15 * 60 * 1000);
         if (blocked) return blocked;
         const { token } = req.params;
-        const delegiert = req.url.includes("delegiert=1");
         const force = req.url.includes("force=1");
+        const zoomCfg = await getZoomConfig();
+        // When the delegate field is off, ignore any ?delegiert=1 in the link so a
+        // stale email button can't register someone as a delegate.
+        const delegiert =
+          zoomCfg.showDelegierter && req.url.includes("delegiert=1");
         try {
           const signer = await getSignerForZoomInvite(token);
           if (!signer) {
@@ -1755,13 +1790,21 @@ const server = Bun.serve({
 
           if (existing && !force) {
             const firstName = sanitize(signer.name.split(/\s/)[0]);
-            const currentStatus = existing.delegierter
-              ? "als <strong>Delegierte*r</strong>"
-              : "als einfache*r Teilnehmer*in";
-            const toggleLabel = existing.delegierter
-              ? "Nicht als Delegierte*r anmelden"
-              : "Als Delegierte*r anmelden";
-            const toggleUrl = `${BASE_URL}/api/zoom-anmelden/${encodeURIComponent(token)}?delegiert=${existing.delegierter ? 0 : 1}&force=1`;
+            // The delegate status + toggle only make sense while the field is on;
+            // when off, show a neutral "registriert" line with no toggle.
+            const currentStatus = !zoomCfg.showDelegierter
+              ? ""
+              : existing.delegierter
+                ? " als <strong>Delegierte*r</strong>"
+                : " als einfache*r Teilnehmer*in";
+            let toggleBlock = "";
+            if (zoomCfg.showDelegierter) {
+              const toggleLabel = existing.delegierter
+                ? "Nicht als Delegierte*r anmelden"
+                : "Als Delegierte*r anmelden";
+              const toggleUrl = `${BASE_URL}/api/zoom-anmelden/${encodeURIComponent(token)}?delegiert=${existing.delegierter ? 0 : 1}&force=1`;
+              toggleBlock = `<p><a href="${toggleUrl}" style="color:#e8001c;">${toggleLabel}</a></p>`;
+            }
             const unsubUrl = existing.unsubscribe_token
               ? `${BASE_URL}/abmelden/${encodeURIComponent(existing.unsubscribe_token)}?from=zoom`
               : null;
@@ -1770,7 +1813,7 @@ const server = Bun.serve({
               : "";
             return new Response(
               zoomUnsubPage(
-                `<h1>Du bist bereits angemeldet</h1><p>Hallo <strong>${firstName}</strong>, du bist bereits ${currentStatus} f\u00fcr das Treffen registriert.</p><p><a href="${toggleUrl}" style="color:#e8001c;">${toggleLabel}</a></p>${unsubLink}`,
+                `<h1>Du bist bereits angemeldet</h1><p>Hallo <strong>${firstName}</strong>, du bist bereits${currentStatus} f\u00fcr das Treffen registriert.</p>${toggleBlock}${unsubLink}`,
               ),
               {
                 headers: {
@@ -1790,15 +1833,13 @@ const server = Bun.serve({
             delegierter: delegiert,
           });
 
-          const cfg = await getZoomConfig();
-
           if (isNew) {
             try {
               await sendZoomSignupEmail({
                 regId: reg.id,
                 name: signer.name,
                 email: signer.email,
-                cfg,
+                cfg: zoomCfg,
               });
             } catch (mailErr) {
               console.error(
@@ -1816,7 +1857,7 @@ const server = Bun.serve({
             : "";
           return new Response(
             zoomUnsubPage(
-              `<h1>Du bist dabei!</h1><p>Wir haben deine Anmeldung f\u00fcr das Treffen gespeichert, <strong>${sanitize(signer.name.split(/\s/)[0])}</strong>.</p>${delegateNote}${updatedNote}${buildMeetingInfo(cfg, { pending: true, timingText: "kurz" })}`,
+              `<h1>Du bist dabei!</h1><p>Wir haben deine Anmeldung f\u00fcr das Treffen gespeichert, <strong>${sanitize(signer.name.split(/\s/)[0])}</strong>.</p>${delegateNote}${updatedNote}${buildMeetingInfo(zoomCfg, { pending: true, timingText: "kurz" })}`,
             ),
             {
               headers: {
@@ -2100,6 +2141,11 @@ const server = Bun.serve({
             reminderOffsetHours: cfg.reminderOffsetHours,
             link: cfg.link,
             hasLink: Boolean(cfg.link),
+            showDelegierter: cfg.showDelegierter,
+            mode: cfg.mode,
+            location: cfg.location,
+            eventLabelFallback: cfg.eventLabelFallback,
+            navLabel: cfg.navLabel,
             mailings: await listZoomMailings(),
           });
         });
@@ -2136,6 +2182,14 @@ const server = Bun.serve({
             zoom_link_offset_hours: linkOffsetHours,
             zoom_reminder_offset_hours: reminderOffsetHours,
             zoom_link: zoomLink,
+            // Ported operational settings (admin-editable, no redeploy).
+            zoom_show_delegierter: body.showDelegierter ? "1" : "0",
+            zoom_mode: body.mode === "inperson" ? "inperson" : "online",
+            zoom_location_name: String(body.locationName ?? "").trim(),
+            zoom_location_address: String(body.locationAddress ?? "").trim(),
+            zoom_location_maps_url: String(body.locationMapsUrl ?? "").trim(),
+            zoom_event_label: String(body.eventLabel ?? "").trim(),
+            zoom_nav_label: String(body.navLabel ?? "").trim(),
           });
           if (eventChanged) await resetZoomMailings();
 
@@ -2147,6 +2201,11 @@ const server = Bun.serve({
             eventLabel: cfg.label,
             linkOffsetHours: cfg.linkOffsetHours,
             reminderOffsetHours: cfg.reminderOffsetHours,
+            showDelegierter: cfg.showDelegierter,
+            mode: cfg.mode,
+            location: cfg.location,
+            eventLabelFallback: cfg.eventLabelFallback,
+            navLabel: cfg.navLabel,
           });
         });
       },
@@ -2236,7 +2295,9 @@ const server = Bun.serve({
               zoomLink: cfg.link,
               linkInfo: buildMeetingInfo(cfg),
               zoomJaUrl: `${BASE_URL}/api/zoom-anmelden/beispiel?delegiert=0`,
-              zoomJaDelegiertUrl: `${BASE_URL}/api/zoom-anmelden/beispiel?delegiert=1`,
+              zoomJaDelegiertUrl: cfg.showDelegierter
+                ? `${BASE_URL}/api/zoom-anmelden/beispiel?delegiert=1`
+                : "",
             }),
           });
         });
@@ -2304,7 +2365,9 @@ const server = Bun.serve({
                 linkInfo: buildMeetingInfo(zoomCfg),
                 unsubscribeUrl,
                 zoomJaUrl: `${BASE_URL}/api/zoom-anmelden/${token}?delegiert=0`,
-                zoomJaDelegiertUrl: `${BASE_URL}/api/zoom-anmelden/${token}?delegiert=1`,
+                zoomJaDelegiertUrl: zoomCfg?.showDelegierter
+                  ? `${BASE_URL}/api/zoom-anmelden/${token}?delegiert=1`
+                  : "",
               };
             }
           } else {
@@ -2328,7 +2391,9 @@ const server = Bun.serve({
                   linkInfo: buildMeetingInfo(zoomCfg),
                   unsubscribeUrl: `${BASE_URL}/abmelden/test`,
                   zoomJaUrl: `${BASE_URL}/api/zoom-anmelden/test?delegiert=0`,
-                  zoomJaDelegiertUrl: `${BASE_URL}/api/zoom-anmelden/test?delegiert=1`,
+                  zoomJaDelegiertUrl: zoomCfg?.showDelegierter
+                    ? `${BASE_URL}/api/zoom-anmelden/test?delegiert=1`
+                    : "",
                 };
           }
           const html = renderEmailHtml(template.html_body, vars);

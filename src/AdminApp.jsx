@@ -470,6 +470,14 @@ export default function AdminApp() {
   const [zoomLinkInput, setZoomLinkInput] = useState("");
   const [zoomLinkOffset, setZoomLinkOffset] = useState(24);
   const [zoomReminderOffset, setZoomReminderOffset] = useState(2);
+  // Ported operational Treffen settings (admin-editable, no redeploy).
+  const [zoomShowDelegierter, setZoomShowDelegierter] = useState(false);
+  const [zoomMode, setZoomMode] = useState("online");
+  const [zoomLocationName, setZoomLocationName] = useState("");
+  const [zoomLocationAddress, setZoomLocationAddress] = useState("");
+  const [zoomLocationMapsUrl, setZoomLocationMapsUrl] = useState("");
+  const [zoomEventLabel, setZoomEventLabel] = useState("");
+  const [zoomNavLabel, setZoomNavLabel] = useState("");
   const [zoomSettingsStatus, setZoomSettingsStatus] = useState(null);
   const [milestonesInput, setMilestonesInput] = useState("");
   const [milestonesStatus, setMilestonesStatus] = useState(null);
@@ -704,6 +712,13 @@ export default function AdminApp() {
         setZoomLinkInput(data.link || "");
         setZoomLinkOffset(data.linkOffsetHours ?? 24);
         setZoomReminderOffset(data.reminderOffsetHours ?? 2);
+        setZoomShowDelegierter(Boolean(data.showDelegierter));
+        setZoomMode(data.mode === "inperson" ? "inperson" : "online");
+        setZoomLocationName(data.location?.name || "");
+        setZoomLocationAddress(data.location?.address || "");
+        setZoomLocationMapsUrl(data.location?.mapsUrl || "");
+        setZoomEventLabel(data.eventLabelFallback || "");
+        setZoomNavLabel(data.navLabel || "");
       }
     });
   }, [api, tab, token]);
@@ -952,6 +967,13 @@ export default function AdminApp() {
         zoomLink: zoomLinkInput,
         linkOffsetHours: Number(zoomLinkOffset),
         reminderOffsetHours: Number(zoomReminderOffset),
+        showDelegierter: zoomShowDelegierter,
+        mode: zoomMode,
+        locationName: zoomLocationName,
+        locationAddress: zoomLocationAddress,
+        locationMapsUrl: zoomLocationMapsUrl,
+        eventLabel: zoomEventLabel,
+        navLabel: zoomNavLabel,
       }),
     });
     if (res.ok) {
@@ -1188,7 +1210,9 @@ export default function AdminApp() {
                   <option value="newsletter">Newsletter-Unterschreiber</option>
                   <option value="email_not_zoom">Newsletter ohne Zoom</option>
                   <option value="zoom">Zoom-Anmelder (alle)</option>
-                  <option value="zoom_delegates">Nur Delegierte (Zoom)</option>
+                  {zoomShowDelegierter && (
+                    <option value="zoom_delegates">Nur Delegierte (Zoom)</option>
+                  )}
                 </select>
               </div>
               <div className="field">
@@ -1709,6 +1733,84 @@ export default function AdminApp() {
                 Bei Änderung des Termins wird der Versand-Status zurückgesetzt,
                 sodass Link-Mail und Erinnerung neu ausgelöst werden.
               </p>
+
+              <div className="admin-card-title">Format & Anzeige</div>
+              <div className="field">
+                <label>Format des Treffens</label>
+                <select
+                  value={zoomMode}
+                  onChange={(e) => setZoomMode(e.target.value)}
+                >
+                  <option value="online">Online (Videocall)</option>
+                  <option value="inperson">Vor Ort (Präsenz)</option>
+                </select>
+              </div>
+              {zoomMode === "inperson" && (
+                <>
+                  <div className="field">
+                    <label>Ort – Name</label>
+                    <input
+                      type="text"
+                      value={zoomLocationName}
+                      onChange={(e) => setZoomLocationName(e.target.value)}
+                      placeholder="z. B. Karl-Liebknecht-Haus"
+                    />
+                  </div>
+                  <div className="field">
+                    <label>Ort – Adresse</label>
+                    <input
+                      type="text"
+                      value={zoomLocationAddress}
+                      onChange={(e) => setZoomLocationAddress(e.target.value)}
+                      placeholder="Straße, PLZ Ort"
+                    />
+                  </div>
+                  <div className="field">
+                    <label>Ort – Karten-Link (optional)</label>
+                    <input
+                      type="url"
+                      value={zoomLocationMapsUrl}
+                      onChange={(e) => setZoomLocationMapsUrl(e.target.value)}
+                      placeholder="https://maps.google.com/..."
+                    />
+                  </div>
+                </>
+              )}
+              <div className="admin-date-row">
+                <div className="field">
+                  <label>Titel/Label (wenn kein Termin gesetzt)</label>
+                  <input
+                    type="text"
+                    value={zoomEventLabel}
+                    onChange={(e) => setZoomEventLabel(e.target.value)}
+                    placeholder="z. B. Termin folgt"
+                  />
+                </div>
+                <div className="field">
+                  <label>Label in Navigation & Button</label>
+                  <input
+                    type="text"
+                    value={zoomNavLabel}
+                    onChange={(e) => setZoomNavLabel(e.target.value)}
+                    placeholder="z. B. Auswertungstreffen"
+                  />
+                </div>
+              </div>
+              <div className="field">
+                <label className="check">
+                  <input
+                    type="checkbox"
+                    checked={zoomShowDelegierter}
+                    onChange={(e) => setZoomShowDelegierter(e.target.checked)}
+                  />
+                  <span>Delegierte*r-Feld anzeigen</span>
+                </label>
+              </div>
+
+              <p className="admin-muted">
+                Einstellungen werden zusammen mit dem Termin gespeichert – bitte
+                oben ein gültiges Datum setzen.
+              </p>
               <div className="admin-actions">
                 <button
                   className="cta"
@@ -1828,8 +1930,13 @@ export default function AdminApp() {
               }}
             >
               <span>
-                Zoom-Anmeldungen · {zoomRegs.length} gesamt ·{" "}
-                {zoomRegs.filter((r) => r.delegierter).length} Delegierte
+                Zoom-Anmeldungen · {zoomRegs.length} gesamt
+                {zoomShowDelegierter && (
+                  <>
+                    {" "}
+                    · {zoomRegs.filter((r) => r.delegierter).length} Delegierte
+                  </>
+                )}
               </span>
               <button
                 type="button"
@@ -1866,7 +1973,7 @@ export default function AdminApp() {
                     <tr>
                       <th>Name</th>
                       <th>Kreisverband</th>
-                      <th>Delegierte*r</th>
+                      {zoomShowDelegierter && <th>Delegierte*r</th>}
                       <th>E-Mail</th>
                       <th>Angemeldet</th>
                     </tr>
@@ -1876,7 +1983,9 @@ export default function AdminApp() {
                       <tr key={r.email}>
                         <td>{r.name}</td>
                         <td>{r.kreisverband || "—"}</td>
-                        <td>{r.delegierter ? "Ja" : "—"}</td>
+                        {zoomShowDelegierter && (
+                          <td>{r.delegierter ? "Ja" : "—"}</td>
+                        )}
                         <td>{r.email}</td>
                         <td>
                           {new Date(r.created_at).toLocaleString("de-DE", {

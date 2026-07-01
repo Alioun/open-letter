@@ -128,6 +128,15 @@ button {
   align-items: center;
   justify-content: space-between;
   padding: 14px 28px;
+  /* Match the height set by the CTA button (min-height 44px + 14px padding) so
+     the bar keeps a consistent height when the CTA is absent (date past). */
+  min-height: 72px;
+}
+
+/* No CTA (success mode, date past): center the nav instead of letting it slam
+   flush against the right edge. Wordmark stays left, right side stays open. */
+.topbar--no-cta nav {
+  margin: 0 auto;
 }
 
 .wordmark {
@@ -3452,22 +3461,16 @@ footer {
   margin-bottom: 22px;
 }
 
-.hero-success-count {
-  font-family: var(--font-display);
-  font-weight: 400;
-  font-size: clamp(18px, 2vw, 24px);
-  line-height: 1.2;
-  color: var(--akzent);
+/* Number shown as the active hero's signature counter card (dark maroon, white
+   text, red offset shadow) — sized to content instead of filling a grid column. */
+.hero-success-card {
+  width: fit-content;
+  max-width: 100%;
   margin: 0 0 24px;
 }
 
-.hero-success-count strong {
-  display: block;
-  font-weight: 900;
-  font-size: clamp(48px, 9vw, 96px);
-  line-height: 0.95;
-  letter-spacing: var(--ls-tight);
-  color: var(--rot-text);
+.hero-success-card .num {
+  font-size: clamp(48px, 11vw, 88px);
 }
 
 .hero-success-body {
@@ -3483,6 +3486,41 @@ footer {
   border: 1.5px solid var(--akzent);
   box-shadow: var(--shadow-md) var(--shadow-md) 0 var(--rot);
   margin: 0 0 24px;
+}
+
+/* Success hero: white body box + action buttons. Stacked on mobile; on desktop
+   the buttons sit to the right of the box (top-aligned, clearing the red shadow). */
+.hero-success-cta {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 24px;
+}
+
+.hero-success-cta .hero-success-body {
+  margin: 0; /* spacing handled by the flex gap */
+}
+
+@media (min-width: 901px) {
+  /* Use the full hero width on desktop instead of the narrow reading column. */
+  .hero-success {
+    max-width: none;
+  }
+
+  .hero-success-cta {
+    flex-direction: row;
+    gap: 32px;
+  }
+
+  /* Body box grows to fill the row; the button column stays pinned to the right. */
+  .hero-success-cta .hero-success-body {
+    flex: 1;
+    max-width: none;
+  }
+
+  .hero-success-cta .hero-actions {
+    flex-shrink: 0;
+  }
 }
 
 /* Collapsed content sections (config-driven) merge into one contiguous block:

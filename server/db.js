@@ -623,6 +623,19 @@ export async function setMilestones(arr) {
   return clean;
 }
 
+// ---- delegate field toggle (admin-editable) --------------------------------
+// Whether the "Ich bin Delegierte*r" field is shown. Stored as app_settings
+// zoom_show_delegierter ("1"/"0"); seeded from the active letter config. The
+// server resolves the same key in getZoomConfig() (server/index.js); this helper
+// exists so db.js code (self-service state) can read it without importing that.
+export async function getShowDelegierter() {
+  const row = await db
+    .query(`SELECT value FROM app_settings WHERE key = 'zoom_show_delegierter'`)
+    .get();
+  if (row?.value != null) return row.value === "1";
+  return Boolean(cfg.zoom?.form?.showDelegierter);
+}
+
 // ---- email templates -------------------------------------------------------
 
 const SYSTEM_SLUGS_SQL =
@@ -1000,6 +1013,9 @@ export async function getUnifiedUnsubscribeState(token, source) {
     zoomName: zoom?.name ?? "",
     zoomKv: zoom?.kreisverband ?? "",
     delegierter: Boolean(zoom?.delegierter ?? false),
+    // Whether the delegate field is currently enabled (admin toggle) — the
+    // self-service page hides the checkbox when off.
+    showDelegierter: await getShowDelegierter(),
   };
 }
 

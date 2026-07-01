@@ -271,9 +271,11 @@ export default {
         <p>
           <a href="{{zoomJaUrl}}" style="display:inline-block;background:#ff0000;color:#ffffff;font-family:'Work Sans',Arial,sans-serif;font-weight:700;font-size:15px;text-decoration:none;padding:13px 22px;border:2px solid #6f003c;">Ja, ich bin dabei</a>
         </p>
+        {{#zoomJaDelegiertUrl}}
         <p>
           <a href="{{zoomJaDelegiertUrl}}" style="display:inline-block;background:#6f003c;color:#ffffff;font-family:'Work Sans',Arial,sans-serif;font-weight:700;font-size:15px;text-decoration:none;padding:13px 22px;border:2px solid #6f003c;">Ja, ich bin dabei und bin Delegierte*r</a>
         </p>
+        {{/zoomJaDelegiertUrl}}
         <p>Deine Angaben (Name, Kreisverband) werden automatisch aus deiner Unterschrift übernommen — du musst nichts weiter ausfüllen.</p>
         <p class="gruss">Mit solidarischen Grüßen<br>Initiative Gehaltsdeckel</p>
         <footer>Du erhältst diese E-Mail, weil du Updates abonniert hast. <a href="{{unsubscribeUrl}}">E-Mails abbestellen</a>.</footer>
@@ -335,6 +337,14 @@ export default {
   success: {
     kicker: "Geschafft!",
     headline: "Hurra, hurra, der Gehaltsdeckel ist da!",
+    // Optional structured headline: each line renders as a styled span
+    // (style "banner" = filled red wedge, "light" = thin weight). Mirrors the
+    // active hero's headlineLines. Falls back to `headline` when omitted.
+    headlineLines: [
+      { text: "Hurra, hurra, der", style: "banner" },
+      { text: "Gehaltsdeckel ist", style: "banner" },
+      { text: "da!", style: "banner" },
+    ],
     body: "Danke an alle, die mitgezeichnet haben: Auf dem Bundesparteitag in Potsdam wurde der Antrag zum Gehaltsdeckel beschlossen. Jetzt werten wir die Aktion gemeinsam aus.",
     antragUrl:
       "https://www.die-linke.de/partei/parteidemokratie/parteitag/potsdamer-parteitag/potsdamer-parteitag/beschluesse/detail/news/gehaltsdeckel-fuer-abgeordnete-der-linken/",

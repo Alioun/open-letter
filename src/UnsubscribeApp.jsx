@@ -350,7 +350,7 @@ export default function UnsubscribeApp() {
                           </label>
                         </>
                       )}
-                      {d.hasZoom && (
+                      {d.hasZoom && d.showDelegierter && (
                         <label className="check">
                           <input
                             type="checkbox"

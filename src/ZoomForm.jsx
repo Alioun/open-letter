@@ -13,6 +13,9 @@ export const ZoomForm = memo(function ZoomForm({
   onSubmit,
   serverError,
   kvNames,
+  // Whether the "Ich bin Delegierte*r" field is shown — admin-toggleable at
+  // runtime (delivered via /api/zoom-count), defaults handled by the caller.
+  showDelegierter = false,
 }) {
   const [name, setName] = useState("");
   const [email, setEmail] = useState("");
@@ -230,7 +233,7 @@ export const ZoomForm = memo(function ZoomForm({
         )}
       </div>
 
-      {F.showDelegierter && (
+      {showDelegierter && (
         <div className="checks">
           <label className="check">
             <input

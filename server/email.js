@@ -141,7 +141,16 @@ const URL_VARIABLES = new Set([
 ]);
 
 export function interpolateTemplate(value, variables = {}) {
-  return String(value || "").replace(
+  // Conditional sections: {{#var}}…{{/var}} keep their inner block only when the
+  // variable is truthy, else the whole block (markers included) is dropped. Lets
+  // config templates gate optional buttons (e.g. the delegate CTA) on a value the
+  // server sets to "" when the corresponding feature is off. Runs before the plain
+  // {{var}} substitution below.
+  const sectioned = String(value || "").replace(
+    /\{\{#(\w+)\}\}([\s\S]*?)\{\{\/\1\}\}/g,
+    (_, key, inner) => (variables[key] ? inner : ""),
+  );
+  return sectioned.replace(
     /\{\{\s*(name|firstName|confirmUrl|deleteUrl|signerCount|unsubscribeUrl|eventLabel|eventWhen|linkInfo|zoomJaUrl|zoomJaDelegiertUrl)\s*\}\}/g,
     (_, key) => {
       const raw = String(variables[key] ?? "");

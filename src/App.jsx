@@ -240,6 +240,20 @@ export default function App() {
   const [zoomError, setZoomError] = useState(null);
   const [zoomCount, setZoomCount] = useState(0);
   const [zoomEventAt, setZoomEventAt] = useState(null);
+  // Runtime-editable Treffen settings (admin panel → /api/zoom-count). Seeded
+  // from the bundled config so there's no flash before the fetch resolves.
+  const [zoomShowDelegierter, setZoomShowDelegierter] = useState(
+    Boolean(cfg.zoom?.form?.showDelegierter),
+  );
+  const [zoomMode, setZoomMode] = useState(cfg.zoom?.mode || "online");
+  const [zoomLocation, setZoomLocation] = useState({
+    name: cfg.zoom?.location?.name || "",
+    address: cfg.zoom?.location?.address || "",
+    mapsUrl: cfg.zoom?.location?.mapsUrl || "",
+  });
+  const [zoomNavLabelRt, setZoomNavLabelRt] = useState(
+    cfg.zoom?.navLabel || "Treffen",
+  );
 
   const emailTrapRef = useFocusTrap(!!emailModal);
   const successTrapRef = useFocusTrap(showSuccess);
@@ -298,6 +312,11 @@ export default function App() {
         const data = await res.json();
         setZoomCount(data.count || 0);
         if (data.eventAt) setZoomEventAt(data.eventAt);
+        if (typeof data.showDelegierter === "boolean")
+          setZoomShowDelegierter(data.showDelegierter);
+        if (data.mode) setZoomMode(data.mode);
+        if (data.location) setZoomLocation(data.location);
+        if (data.navLabel) setZoomNavLabelRt(data.navLabel);
       }
     } catch {}
   }, []);
@@ -416,11 +435,11 @@ export default function App() {
   const navItems = successMode
     ? cfg.nav.filter((n) => n.id !== "unterzeichnen")
     : cfg.nav;
-  const zoomNavLabel = cfg.zoom?.navLabel || "Treffen";
+  const zoomNavLabel = zoomNavLabelRt || "Treffen";
   const showZoomNav = zoomEnabled && zoomOpen;
   // In-person meeting location (shown in the #zoom section when mode is inperson).
-  const zoomInPerson = cfg.zoom?.mode === "inperson";
-  const zoomLocationText = [cfg.zoom?.location?.name, cfg.zoom?.location?.address]
+  const zoomInPerson = zoomMode === "inperson";
+  const zoomLocationText = [zoomLocation?.name, zoomLocation?.address]
     .filter(Boolean)
     .join(", ");
   const ctaToZoom = successMode && showZoomNav;
@@ -711,11 +730,11 @@ export default function App() {
               {zoomInPerson && zoomLocationText && (
                 <p className="zoom-where">
                   <strong>Ort:</strong> {zoomLocationText}
-                  {cfg.zoom?.location?.mapsUrl && (
+                  {zoomLocation?.mapsUrl && (
                     <>
                       {" · "}
                       <a
-                        href={cfg.zoom.location.mapsUrl}
+                        href={zoomLocation.mapsUrl}
                         target="_blank"
                         rel="noopener noreferrer"
                       >
@@ -739,6 +758,7 @@ export default function App() {
               onSubmit={handleZoomSubmit}
               serverError={zoomError}
               kvNames={signFormKvNames}
+              showDelegierter={zoomShowDelegierter}
             />
           </div>
         </div>
@@ -1090,7 +1110,7 @@ export default function App() {
         {total.toLocaleString(locale)} {cfg.hero.counterLabel}
       </div>
 
-      <header className="topbar">
+      <header className={"topbar" + (showCta ? "" : " topbar--no-cta")}>
         <a
           href="#main"
           className="wordmark"
@@ -1212,43 +1232,57 @@ export default function App() {
                 {cfg.success?.kicker && (
                   <span className="success-kicker">{cfg.success.kicker}</span>
                 )}
-                <h1 className="headline">{cfg.success?.headline}</h1>
+                <h1 className="headline">
+                  {cfg.success?.headlineLines
+                    ? cfg.success.headlineLines.map((line, i) => (
+                        <Fragment key={i}>
+                          {i > 0 && <br />}
+                          <span className={line.style}>{line.text}</span>
+                        </Fragment>
+                      ))
+                    : cfg.success?.headline}
+                </h1>
                 {cfg.success?.countLabel && (
-                  <p className="hero-success-count">
-                    <strong>{total.toLocaleString(locale)}</strong>{" "}
-                    {cfg.success.countLabel}
-                  </p>
-                )}
-                {cfg.success?.body && (
-                  <p className="hero-success-body">{cfg.success.body}</p>
-                )}
-                <div className="hero-actions">
-                  {zoomEnabled && zoomOpen && (
-                    <button
-                      className="scrollcta"
-                      onClick={() => scrollTo("zoom")}
-                    >
-                      {cfg.success?.ctaZoom || "Anmelden"}{" "}
-                      <span aria-hidden="true">→</span>
-                    </button>
-                  )}
-                  {antragUrlValid && (
-                    <a
-                      className="scrollcta scrollcta--secondary"
-                      href={antragUrl}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                    >
-                      {cfg.success?.antragLabel || "Mehr erfahren"}{" "}
-                      <span aria-hidden="true">→</span>
-                    </a>
-                  )}
-                  <button
-                    className="scrollcta scrollcta--secondary"
-                    onClick={() => scrollTo("brief")}
+                  <div
+                    className="counter-card hero-success-card"
+                    aria-label={`${total.toLocaleString(locale)} ${cfg.success.countLabel}`}
                   >
-                    {cfg.hero.ctaSecondary}
-                  </button>
+                    <div className="num">{total.toLocaleString(locale)}</div>
+                    <div className="meta">{cfg.success.countLabel}</div>
+                  </div>
+                )}
+                <div className="hero-success-cta">
+                  {cfg.success?.body && (
+                    <p className="hero-success-body">{cfg.success.body}</p>
+                  )}
+                  <div className="hero-actions">
+                    {zoomEnabled && zoomOpen && (
+                      <button
+                        className="scrollcta"
+                        onClick={() => scrollTo("zoom")}
+                      >
+                        {cfg.success?.ctaZoom || "Anmelden"}{" "}
+                        <span aria-hidden="true">→</span>
+                      </button>
+                    )}
+                    {antragUrlValid && (
+                      <a
+                        className="scrollcta scrollcta--secondary"
+                        href={antragUrl}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                      >
+                        {cfg.success?.antragLabel || "Mehr erfahren"}{" "}
+                        <span aria-hidden="true">→</span>
+                      </a>
+                    )}
+                    <button
+                      className="scrollcta scrollcta--secondary"
+                      onClick={() => scrollTo("brief")}
+                    >
+                      {cfg.hero.ctaSecondary}
+                    </button>
+                  </div>
                 </div>
               </div>
             ) : (
