@@ -14,8 +14,14 @@ import { openEncrypted, DB_PATH } from "../db/connection.js";
 const BACKUP_DIR = process.env.BACKUP_DIR || "/app/backups";
 const BACKUP_KEEP = Math.max(1, parseInt(process.env.BACKUP_KEEP || "48", 10));
 const BACKUP_GZIP = process.env.BACKUP_GZIP !== "false"; // gzip by default
-const BACKUP_KEY = process.env.BACKUP_ENCRYPTION_KEY || "";
-if (process.env.NODE_ENV === "production" && !BACKUP_KEY) {
+// Resolve the backup key the same way restore does: prefer a dedicated
+// BACKUP_ENCRYPTION_KEY, else fall back to DATABASE_ENCRYPTION_KEY. This keeps
+// backup.js and restore-backup.js in agreement and guarantees a backup is never
+// written with an empty key (which SQLCipher treats as "no encryption").
+const BACKUP_KEY =
+  process.env.BACKUP_ENCRYPTION_KEY || process.env.DATABASE_ENCRYPTION_KEY || "";
+// Production still requires a *separate* backup key for defence-in-depth.
+if (process.env.NODE_ENV === "production" && !process.env.BACKUP_ENCRYPTION_KEY) {
   throw new Error(
     "BACKUP_ENCRYPTION_KEY must be set in production to protect encrypted backups.",
   );
@@ -26,6 +32,12 @@ const sqlQuote = (s) => `'${String(s).replace(/'/g, "''")}'`;
 
 // Write a consistent encrypted snapshot to `destPath` (a SQLCipher DB file).
 export async function exportEncrypted(destPath) {
+  // Fail closed: never emit a plaintext backup (ATTACH … KEY '' = unencrypted).
+  if (!BACKUP_KEY) {
+    throw new Error(
+      "No backup encryption key (set BACKUP_ENCRYPTION_KEY or DATABASE_ENCRYPTION_KEY) — refusing to write an unencrypted backup.",
+    );
+  }
   const db = await openEncrypted(DB_PATH);
   try {
     await db.run(

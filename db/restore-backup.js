@@ -64,6 +64,11 @@ async function resolveBackupFile(arg) {
 
 async function main() {
   if (!DB_KEY) throw new Error("DATABASE_ENCRYPTION_KEY is required");
+  if (!BACKUP_KEY) {
+    throw new Error(
+      "No backup key (set BACKUP_ENCRYPTION_KEY or DATABASE_ENCRYPTION_KEY) to open the backup.",
+    );
+  }
   const arg = process.argv[2];
   if (!arg) {
     throw new Error("Usage: bun db/restore-backup.js <backup-file | --latest>");
