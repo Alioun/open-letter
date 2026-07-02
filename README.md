@@ -120,7 +120,7 @@ bun run db:seed                # seeds 200 signers, then trickles 1 every 6s
 
 ## Quick Start (Docker — demo with sample data)
 
-No local Bun or Postgres needed:
+No local Bun needed:
 
 ```bash
 docker compose -f docker-compose.dev.yml up --build
@@ -142,7 +142,13 @@ This creates the encrypted SQLite database, seeds 200 verified signers, trickles
 | `NODE_ENV`         | No         | `development`           | `production` enables CSP headers + asset minification                                                                 |
 | `ADMIN_PATH`       | Yes        | —                       | Secret single-segment admin path, without leading or trailing slashes. Use `my-secret-panel`, not `/my-secret-panel`. |
 | `ADMIN_PASSWORD`   | Yes        | —                       | Admin login password                                                                                                  |
-| `ADMIN_JWT_SECRET` | Yes        | —                       | Long random secret for admin session JWTs                                                                             |
+| `ADMIN_JWT_SECRET` | Yes        | —                       | Long random secret for admin session JWTs. In production it must be **distinct** from `API_TOKEN_SECRET` (fails closed if equal). |
+| `API_TOKEN_SECRET` | Yes (prod) | —                       | Secret for signing public API session JWTs. Must be **distinct** from `ADMIN_JWT_SECRET` in production.               |
+| `REQUIRE_API_TOKEN`| No         | `true`                  | Gate public read endpoints behind a session token from `/api/session`. Set `false` to disable the gate (escape hatch). |
+| `ALLOWED_ORIGINS`  | No         | `BASE_URL`              | Comma-separated CORS allowlist for public API responses. Origins not listed fall back to `BASE_URL`.                  |
+| `TRUST_PROXY`      | No         | `false`                 | Trust `X-Forwarded-For` for the client IP — set `true` behind a reverse proxy so per-IP rate-limiting is accurate. Warns at startup in production when unset. |
+| `DATABASE_JOURNAL_MODE` | No    | SQLite default (`DELETE` in compose) | SQLite journal mode (`PRAGMA journal_mode`). Compose sets `DELETE`.                                   |
+| `GIT_COMMIT`       | No         | —                       | Commit SHA surfaced at `/api/version`. Falls back to `COMMIT_SHA`, `SOURCE_COMMIT`, `GIT_SHA`, `SOURCE_VERSION`, and PaaS vars (`RAILWAY_`/`RENDER_`/`VERCEL_GIT_COMMIT_SHA`). |
 | `EMAIL_PROVIDER`   | No         | `email.provider` (config) | Mail transport: `resend` or `smtp`. Overrides the active letter config.                                            |
 | `EMAIL_FROM`       | No         | `email.from` (config)   | Verified sender for either provider (alias of `RESEND_FROM`)                                                          |
 | `RESEND_API_KEY`   | Yes when provider=resend (prod) | —          | Resend API key used to send transactional email                                                                       |
@@ -174,16 +180,39 @@ See `.env.example` for a template.
 
 ## API
 
+Public read endpoints require a short-lived session token from `/api/session`
+(when `REQUIRE_API_TOKEN` is on) and are per-IP rate-limited. The admin API lives
+under `/api/admin/*` behind the admin login and is not listed here.
+
 | Method | Path                              | Description                                              |
 | ------ | --------------------------------- | -------------------------------------------------------- |
 | `GET`  | `/api/health`                     | Health check — `{ok, db}`, returns 503 if DB unreachable |
-| `GET`  | `/api/stats`                      | Signature totals — `{total, today, week, kvCount}`       |
+| `GET`  | `/api/version`                    | Build info — `{commit, letter, env, runtime, startedAt}` (no-store) |
+| `GET`  | `/api/session`                    | Issue a short-lived (30 min) public session token — `{token, expiresIn}` |
+| `GET`  | `/api/stats`                      | Signature totals + milestones/goal (token-gated read)   |
 | `GET`  | `/api/signers`                    | Verified signers list (paginated, filterable)            |
+| `GET`  | `/api/occupations`                | Occupation aggregates (token-gated read)                |
+| `GET`  | `/api/kreisverband-stats`         | Per-Kreisverband counts (token-gated read)              |
+| `GET`  | `/api/state-stats`                | Per-German-state counts (token-gated read)              |
 | `POST` | `/api/sign`                       | Submit a signature — triggers verification email         |
+| `POST` | `/api/resend-verification`        | Re-send the verification email for a pending signature   |
 | `GET`  | `/api/confirm/:token`             | Email confirmation link — verifies + redirects           |
+| `POST` | `/api/request-deletion`           | Request a signature-deletion link by email               |
+| `POST` | `/api/delete/:token`              | Delete a signature via a deletion-link token             |
 | `GET`  | `/api/unsubscribe/:token`         | Newsletter unsubscribe state                             |
 | `POST` | `/api/unsubscribe/:token/opt-out` | Opt out of newsletter emails                             |
 | `POST` | `/api/unsubscribe/:token/delete`  | Delete signature from a newsletter link                  |
+
+### Event / Zoom endpoints (only when `features.zoomEvent`)
+
+| Method | Path                          | Description                                                     |
+| ------ | ----------------------------- | -------------------------------------------------------------- |
+| `POST` | `/api/zoom-register`          | Register for the event (online Zoom or in-person meeting)      |
+| `GET`  | `/api/zoom-count`             | Current registration count (token-gated read)                  |
+| `GET`  | `/api/termin.ics`             | Calendar (ICS) file for the event                              |
+| `GET`  | `/api/zoom-anmelden/:token`   | Self-service registration link (online)                        |
+| `GET`  | `/api/treffen-anmelden/:token`| Self-service registration link (in-person meeting)             |
+| `GET`  | `/api/zoom-abmelden/:token`   | Self-service de-registration link                              |
 
 ### POST /api/sign
 
@@ -289,7 +318,10 @@ relays) for `smtp`. The app fails closed at startup if they're missing.
 ## Security
 
 - **Headers**: `X-Content-Type-Options: nosniff`, `X-Frame-Options: DENY`, `Referrer-Policy: strict-origin-when-cross-origin`. In production: `Content-Security-Policy` restricting sources to `'self'` + Google Fonts.
-- **Rate limiting**: In-memory sliding window, 3 sign requests per IP per 15 minutes.
+- **Rate limiting**: In-memory sliding window, 3 sign requests per IP per 15 minutes; public read endpoints are also per-IP rate-limited.
+- **Public API session tokens**: read endpoints are gated behind a 30-minute JWT issued by `/api/session`, signed with `API_TOKEN_SECRET` (a separate key from the admin JWTs). Set `REQUIRE_API_TOKEN=false` to disable the gate.
+- **CORS allowlist**: API responses are restricted to `ALLOWED_ORIGINS` (defaults to `BASE_URL`).
+- **Proxy-aware rate limiting**: with `TRUST_PROXY=true` the client IP is read from `X-Forwarded-For`, so per-IP limits stay correct behind a reverse proxy.
 - **Input sanitization**: All text trimmed, HTML tags stripped, lengths capped. Parameterized SQL queries throughout.
 - **Token security**: `crypto.randomUUID()` (128-bit), 24h expiry, cleared after use.
 - **No email exposure**: `/api/signers` never returns email addresses. `/api/sign` returns the same response whether the email exists or not.
@@ -372,6 +404,6 @@ encrypted snapshots. Back up the key separately from both.
 docker compose -f docker-compose.dev.yml up --build
 ```
 
-Includes Postgres, auto-seeds 200 signers, and trickles new ones every 6 seconds. Default DB password: `devpass`.
+No Postgres — this builds the encrypted SQLite database, auto-seeds 200 verified signers, and trickles a new one every 6 seconds. It uses dev defaults for `DATABASE_ENCRYPTION_KEY` / `API_TOKEN_SECRET` when they aren't set.
 
 In all cases, the app runs `db/setup.js` on startup to ensure the schema exists. Health check at `/api/health` confirms DB connectivity.
