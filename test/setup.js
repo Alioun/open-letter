@@ -15,6 +15,11 @@ const repoRoot = join(__dirname, "..");
 const tmp = mkdtempSync(join(tmpdir(), "diaet-test-"));
 process.env.DATABASE_PATH = join(tmp, "test.db");
 process.env.DATABASE_ENCRYPTION_KEY = "test-encryption-key-123";
+// Pin the backup key too, so a developer's local .env can't leak a mismatched
+// BACKUP_ENCRYPTION_KEY into the test process (which would make backups
+// unreadable with the test key). Setting it here also blocks connection.js's
+// loadDotEnv from importing the real value.
+process.env.BACKUP_ENCRYPTION_KEY = "test-encryption-key-123";
 if (!process.env.HONKER_EXTENSION_PATH) {
   const ext =
     process.platform === "darwin"
