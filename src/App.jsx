@@ -2404,10 +2404,14 @@ function DatenschutzModal({ onClose }) {
             werden <strong>
               ausschließlich für diese Petition verwendet
             </strong>{" "}
-            und nicht an Dritte weitergegeben oder für andere Zwecke genutzt.
-            Sie werden für die Dauer der Initiative gespeichert und bei
-            Beendigung der Kampagne vollständig gelöscht , spätestens jedoch 3
-            Jahre nach Unterzeichnung (§ 195 BGB) oder auf frühere Anfrage.
+            und – mit Ausnahme der in dieser Erklärung genannten Dienstleister
+            (siehe unten) – nicht an unbeteiligte Dritte weitergegeben oder für
+            andere Zwecke genutzt. Sie werden für die Dauer der Initiative
+            gespeichert und bei Beendigung der Kampagne vollständig gelöscht,
+            spätestens jedoch 3 Jahre nach Unterzeichnung (§ 195 BGB) oder auf
+            frühere Anfrage. Nicht bestätigte Eintragungen – bei denen der
+            Bestätigungslink nicht angeklickt wurde – werden automatisch
+            spätestens 24 Stunden nach der Eintragung gelöscht.
           </p>
           <p>
             <strong>c) Newsletter / Kampagnen-Updates</strong>
@@ -2460,6 +2464,16 @@ function DatenschutzModal({ onClose }) {
               . Rechtsgrundlage ist Art. 6 Abs. 1 lit. a und lit. f DS-GVO.
             </p>
           )}
+          <p>
+            <strong>e) Ermittlung des Bundeslandes</strong>
+            <br />
+            Sofern du einen Kreisverband angibst, wird dieser zur Zuordnung des
+            Bundeslandes einmalig an den Dienst Nominatim der OpenStreetMap
+            Foundation (Server in der EU / im Vereinigten Königreich)
+            übermittelt. Dein Name und deine E-Mail-Adresse werden dabei nicht
+            übertragen. Rechtsgrundlage ist Art. 6 Abs. 1 lit. f DS-GVO
+            (berechtigtes Interesse an einer regionalen Auswertung).
+          </p>
 
           <h5>3. Deine Rechte</h5>
           <p>
@@ -2480,19 +2494,19 @@ function DatenschutzModal({ onClose }) {
           <h5>4. Beschwerderecht</h5>
           <p>
             Wenn du der Ansicht bist, dass die Verarbeitung deiner Daten gegen
-            Datenschutzrecht verstößt, kannst du dich bei der zuständigen
-            Aufsichtsbehörde beschweren:
-          </p>
-          <p>
-            Bundesbeauftragte für den Datenschutz und die Informationsfreiheit
-            (BfDI) -{" "}
+            Datenschutzrecht verstößt, kannst du dich bei einer
+            Datenschutz-Aufsichtsbehörde beschweren. Für private Verantwortliche
+            ist die Landesdatenschutzbehörde des Bundeslandes zuständig, in dem
+            die verantwortliche Stelle ihren Sitz hat. Eine Übersicht aller
+            deutschen Aufsichtsbehörden findest du hier:{" "}
             <a
-              href="https://www.bfdi.bund.de"
+              href="https://www.bfdi.bund.de/DE/Service/Anschriften/Laender/Laender-node.html"
               target="_blank"
               rel="noopener noreferrer"
             >
-              www.bfdi.bund.de
+              Liste der Datenschutz-Aufsichtsbehörden
             </a>
+            .
           </p>
 
           <hr />
