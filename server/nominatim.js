@@ -10,11 +10,25 @@ const NOMINATIM_BASE = "https://nominatim.openstreetmap.org/search";
 const USER_AGENT = "GehaltsdeckelJetzt/1.0 (kontakt@gehaltsdeckel.jetzt)";
 const WORKER_INTERVAL = 5000;
 const RATE_LIMIT_MS = 1100;
+const FETCH_TIMEOUT_MS = 10000;
+// Bounds so a burst of unique, unresolvable Kreisverband names can't grow the
+// in-memory queue / dedupe set without limit. The durable cache lives in the DB
+// (kv_state_cache), so evicting from processedKvs only risks a re-query.
+const MAX_QUEUE = 5000;
+const MAX_PROCESSED = 10000;
 
 const queue = [];
 const processedKvs = new Set();
 let workerRunning = false;
 let lastNominatimCall = 0;
+
+function markProcessed(kreisverband) {
+  processedKvs.add(kreisverband);
+  if (processedKvs.size > MAX_PROCESSED) {
+    // Evict the oldest entry (Set preserves insertion order).
+    processedKvs.delete(processedKvs.values().next().value);
+  }
+}
 
 export function enqueueStateResolution(signerId, kreisverband) {
   if (!kreisverband) return;
@@ -28,6 +42,7 @@ export function enqueueStateResolution(signerId, kreisverband) {
   }
 
   if (processedKvs.has(kreisverband)) return;
+  if (queue.length >= MAX_QUEUE) return;
 
   queue.push({ signerId, kreisverband });
 }
@@ -49,6 +64,7 @@ async function resolveViaNominatim(kreisverband) {
 
   const res = await fetch(`${NOMINATIM_BASE}?${params}`, {
     headers: { "User-Agent": USER_AGENT },
+    signal: AbortSignal.timeout(FETCH_TIMEOUT_MS),
   });
 
   if (!res.ok) {
@@ -77,7 +93,7 @@ async function processQueue() {
 
     try {
       const state = await resolveViaNominatim(item.kreisverband);
-      processedKvs.add(item.kreisverband);
+      markProcessed(item.kreisverband);
 
       if (state) {
         await upsertKvStateCache(item.kreisverband, state, "nominatim");
