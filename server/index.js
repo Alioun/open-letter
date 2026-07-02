@@ -70,6 +70,7 @@ import {
   updateSignerByEmail,
   updateZoomByEmail,
   deleteSignerByUnsubscribeToken,
+  deleteExpiredUnverifiedSigners,
   getStateStats,
   ensureKvStateCacheTable,
   getStateResolutionStats,
@@ -259,6 +260,11 @@ if (!ADMIN_PATH || !ADMIN_PASSWORD || !ADMIN_JWT_SECRET) {
 if (ADMIN_JWT_SECRET.length < 32) {
   throw new Error("ADMIN_JWT_SECRET must be at least 32 characters long.");
 }
+if (!isDev && ADMIN_PASSWORD.length < 16) {
+  throw new Error(
+    "ADMIN_PASSWORD must be at least 16 characters long in production.",
+  );
+}
 if (!isDev && !TRUST_PROXY) {
   console.warn(
     "[security] TRUST_PROXY is not set — set TRUST_PROXY=true when running behind a reverse proxy for accurate IP rate-limiting.",
@@ -437,11 +443,16 @@ function getClientIp(req) {
         .split(",")
         .map((s) => s.trim())
         .filter(Boolean);
-      return parts[parts.length - 1] || "unknown";
+      const last = parts[parts.length - 1];
+      if (last) return last;
     }
-    return "unknown";
+    // Proxy sent no forwarding headers — fall through to the socket address.
   }
-  return req.headers.get("x-real-ip") || "unknown";
+  // Not behind a trusted proxy (or none of the forwarding headers were set):
+  // use the real TCP peer address. Forwarding headers are client-controlled,
+  // so trusting them without TRUST_PROXY lets an attacker rotate X-Real-IP to
+  // dodge every per-IP rate limit (incl. admin-login brute-force protection).
+  return server.requestIP(req)?.address || "unknown";
 }
 
 const MAX_BODY_BYTES = 128 * 1024;
@@ -492,7 +503,8 @@ async function parseJsonBody(req) {
     return JSON.parse(text);
   }
 
-  return await parseJsonBody(req);
+  // No readable stream body (the content-length cap above still applies).
+  return await req.json();
 }
 
 async function constantTimePasswordMatches(submitted) {
@@ -513,7 +525,9 @@ async function createAdminToken() {
     .setProtectedHeader({ alg: "HS256" })
     .setSubject("admin")
     .setIssuedAt()
-    .setExpirationTime("8h")
+    // Short TTL limits the blast radius of a leaked admin token (no revocation
+    // list exists; rotating ADMIN_JWT_SECRET is the only hard kill switch).
+    .setExpirationTime("2h")
     .sign(jwtSecret);
 }
 
@@ -2679,6 +2693,11 @@ async function handleMaintenanceJob({ task }) {
     await runZoomMailingWorker();
   } else if (task === "backup") {
     await runBackup();
+  } else if (task === "purge-unverified") {
+    const removed = await deleteExpiredUnverifiedSigners();
+    if (removed > 0) {
+      console.log(`[purge] deleted ${removed} expired unverified sign-up(s)`);
+    }
   }
 }
 
@@ -2693,6 +2712,10 @@ try {
   });
   await registerSchedule("hourly-backup", "maintenance", "0 * * * *", {
     task: "backup",
+  });
+  // DSGVO: sweep expired, never-confirmed sign-ups daily at 03:30.
+  await registerSchedule("purge-unverified", "maintenance", "30 3 * * *", {
+    task: "purge-unverified",
   });
   startWorker({
     campaigns: handleCampaignJob,

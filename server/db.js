@@ -953,6 +953,18 @@ export async function deleteSignerByUnsubscribeToken(token) {
   return Boolean(row);
 }
 
+// DSGVO data minimisation: drop sign-ups that were never email-confirmed once
+// their verification token has expired (token TTL is 24h). Confirmed rows
+// (verified = 1, token cleared) are never touched. Returns the number deleted.
+export async function deleteExpiredUnverifiedSigners() {
+  const res = await db
+    .query(
+      `DELETE FROM signers WHERE verified = 0 AND token_expires_at < ?`,
+    )
+    .run(nowIso());
+  return res?.changes ?? 0;
+}
+
 // Resolve email from either a signer or zoom unsubscribe token.
 export async function resolveEmailFromToken(token, source) {
   if (source === "zoom") {
