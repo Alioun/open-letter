@@ -2757,8 +2757,9 @@ try {
       emails: sendQueuedEmail,
     },
     // Transactional mail is claimed in bigger batches and sent with overlap, so
-    // a sign-up burst drains at provider speed rather than one mail per tick.
-    { batch: 25, concurrency: { emails: 10 } },
+    // a sign-up burst drains at provider speed rather than one mail per tick,
+    // and polled on its own loop so a long campaign send can't delay it.
+    { batch: 25, concurrency: { emails: 10 }, isolated: ["emails"] },
   );
   jobsReady = true;
 } catch (err) {

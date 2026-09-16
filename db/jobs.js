@@ -23,7 +23,7 @@ const EXT = defaultExt();
 const WORKER_ID = `w-${process.pid}`;
 
 let started = false;
-let timer = null;
+const timers = new Set();
 let booted = false;
 
 // Load the extension into the keyed connection and create Honker's tables.
@@ -65,12 +65,18 @@ export async function registerSchedule(name, queue, expr, payload = {}, { priori
 // Transactional email needs more than 1: a provider round-trip is ~100-300ms,
 // so strictly sequential sends would cap the queue at a handful per second and
 // a sign-up burst would take minutes to drain.
+//
+// `isolated` queues get a poll loop of their own. The main loop awaits each
+// handler before moving to the next queue, so a long handler (a campaign send
+// runs for many minutes) would otherwise hold up every queue after it —
+// including the verification mail of someone signing up during the send.
 export function startWorker(handlers, {
   queues = Object.keys(handlers),
   intervalMs = 1000,
   batch = 5,
   visibilityS = 1800,
   concurrency = {},
+  isolated = [],
 } = {}) {
   if (started) return;
   started = true;
@@ -81,11 +87,11 @@ export function startWorker(handlers, {
   const ack = db.query("SELECT honker_ack(?, ?) AS v");
   const retry = db.query("SELECT honker_retry(?, ?, ?, ?) AS v");
 
-  async function loop() {
+  async function loop(loopQueues, withTick) {
     try {
-      await tick.get(Math.floor(Date.now() / 1000));
+      if (withTick) await tick.get(Math.floor(Date.now() / 1000));
 
-      for (const queue of queues) {
+      for (const queue of loopQueues) {
         await sweep.get(queue);
         const res = await claim.get(queue, WORKER_ID, batch, visibilityS);
         const jobs = res?.rows ? JSON.parse(res.rows) : [];
@@ -119,16 +125,24 @@ export function startWorker(handlers, {
     } catch (err) {
       console.error("[jobs] loop error:", err);
     } finally {
-      if (started) timer = setTimeout(loop, intervalMs);
+      if (started) {
+        const t = setTimeout(() => {
+          timers.delete(t);
+          loop(loopQueues, withTick);
+        }, intervalMs);
+        timers.add(t);
+      }
     }
   }
 
-  loop();
+  const shared = queues.filter((q) => !isolated.includes(q));
+  loop(shared, true);
+  for (const q of queues.filter((q) => isolated.includes(q))) loop([q], false);
   console.log(`[jobs] worker started (queues: ${queues.join(", ")})`);
 }
 
 export function stopWorker() {
   started = false;
-  if (timer) clearTimeout(timer);
-  timer = null;
+  for (const t of timers) clearTimeout(t);
+  timers.clear();
 }
