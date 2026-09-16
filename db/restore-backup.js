@@ -30,6 +30,7 @@ const TABLES = [
   "campaigns",
   "zoom_registrations",
   "deletion_requests",
+  "zoom_pending",
   "zoom_event_mailings",
   "app_settings",
   "kv_state_cache",

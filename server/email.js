@@ -458,3 +458,28 @@ export async function sendVerificationEmail({
     headers,
   });
 }
+
+export async function sendTreffenVerificationEmail({
+  to,
+  name,
+  token,
+  baseUrl,
+  eventLabel = "",
+  eventWhen = "",
+}) {
+  console.log(`[email] treffen verification toDomain=${getEmailDomain(to)}`);
+  const rendered = await renderTemplateBySlug("zoom_verification", {
+    name,
+    firstName: name.split(/\s/)[0],
+    confirmUrl: `${baseUrl}/api/treffen-bestaetigen/${token}`,
+    eventLabel,
+    eventWhen,
+  });
+  if (!rendered) throw new Error("zoom_verification template missing");
+
+  await sendRenderedEmail({
+    to,
+    subject: rendered.subject,
+    html: rendered.html,
+  });
+}

@@ -8,6 +8,7 @@ import {
   getSignerIdByEmail,
   getDeletionRequestForMail,
   getZoomRegistrationByEmail,
+  getZoomPendingForMail,
   issueUnsubscribeToken,
   issueZoomUnsubscribeToken,
 } from "./db.js";
@@ -58,6 +59,20 @@ export async function prepareQueuedEmail(payload) {
         signerId: await getSignerIdByEmail(req.email),
         email: req.email,
       })),
+    };
+  }
+
+  if (kind === "treffen-verification") {
+    const pending = await getZoomPendingForMail(payload.pendingId);
+    if (!pending || !notExpired(pending.expires_at)) return null;
+    // No unsubscribe link: nothing is registered yet, and the mail is sent
+    // only once per sign-up.
+    return {
+      kind,
+      to: pending.email,
+      name: pending.name,
+      token: pending.token,
+      baseUrl,
     };
   }
 

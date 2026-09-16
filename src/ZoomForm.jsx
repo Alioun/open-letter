@@ -72,7 +72,7 @@ export const ZoomForm = memo(function ZoomForm({
   if (done) {
     return (
       <div className="form-card zoom-done" role="status">
-        <span className="badge">{F.doneBadge || "Angemeldet"}</span>
+        <span className="badge">{F.doneBadge || "Fast geschafft"}</span>
         <div className="check-anim">
           <svg
             viewBox="0 0 24 24"
@@ -86,10 +86,10 @@ export const ZoomForm = memo(function ZoomForm({
             <polyline points="20 6 9 17 4 12"></polyline>
           </svg>
         </div>
-        <h3>{F.doneTitle || "Du bist dabei."}</h3>
+        <h3>{F.doneTitle || "Bitte bestätige deine Anmeldung."}</h3>
         <p className="sub2">
           {F.doneText ||
-            "Wir haben dir eine Bestätigung per E-Mail geschickt. Den Einwahllink bekommst du rechtzeitig vor dem Termin."}
+            "Wir haben dir eine E-Mail geschickt. Erst wenn du den Link darin anklickst, bist du angemeldet."}
         </p>
       </div>
     );

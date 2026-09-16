@@ -137,6 +137,20 @@ CREATE INDEX IF NOT EXISTS idx_zoom_reg_unsub
   ON zoom_registrations (unsubscribe_token)
   WHERE unsubscribe_token IS NOT NULL;
 
+-- Treffen sign-ups from the public form that haven't clicked the confirmation
+-- link yet. Only confirmed rows move to zoom_registrations, which is what every
+-- Treffen mailing reads. Unconfirmed rows are deleted once the link expires.
+CREATE TABLE IF NOT EXISTS zoom_pending (
+  id            INTEGER PRIMARY KEY AUTOINCREMENT,
+  name          TEXT NOT NULL,
+  email         TEXT NOT NULL UNIQUE,
+  kreisverband  TEXT DEFAULT '',
+  delegierter   INTEGER NOT NULL DEFAULT 0,
+  token         TEXT NOT NULL UNIQUE,
+  expires_at    TEXT NOT NULL,
+  created_at    TEXT DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ','now'))
+);
+
 -- Pending "delete my data" requests from the privacy-policy form. Keyed by
 -- email, not by signer, so an address that only registered for the Treffen can
 -- be erased too. Rows live for the 24h link validity and are removed on use.

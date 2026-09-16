@@ -519,6 +519,10 @@ export async function eraseEmail(email) {
       `DELETE FROM deletion_requests /* public-neutral */ WHERE email = ? RETURNING id`,
     )
     .get(email);
+  const pending = await db
+    .query(`DELETE FROM zoom_pending /* public-neutral */ WHERE email = ? RETURNING id`)
+    .get(email);
+  if (pending) await deleteJobsByPayload("emails", "pendingId", pending.id);
   if (signer) await deleteEmailJobsForSigner(signer.id);
   if (request) await deleteJobsByPayload("emails", "requestId", request.id);
   return Boolean(signer || zoom);
@@ -660,6 +664,103 @@ export async function deleteZoomRegistrationByUnsubscribeToken(token) {
     )
     .get(token);
   return Boolean(row);
+}
+
+// ---- Treffen sign-up with double opt-in ------------------------------------
+
+// Record a sign-up from the public form. Nothing is written to
+// zoom_registrations until the address confirms, so an unauthenticated request
+// can neither register someone else nor change an existing registration.
+// Returns { status: "registered" } when the address is already registered,
+// otherwise { status: "pending", id } — an unexpired pending sign-up is kept as
+// it was (its link is simply mailed again), an expired one is replaced.
+export async function insertZoomPending({ name, email, kv, delegierter, token, expiresAt }) {
+  const registered = await db
+    .query(`SELECT 1 FROM zoom_registrations WHERE email = ?`)
+    .get(email);
+  if (registered) return { status: "registered" };
+  const row = await db
+    .query(
+      `INSERT INTO zoom_pending /* public-neutral */
+         (name, email, kreisverband, delegierter, token, expires_at)
+       VALUES (?, ?, ?, ?, ?, ?)
+       ON CONFLICT (email) DO UPDATE
+         SET name = excluded.name,
+             kreisverband = excluded.kreisverband,
+             delegierter = excluded.delegierter,
+             token = excluded.token,
+             expires_at = excluded.expires_at,
+             created_at = strftime('%Y-%m-%dT%H:%M:%fZ','now')
+         WHERE zoom_pending.expires_at <= ?
+       RETURNING id`,
+    )
+    .get(name, email, kv || "", B(delegierter), token, iso(expiresAt), nowIso());
+  if (row) return { status: "pending", id: row.id };
+  const existing = await db
+    .query(`SELECT id FROM zoom_pending WHERE email = ?`)
+    .get(email);
+  return { status: "pending", id: existing.id };
+}
+
+export async function getZoomPendingForMail(id) {
+  return (
+    boolify(
+      (await db
+        .query(
+          `SELECT id, name, email, kreisverband, delegierter, token, expires_at
+           FROM zoom_pending WHERE id = ?`,
+        )
+        .get(id)) || null,
+      ["delegierter"],
+    )
+  );
+}
+
+export async function getZoomPendingByToken(token) {
+  return boolify(
+    (await db
+      .query(
+        `SELECT id, name, email, kreisverband, delegierter FROM zoom_pending
+         WHERE token = ? AND expires_at > ?`,
+      )
+      .get(token, nowIso())) || null,
+    ["delegierter"],
+  );
+}
+
+// The confirmation link was used: move the sign-up into zoom_registrations.
+// Overwriting an existing registration is fine here — the request proved it
+// controls the address. Returns the registration, or null for a bad link.
+export async function confirmZoomPending(token) {
+  // No transaction: the connection is shared with concurrent requests. The
+  // DELETE … RETURNING claims the link atomically, so it works exactly once.
+  const pending = await db
+    .query(
+      `DELETE FROM zoom_pending /* public-neutral */
+       WHERE token = ? AND expires_at > ?
+       RETURNING name, email, kreisverband, delegierter`,
+    )
+    .get(token, nowIso());
+  if (!pending) return null;
+  const reg = await insertZoomRegistration({
+    name: pending.name,
+    email: pending.email,
+    kv: pending.kreisverband,
+    delegierter: Boolean(pending.delegierter),
+  });
+  return {
+    id: reg.id,
+    name: pending.name,
+    email: pending.email,
+    delegierter: Boolean(pending.delegierter),
+  };
+}
+
+export async function deleteExpiredZoomPending() {
+  const res = await db
+    .query(`DELETE FROM zoom_pending /* public-neutral */ WHERE expires_at < ?`)
+    .run(nowIso());
+  return res?.changes ?? 0;
 }
 
 // Treffen registrations are only kept for the event itself: once

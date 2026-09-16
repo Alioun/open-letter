@@ -225,6 +225,18 @@ export default {
       <p>Mit solidarischen Grüßen<br>Initiative Gehaltsdeckel</p>
     `,
       },
+      zoom_verification: {
+        name: "Treffen-Anmeldung bestätigen",
+        subject:
+          "Bitte bestätige deine Anmeldung zum Auswertungstreffen — Gehaltsdeckel jetzt",
+        htmlBody: `
+      <p>Hallo {{firstName}},</p>
+      <p>du möchtest am Auswertungstreffen der Unterzeichner*innen<strong>{{eventWhen}}</strong> teilnehmen.</p>
+      <p><a href="{{confirmUrl}}">Klicke hier, um deine Anmeldung zu bestätigen</a></p>
+      <p>Der Link ist 24 Stunden gültig. Erst nach der Bestätigung bist du angemeldet und bekommst Infos zum Treffen. Wenn du dich nicht angemeldet hast, kannst du diese E-Mail ignorieren – wir löschen die Angaben dann automatisch.</p>
+      <p>Mit solidarischen Grüßen<br>Initiative Gehaltsdeckel</p>
+    `,
+      },
       zoom_confirmation: {
         name: "Treffen-Anmeldung Bestatigung",
         subject:
@@ -400,10 +412,10 @@ export default {
       showDelegierter: false,
       delegierterLabel: "Ich bin Delegierte*r.",
       // Success/confirmation panel after submitting.
-      doneBadge: "Angemeldet",
-      doneTitle: "Du bist dabei.",
+      doneBadge: "Fast geschafft",
+      doneTitle: "Bitte bestätige deine Anmeldung.",
       doneText:
-        "Wir haben dir eine Bestätigung per E-Mail geschickt. Alle Infos zum Treffen bekommst du rechtzeitig vor dem Termin.",
+        "Wir haben dir eine E-Mail geschickt. Erst wenn du den Link darin anklickst, bist du angemeldet. Alle Infos zum Treffen bekommst du dann rechtzeitig vor dem Termin.",
     },
   },
 };

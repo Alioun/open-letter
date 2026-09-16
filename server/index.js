@@ -41,6 +41,10 @@ import {
   deleteByDeletionToken,
   deleteExpiredDeletionRequests,
   purgeZoomRegistrationsAfter,
+  insertZoomPending,
+  getZoomPendingByToken,
+  confirmZoomPending,
+  deleteExpiredZoomPending,
   healthCheck,
   close,
   listEmailTemplates,
@@ -96,6 +100,7 @@ import {
 import {
   sendVerificationEmail,
   sendZoomConfirmationEmail,
+  sendTreffenVerificationEmail,
   sendDeletionEmail,
   sendRenderedEmail,
   sendBatchEmails,
@@ -978,6 +983,27 @@ async function sendZoomReminderMails(cfg) {
   return sent;
 }
 
+function htmlPage(inner, status = 200) {
+  return new Response(simplePage(inner), {
+    status,
+    headers: { "Content-Type": "text/html; charset=utf-8", ...securityHeaders },
+  });
+}
+
+function treffenLinkExpired() {
+  return htmlPage(
+    `<h1>Link abgelaufen</h1><p>Dieser Link ist leider nicht mehr gültig. Du kannst dich auf <a href="${BASE_URL}/#zoom">${escapeHtml(new URL(BASE_URL).host)}</a> erneut anmelden.</p>`,
+    410,
+  );
+}
+
+function treffenLinkError() {
+  return htmlPage(
+    `<h1>Fehler</h1><p>Etwas ist schiefgelaufen. Bitte versuche es später erneut.</p>`,
+    500,
+  );
+}
+
 // The privacy policy promises Treffen registrations are deleted 14 days after
 // the event.
 const TREFFEN_RETENTION_MS = 14 * 24 * 60 * 60 * 1000;
@@ -1446,17 +1472,22 @@ const server = Bun.serve({
             );
           }
 
-          const reg = await insertZoomRegistration({
+          // Double opt-in: nothing is registered (or overwritten) until the
+          // address confirms via the mailed link. Same answer either way, so
+          // the response doesn't reveal whether an address is registered.
+          const pending = await insertZoomPending({
             name,
             email,
             kv,
             delegierter,
+            token: crypto.randomUUID(),
+            expiresAt: new Date(Date.now() + 24 * 60 * 60 * 1000),
           });
-
-          try {
-            await sendZoomSignupEmail({ regId: reg.id, name, email, cfg: zoomCfg });
-          } catch (mailErr) {
-            console.error("zoom registration email failed:", mailErr);
+          if (pending.status === "pending") {
+            await queueEmail("treffen-verification", {
+              pendingId: pending.id,
+              baseUrl: getBaseUrl(req),
+            });
           }
 
           return json({ ok: true });
@@ -1819,6 +1850,56 @@ const server = Bun.serve({
         } catch (err) {
           console.error("POST /api/unsubscribe/delete error:", err);
           return json({ error: "Internal server error" }, 500);
+        }
+      },
+    },
+
+    // Confirmation link from the Treffen sign-up mail. GET only shows what will
+    // be registered; the registration happens on the button's POST, so a mail
+    // scanner following the link can't sign anyone up.
+    "/api/treffen-bestaetigen/:token": {
+      async GET(req) {
+        const blocked = denyRate(req, "token-link", 120, 15 * 60 * 1000);
+        if (blocked) return blocked;
+        try {
+          const pending = await getZoomPendingByToken(req.params.token);
+          if (!pending) return treffenLinkExpired();
+          const zoomCfg = await getZoomConfig();
+          const delegate =
+            zoomCfg.showDelegierter && pending.delegierter
+              ? "<p>Du meldest dich als <strong>Delegierte*r</strong> an.</p>"
+              : "";
+          return htmlPage(
+            `<h1>Anmeldung bestätigen</h1><p>Hallo <strong>${firstNameHtml(pending.name)}</strong>, bitte bestätige deine Anmeldung zum Treffen${escapeHtml(zoomCfg.whenPhrase)}.</p><p>Name: ${escapeHtml(pending.name)}${pending.kreisverband ? `<br>Kreisverband: ${escapeHtml(pending.kreisverband)}` : ""}</p>${delegate}<form method="post"><button type="submit">Anmeldung bestätigen</button></form>`,
+          );
+        } catch (err) {
+          console.error("GET /api/treffen-bestaetigen error:", err);
+          return treffenLinkError();
+        }
+      },
+      async POST(req) {
+        const blocked = denyRate(req, "token-link", 120, 15 * 60 * 1000);
+        if (blocked) return blocked;
+        try {
+          const reg = await confirmZoomPending(req.params.token);
+          if (!reg) return treffenLinkExpired();
+          const zoomCfg = await getZoomConfig();
+          try {
+            await sendZoomSignupEmail({
+              regId: reg.id,
+              name: reg.name,
+              email: reg.email,
+              cfg: zoomCfg,
+            });
+          } catch (mailErr) {
+            console.error("[treffen-bestaetigen] confirmation email failed:", mailErr);
+          }
+          return htmlPage(
+            `<h1>Du bist dabei!</h1><p>Wir haben deine Anmeldung für das Treffen gespeichert, <strong>${firstNameHtml(reg.name)}</strong>.</p>${buildMeetingInfo(zoomCfg, { pending: true, timingText: "kurz" })}`,
+          );
+        } catch (err) {
+          console.error("POST /api/treffen-bestaetigen error:", err);
+          return treffenLinkError();
         }
       },
     },
@@ -2698,6 +2779,14 @@ async function sendQueuedEmail(payload) {
       return await sendAlreadySignedEmail(args);
     case "deletion":
       return await sendDeletionEmail(args);
+    case "treffen-verification": {
+      const zoomCfg = await getZoomConfig();
+      return await sendTreffenVerificationEmail({
+        ...args,
+        eventLabel: zoomCfg.label,
+        eventWhen: zoomCfg.whenPhrase,
+      });
+    }
     default:
       throw new Error(`unknown email kind: ${args.kind}`);
   }
@@ -2740,6 +2829,7 @@ async function handleMaintenanceJob({ task }) {
       console.log(`[purge] deleted ${removed} expired unverified sign-up(s)`);
     }
     await deleteExpiredDeletionRequests();
+    await deleteExpiredZoomPending();
   } else if (task === "purge-dead-emails") {
     const removed = await purgeDeadJobs("emails", EMAIL_JOB_TTL_S);
     if (removed > 0) {
