@@ -2,6 +2,7 @@ import juice from "juice";
 import nodemailer from "nodemailer";
 import { getEmailTemplateBySlug, getNewsletterStats } from "./db.js";
 import cfg from "../config/letter.config.js";
+import { escapeHtml } from "./pages.js";
 
 // ---- Transport selection ---------------------------------------------------
 // The mail transport is chosen by the active letter config (email.provider),
@@ -122,14 +123,6 @@ const emailCss = `
   .signers-line { color: ${ec.grau}; font-family: ${emailDisplay}; }
   footer { border-top: 1px solid ${ec.akzent}; color: ${ec.grau}; font-size: 13px; line-height: 1.5; margin-top: 28px; padding-top: 16px; }
 `;
-
-function escapeHtml(str) {
-  return str
-    .replace(/&/g, "&amp;")
-    .replace(/</g, "&lt;")
-    .replace(/>/g, "&gt;")
-    .replace(/"/g, "&quot;");
-}
 
 const URL_VARIABLES = new Set([
   "confirmUrl",

@@ -104,6 +104,7 @@ import {
   batchDelayMs,
 } from "./email.js";
 import { buildZoomIcs } from "./ics.js";
+import { simplePage, firstNameHtml, escapeHtml } from "./pages.js";
 import { checkRateLimit } from "./ratelimit.js";
 import { stopCache } from "./cache.js";
 import { runBackup } from "./backup.js";
@@ -463,14 +464,6 @@ function bodyTooLarge(req) {
   return len > MAX_BODY_BYTES;
 }
 
-function escapeHtml(str) {
-  return String(str || "")
-    .replace(/&/g, "&amp;")
-    .replace(/</g, "&lt;")
-    .replace(/>/g, "&gt;")
-    .replace(/"/g, "&quot;");
-}
-
 function concatUint8Arrays(chunks) {
   let length = 0;
   for (const chunk of chunks) length += chunk.length;
@@ -708,21 +701,6 @@ function buildZoomEventIcs(zc, { includeLink = false } = {}) {
     location: "Online",
     uid: `zoom-${zc.eventAt.getTime()}@gehaltsdeckel.jetzt`,
   });
-}
-
-function zoomUnsubPage(inner) {
-  return `<!doctype html><html lang="de"><head><meta charset="utf-8">
-<meta name="viewport" content="width=device-width, initial-scale=1">
-<meta name="robots" content="noindex">
-<title>Zoom-Verteiler — Gehaltsdeckel jetzt</title>
-<style>
-  body { margin:0; min-height:100vh; display:flex; align-items:center; justify-content:center; background:#f4f1ec; color:#6f003c; font-family:Inter,Arial,sans-serif; padding:24px; }
-  .card { max-width:520px; background:#fff; border:1px solid #6f003c; box-shadow:10px 10px 0 #ff0000; padding:40px; }
-  h1 { font-family:"Work Sans",Arial,sans-serif; font-weight:900; font-size:28px; margin:0 0 16px; }
-  p { font-size:16px; line-height:1.6; margin:0 0 16px; }
-  button { font-family:"Work Sans",Arial,sans-serif; font-weight:700; font-size:15px; color:#fff; background:#ff0000; border:none; padding:14px 22px; cursor:pointer; }
-  button:hover { background:#cc0000; }
-</style></head><body><div class="card">${inner}</div></body></html>`;
 }
 
 async function sendCampaign(campaign) {
@@ -1903,7 +1881,7 @@ const server = Bun.serve({
           const signer = await getSignerForZoomInvite(token);
           if (!signer) {
             return new Response(
-              zoomUnsubPage(
+              simplePage(
                 `<h1>Link abgelaufen</h1><p>Dieser Link ist leider nicht mehr g\u00fcltig. Du kannst dich auf <a href="${BASE_URL}/#zoom">gehaltsdeckel.jetzt</a> direkt anmelden.</p>`,
               ),
               {
@@ -1916,7 +1894,7 @@ const server = Bun.serve({
           const existing = await getZoomRegistrationByEmail(signer.email);
 
           if (existing && !force) {
-            const firstName = sanitize(signer.name.split(/\s/)[0]);
+            const firstName = firstNameHtml(signer.name);
             // The delegate status + toggle only make sense while the field is on;
             // when off, show a neutral "registriert" line with no toggle.
             const currentStatus = !zoomCfg.showDelegierter
@@ -1939,7 +1917,7 @@ const server = Bun.serve({
               ? `<p><a href="${unsubUrl}">Abmelden</a></p>`
               : "";
             return new Response(
-              zoomUnsubPage(
+              simplePage(
                 `<h1>Du bist bereits angemeldet</h1><p>Hallo <strong>${firstName}</strong>, du bist bereits${currentStatus} f\u00fcr das Treffen registriert.</p>${toggleBlock}${unsubLink}`,
               ),
               {
@@ -1983,8 +1961,8 @@ const server = Bun.serve({
             ? `<p>Deine Anmeldung wurde aktualisiert.</p>`
             : "";
           return new Response(
-            zoomUnsubPage(
-              `<h1>Du bist dabei!</h1><p>Wir haben deine Anmeldung f\u00fcr das Treffen gespeichert, <strong>${sanitize(signer.name.split(/\s/)[0])}</strong>.</p>${delegateNote}${updatedNote}${buildMeetingInfo(zoomCfg, { pending: true, timingText: "kurz" })}`,
+            simplePage(
+              `<h1>Du bist dabei!</h1><p>Wir haben deine Anmeldung f\u00fcr das Treffen gespeichert, <strong>${firstNameHtml(signer.name)}</strong>.</p>${delegateNote}${updatedNote}${buildMeetingInfo(zoomCfg, { pending: true, timingText: "kurz" })}`,
             ),
             {
               headers: {
@@ -1996,7 +1974,7 @@ const server = Bun.serve({
         } catch (err) {
           console.error("GET /api/treffen-anmelden error:", err);
           return new Response(
-            zoomUnsubPage(
+            simplePage(
               `<h1>Fehler</h1><p>Etwas ist schiefgelaufen. Bitte versuche es sp\u00e4ter erneut oder melde dich direkt auf <a href="${BASE_URL}/#zoom">gehaltsdeckel.jetzt</a> an.</p>`,
             ),
             {
