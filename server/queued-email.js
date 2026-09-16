@@ -9,6 +9,7 @@ import {
   getDeletionRequestForMail,
   getZoomRegistrationByEmail,
   getZoomPendingForMail,
+  getZoomRegistrationForMail,
   issueUnsubscribeToken,
   issueZoomUnsubscribeToken,
 } from "./db.js";
@@ -73,6 +74,22 @@ export async function prepareQueuedEmail(payload) {
       name: pending.name,
       token: pending.token,
       baseUrl,
+    };
+  }
+
+  if (kind === "treffen-already-registered") {
+    const reg = await getZoomRegistrationForMail(payload.registrationId);
+    if (!reg) return null;
+    const token = await issueZoomUnsubscribeToken(reg.id);
+    return {
+      kind,
+      to: reg.email,
+      name: reg.name,
+      baseUrl,
+      headers: buildUnsubscribeHeaders(
+        `${baseUrl}/api/zoom-abmelden/${token}/opt-out`,
+      ),
+      unsubscribeUrl: `${baseUrl}/abmelden/${token}?from=zoom`,
     };
   }
 

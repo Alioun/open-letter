@@ -1,5 +1,10 @@
 import { describe, test, expect, beforeEach } from "bun:test";
-import { resetDb, addZoomRegistration, db } from "./helpers.js";
+import {
+  resetDb,
+  addZoomRegistration,
+  addVerifiedSigner,
+  db,
+} from "./helpers.js";
 import * as q from "../server/db.js";
 import { prepareQueuedEmail } from "../server/queued-email.js";
 
@@ -67,6 +72,40 @@ describe("Treffen sign-up with double opt-in", () => {
     await signup();
     await q.eraseEmail("tina@example.org");
     expect(await count("zoom_pending")).toBe(0);
+  });
+
+  test("a sign-up for a registered address mails its settings link", async () => {
+    const z = await addZoomRegistration({ email: "tina@example.org" });
+    const res = await signup();
+    expect(res).toEqual({ status: "registered", id: z.id });
+    const args = await prepareQueuedEmail({
+      kind: "treffen-already-registered",
+      registrationId: res.id,
+      baseUrl: "https://example.org",
+    });
+    expect(args.to).toBe("tina@example.org");
+    expect(args.unsubscribeUrl).toEndWith("?from=zoom");
+  });
+
+  test("the settings-page delete works with a Treffen token", async () => {
+    const s = await addVerifiedSigner({ email: "both@example.org" });
+    const z = await addZoomRegistration({ email: s.email });
+    const token = await q.issueZoomUnsubscribeToken(z.id);
+    expect(await q.deleteSignerByUnsubscribeToken(token, "zoom")).toBe(true);
+    expect(await count("signers")).toBe(0);
+    expect(await count("zoom_registrations")).toBe(0);
+  });
+
+  test("replacing a past event's date still purges its registrations on time", async () => {
+    await addZoomRegistration({ created_at: new Date(Date.now() - 60_000).toISOString() });
+    await q.scheduleTreffenPurge(new Date(Date.now() + 3600_000));
+    expect(await q.purgePreviousTreffenRegistrations()).toBe(0); // not due yet
+    await q.scheduleTreffenPurge(new Date(Date.now() - 1000)); // earlier deadline wins
+    // Registered for the next event after the date changed: kept.
+    await addZoomRegistration({ created_at: new Date(Date.now() + 60_000).toISOString() });
+    expect(await q.purgePreviousTreffenRegistrations()).toBe(1);
+    expect(await count("zoom_registrations")).toBe(1);
+    expect(await q.purgePreviousTreffenRegistrations()).toBe(0);
   });
 
   test("the confirmation mail is built from the pending row", async () => {

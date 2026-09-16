@@ -462,6 +462,32 @@ export async function sendVerificationEmail({
   });
 }
 
+export async function sendTreffenAlreadyRegisteredEmail({
+  to,
+  name,
+  headers,
+  unsubscribeUrl,
+  eventLabel = "",
+  eventWhen = "",
+}) {
+  console.log(`[email] treffen already registered toDomain=${getEmailDomain(to)}`);
+  const rendered = await renderTemplateBySlug("zoom_already_registered", {
+    name,
+    firstName: name.split(/\s/)[0],
+    unsubscribeUrl,
+    eventLabel,
+    eventWhen,
+  });
+  if (!rendered) throw new Error("zoom_already_registered template missing");
+
+  await sendRenderedEmail({
+    to,
+    subject: rendered.subject,
+    html: rendered.html,
+    headers,
+  });
+}
+
 export async function sendTreffenVerificationEmail({
   to,
   name,

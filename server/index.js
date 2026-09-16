@@ -43,6 +43,8 @@ import {
   deleteByDeletionToken,
   deleteExpiredDeletionRequests,
   purgeZoomRegistrationsAfter,
+  scheduleTreffenPurge,
+  purgePreviousTreffenRegistrations,
   insertZoomPending,
   getZoomPendingByToken,
   confirmZoomPending,
@@ -105,6 +107,7 @@ import {
   sendVerificationEmail,
   sendZoomConfirmationEmail,
   sendTreffenVerificationEmail,
+  sendTreffenAlreadyRegisteredEmail,
   sendDeletionEmail,
   sendRenderedEmail,
   sendBatchEmails,
@@ -1140,11 +1143,12 @@ async function runZoomMailingWorker() {
   if (!cfg.dateSet) return; // no date yet → nothing to schedule
   const eventMs = cfg.eventAt.getTime();
   if (Number.isNaN(eventMs)) return;
-  // Registrations are only kept until TREFFEN_RETENTION_MS after the event.
+  // Registrations are only kept until TREFFEN_RETENTION_MS after the event —
+  // the current one, and a previous one whose date was replaced afterwards.
   try {
-    const purged = await purgeZoomRegistrationsAfter(
-      new Date(eventMs + TREFFEN_RETENTION_MS),
-    );
+    const purged =
+      (await purgePreviousTreffenRegistrations()) +
+      (await purgeZoomRegistrationsAfter(new Date(eventMs + TREFFEN_RETENTION_MS)));
     if (purged > 0) {
       console.log(`[purge] deleted ${purged} Treffen registration(s) after the event`);
     }
@@ -1612,6 +1616,13 @@ const server = Bun.serve({
               pendingId: pending.id,
               baseUrl: getBaseUrl(req),
             });
+          } else {
+            // Already registered: tell the address so, with its settings link,
+            // instead of leaving them waiting for a confirmation mail.
+            await queueEmail("treffen-already-registered", {
+              registrationId: pending.id,
+              baseUrl: getBaseUrl(req),
+            });
           }
 
           return json({ ok: true });
@@ -2012,7 +2023,14 @@ const server = Bun.serve({
         const blocked = denyRate(req, "unsub", 120, 15 * 60 * 1000);
         if (blocked) return blocked;
         try {
-          const ok = await deleteSignerByUnsubscribeToken(req.params.token);
+          const source =
+            new URL(req.url).searchParams.get("from") === "zoom"
+              ? "zoom"
+              : "newsletter";
+          const ok = await deleteSignerByUnsubscribeToken(
+            req.params.token,
+            source,
+          );
           if (!ok) return json({ ok: false }, 404);
           return json({ ok: true });
         } catch (err) {
@@ -2421,6 +2439,14 @@ const server = Bun.serve({
 
           const prev = await getZoomConfig();
           const eventChanged = eventDate.toISOString() !== prev.eventAtIso;
+          // Replacing the date of a Treffen that already took place: the current
+          // registrations belong to that event and are still deleted
+          // TREFFEN_RETENTION_MS after it, whatever the new date is.
+          if (eventChanged && prev.dateSet && prev.eventAt.getTime() <= Date.now()) {
+            await scheduleTreffenPurge(
+              new Date(prev.eventAt.getTime() + TREFFEN_RETENTION_MS),
+            );
+          }
 
           const zoomLink = String(body.zoomLink ?? "").trim();
           await setZoomSettings({
@@ -2852,6 +2878,14 @@ async function sendQueuedEmail(payload) {
     case "treffen-verification": {
       const zoomCfg = await getZoomConfig();
       return await sendTreffenVerificationEmail({
+        ...args,
+        eventLabel: zoomCfg.label,
+        eventWhen: zoomCfg.whenPhrase,
+      });
+    }
+    case "treffen-already-registered": {
+      const zoomCfg = await getZoomConfig();
+      return await sendTreffenAlreadyRegisteredEmail({
         ...args,
         eventLabel: zoomCfg.label,
         eventWhen: zoomCfg.whenPhrase,

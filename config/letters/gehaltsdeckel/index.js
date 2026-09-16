@@ -256,6 +256,17 @@ export default {
       <p>Mit solidarischen Grüßen<br>Initiative Gehaltsdeckel</p>
     `,
       },
+      zoom_already_registered: {
+        name: "Treffen: bereits angemeldet",
+        subject: "Du bist bereits angemeldet — Auswertungstreffen{{eventWhen}}",
+        htmlBody: `
+      <p>Hallo {{firstName}},</p>
+      <p>gerade wurde das Anmeldeformular für das Auswertungstreffen<strong>{{eventWhen}}</strong> mit deiner E-Mail-Adresse ausgefüllt. Du bist bereits angemeldet – es hat sich nichts geändert.</p>
+      <p>Deine Angaben ändern oder dich abmelden kannst du hier: <a href="{{unsubscribeUrl}}">E-Mail-Einstellungen</a></p>
+      <p>Wenn du das Formular nicht ausgefüllt hast, kannst du diese E-Mail ignorieren.</p>
+      <p>Mit solidarischen Grüßen<br>Initiative Gehaltsdeckel</p>
+    `,
+      },
       zoom_confirmation: {
         name: "Treffen-Anmeldung Bestatigung",
         subject:

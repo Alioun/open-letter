@@ -716,9 +716,9 @@ export async function deleteZoomRegistrationByUnsubscribeToken(token) {
 // it was (its link is simply mailed again), an expired one is replaced.
 export async function insertZoomPending({ name, email, kv, delegierter, token, expiresAt }) {
   const registered = await db
-    .query(`SELECT 1 FROM zoom_registrations WHERE email = ?`)
+    .query(`SELECT id FROM zoom_registrations WHERE email = ?`)
     .get(email);
-  if (registered) return { status: "registered" };
+  if (registered) return { status: "registered", id: registered.id };
   const row = await db
     .query(
       `INSERT INTO zoom_pending /* public-neutral */
@@ -753,6 +753,14 @@ export async function getZoomPendingForMail(id) {
         .get(id)) || null,
       ["delegierter"],
     )
+  );
+}
+
+export async function getZoomRegistrationForMail(id) {
+  return (
+    (await db
+      .query(`SELECT id, name, email FROM zoom_registrations WHERE id = ?`)
+      .get(id)) || null
   );
 }
 
@@ -800,6 +808,43 @@ export async function deleteExpiredZoomPending() {
   const res = await db
     .query(`DELETE FROM zoom_pending /* public-neutral */ WHERE expires_at < ?`)
     .run(nowIso());
+  return res?.changes ?? 0;
+}
+
+// When the date of a Treffen that already happened is replaced, the existing
+// registrations (made before now) still have to go at `purgeAt` — the old
+// event's deadline, not the new one's. An earlier pending deadline is kept.
+export async function scheduleTreffenPurge(purgeAt) {
+  const prev = await getPreviousTreffenPurge();
+  const at =
+    prev && prev.purgeAt < purgeAt.toISOString() ? prev.purgeAt : purgeAt.toISOString();
+  await db
+    .query(
+      `INSERT INTO app_settings /* public-neutral */ (key, value, updated_at)
+       VALUES ('treffen_previous_purge', ?, ?)
+       ON CONFLICT (key) DO UPDATE SET value = excluded.value, updated_at = excluded.updated_at`,
+    )
+    .run(JSON.stringify({ purgeAt: at, createdBefore: nowIso() }), nowIso());
+}
+
+async function getPreviousTreffenPurge() {
+  const row = await db
+    .query(`SELECT value FROM app_settings WHERE key = 'treffen_previous_purge'`)
+    .get();
+  return row ? JSON.parse(row.value) : null;
+}
+
+export async function purgePreviousTreffenRegistrations() {
+  const pending = await getPreviousTreffenPurge();
+  if (!pending || nowIso() < pending.purgeAt) return 0;
+  const res = await db
+    .query(`DELETE FROM zoom_registrations WHERE created_at < ?`)
+    .run(pending.createdBefore);
+  await db
+    .query(
+      `DELETE FROM app_settings /* public-neutral */ WHERE key = 'treffen_previous_purge'`,
+    )
+    .run();
   return res?.changes ?? 0;
 }
 
@@ -1279,15 +1324,11 @@ export async function optOutNewsletter(token) {
 
 // "Unterschrift vollständig löschen" on the settings page: erases the signature
 // and everything else stored for that address, incl. a Treffen registration.
-export async function deleteSignerByUnsubscribeToken(token) {
-  const row = await db
-    .query(
-      `SELECT email FROM signers
-       WHERE unsubscribe_token = ? AND unsubscribe_token_created_at > ?`,
-    )
-    .get(token, isoAgo(TOKEN_EDIT_WINDOW));
-  if (!row) return false;
-  await eraseEmail(row.email);
+// Accepts a signer or a Treffen token, like the rest of the settings page.
+export async function deleteSignerByUnsubscribeToken(token, source) {
+  const email = await resolveEmailFromToken(token, source);
+  if (!email) return false;
+  await eraseEmail(email);
   return true;
 }
 
