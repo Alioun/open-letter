@@ -9,10 +9,27 @@
 //   * The Postgres `fuzzystrmatch` search (levenshtein / regexp_split_to_table)
 //     is reimplemented in JS (`fuzzyMatch`), since bun:sqlite has no custom
 //     SQL functions.
-import { db, nowIso, isoAgo } from "../db/connection.js";
+import { db, nowIso, isoAgo, onMutation } from "../db/connection.js";
+import { cached, invalidate } from "./cache.js";
 import cfg from "../config/letter.config.js";
 
 const DAY = 24 * 60 * 60 * 1000;
+
+// How many signers the typo-tolerant search fallback will score in JS. Only
+// reached when nothing contains the search term at all.
+const FUZZY_SCAN_LIMIT = Number(process.env.FUZZY_SCAN_LIMIT || 20000);
+
+// Public reads are cached and de-duplicated while in flight (server/cache.js).
+// Any write drops the cache, so a confirmation or deletion is visible to the
+// very next read — except writes tagged `/* public-neutral */`, which cannot
+// change a public response and therefore must not throw the cache away.
+//
+// The tagged ones matter: a sign-up writes an *unverified* row plus a couple of
+// token columns, and every public read counts only `verified = 1`. Before this,
+// a burst of sign-ups invalidated everything several times a second and each
+// poll re-ran every aggregate — the load test collapsed at 200 open tabs on a
+// workload that now handles thousands.
+onMutation(invalidate);
 
 // ---- small helpers ---------------------------------------------------------
 
@@ -105,13 +122,15 @@ function parseIds(json) {
 
 // ---- public signers list ---------------------------------------------------
 
-export async function getSigners({
-  filter = "alle",
-  search = "",
-  limit = 18,
-  offset = 0,
-  sort = "desc",
-}) {
+export async function getSigners(opts) {
+  const { filter = "alle", search = "", limit = 18, offset = 0, sort = "desc" } = opts;
+  return cached(
+    `signers:${filter}:${search.trim().toLowerCase()}:${limit}:${offset}:${sort}`,
+    () => querySigners({ filter, search, limit, offset, sort }),
+  );
+}
+
+async function querySigners({ filter, search, limit, offset, sort }) {
   limit = Math.min(Math.max(1, limit), 100);
   offset = Math.max(0, offset);
 
@@ -142,13 +161,39 @@ export async function getSigners({
     return { signers, total };
   }
 
-  // Fuzzy search in JS over the candidate set.
+  // Substring hits — the overwhelmingly common case — are found in SQL, which
+  // scans in C and returns only what it matched. The old code pulled every
+  // verified signer into JS and scored each one: at 100k signers that was ~100k
+  // objects and a Levenshtein pass per search, which measured at seconds per
+  // request and several hundred MB of RSS.
+  const like = `%${searchClean.replace(/[\\%_]/g, "\\$&")}%`;
+  const substrWhere = `${whereSql} AND (lower(s.name) LIKE ? ESCAPE '\\' OR lower(s.kreisverband) LIKE ? ESCAPE '\\')`;
+  const { total: substrTotal } = await db
+    .query(`SELECT COUNT(*) AS total FROM signers s WHERE ${substrWhere}`)
+    .get(...params, like, like);
+
+  if (substrTotal > 0) {
+    const signers = await db
+      .query(
+        `SELECT s.name, s.kreisverband, s.state, s.created_at
+         FROM signers s WHERE ${substrWhere}
+         ORDER BY s.created_at ${sortDir} LIMIT ? OFFSET ?`,
+      )
+      .all(...params, like, like, limit, offset);
+    return { signers, total: substrTotal };
+  }
+
+  // Nothing contains the term, so it is probably misspelled: fall back to fuzzy
+  // scoring, which is the only way "Schmidt" can be found by typing "Schmitt".
+  // Bounded to the most recent FUZZY_SCAN_LIMIT signers so a stream of junk
+  // queries can't pin the CPU on a table of any size.
   const rows = await db
     .query(
       `SELECT s.name, s.kreisverband, s.state, s.created_at
-       FROM signers s WHERE ${whereSql}`,
+       FROM signers s WHERE ${whereSql}
+       ORDER BY s.created_at DESC LIMIT ?`,
     )
-    .all(...params);
+    .all(...params, FUZZY_SCAN_LIMIT);
 
   const scored = [];
   for (const r of rows) {
@@ -285,6 +330,10 @@ export async function getNewsletterSignerFilters() {
 // ---- stats -----------------------------------------------------------------
 
 export async function getStats() {
+  return cached("stats", queryStats);
+}
+
+async function queryStats() {
   return await db
     .query(
       `SELECT
@@ -298,6 +347,11 @@ export async function getStats() {
 }
 
 export async function getNewsletterStats() {
+  // Rendered into every transactional email, so it runs on each sign-up too.
+  return cached("newsletter-stats", queryNewsletterStats);
+}
+
+async function queryNewsletterStats() {
   return await db
     .query(
       `SELECT
@@ -328,7 +382,7 @@ export async function insertSigner({
 }) {
   const row = await db
     .query(
-      `INSERT INTO signers
+      `INSERT INTO signers /* public-neutral */
          (name, email, kreisverband, occupation, newsletter, show_publicly, verification_token, token_expires_at)
        VALUES (?, ?, ?, ?, ?, ?, ?, ?)
        ON CONFLICT (email) DO UPDATE
@@ -366,7 +420,7 @@ export async function getVerifiedSignerName(email) {
 export async function refreshVerificationToken(email, token, expiresAt) {
   const row = await db
     .query(
-      `UPDATE signers SET verification_token = ?, token_expires_at = ?
+      `UPDATE signers /* public-neutral */ SET verification_token = ?, token_expires_at = ?
        WHERE email = ? AND verified = 0 RETURNING name`,
     )
     .get(token, iso(expiresAt), email);
@@ -389,7 +443,7 @@ export async function confirmSigner(token) {
 export async function createDeletionToken(email, token, expiresAt) {
   const row = await db
     .query(
-      `UPDATE signers SET deletion_token = ?, deletion_token_expires_at = ?
+      `UPDATE signers /* public-neutral */ SET deletion_token = ?, deletion_token_expires_at = ?
        WHERE email = ? RETURNING id`,
     )
     .get(token, iso(expiresAt), email);
@@ -435,9 +489,9 @@ export async function insertZoomRegistration({ name, email, kv, delegierter }) {
 }
 
 export async function getZoomRegistrationCount() {
-  return await db
-    .query(`SELECT COUNT(*) AS count FROM zoom_registrations`)
-    .get();
+  return cached("zoom-count", () =>
+    db.query(`SELECT COUNT(*) AS count FROM zoom_registrations`).get(),
+  );
 }
 
 export async function listZoomRegistrations() {
@@ -564,12 +618,14 @@ export async function clearZoomRegistrations() {
 }
 
 export async function getZoomSettings() {
-  const rows = await db
-    .query(`SELECT key, value FROM app_settings WHERE key LIKE 'zoom_%'`)
-    .all();
-  const out = {};
-  for (const row of rows) out[row.key] = row.value;
-  return out;
+  return cached("zoom-settings", async () => {
+    const rows = await db
+      .query(`SELECT key, value FROM app_settings WHERE key LIKE 'zoom_%'`)
+      .all();
+    const out = {};
+    for (const row of rows) out[row.key] = row.value;
+    return out;
+  });
 }
 
 export async function setZoomSettings(partial) {
@@ -599,6 +655,10 @@ function sanitizeMilestones(arr) {
 }
 
 export async function getMilestones() {
+  return cached("milestones", queryMilestones);
+}
+
+async function queryMilestones() {
   const row = await db
     .query(`SELECT value FROM app_settings WHERE key = 'milestones'`)
     .get();
@@ -629,11 +689,13 @@ export async function setMilestones(arr) {
 // server resolves the same key in getZoomConfig() (server/index.js); this helper
 // exists so db.js code (self-service state) can read it without importing that.
 export async function getShowDelegierter() {
-  const row = await db
-    .query(`SELECT value FROM app_settings WHERE key = 'zoom_show_delegierter'`)
-    .get();
-  if (row?.value != null) return row.value === "1";
-  return Boolean(cfg.zoom?.form?.showDelegierter);
+  return cached("show-delegierter", async () => {
+    const row = await db
+      .query(`SELECT value FROM app_settings WHERE key = 'zoom_show_delegierter'`)
+      .get();
+    if (row?.value != null) return row.value === "1";
+    return Boolean(cfg.zoom?.form?.showDelegierter);
+  });
 }
 
 // ---- email templates -------------------------------------------------------
@@ -914,7 +976,7 @@ export async function refreshUnsubscribeTokenByEmail(email) {
   const token = crypto.randomUUID();
   const row = await db
     .query(
-      `UPDATE signers SET unsubscribe_token = ?, unsubscribe_token_created_at = ?
+      `UPDATE signers /* public-neutral */ SET unsubscribe_token = ?, unsubscribe_token_created_at = ?
        WHERE email = ? RETURNING unsubscribe_token`,
     )
     .get(token, nowIso(), email);
@@ -1132,6 +1194,10 @@ function addGendersternchen(label) {
 }
 
 export async function getOccupations() {
+  return cached("occupations", queryOccupations);
+}
+
+async function queryOccupations() {
   const rows = await db
     .query(
       `SELECT occupation, COUNT(*) AS count FROM signers
@@ -1203,6 +1269,10 @@ export async function loadOccNotTypo() {
 // ---- kreisverband / state --------------------------------------------------
 
 export async function getKreisverbandStats() {
+  return cached("kv-stats", queryKreisverbandStats);
+}
+
+async function queryKreisverbandStats() {
   return await db
     .query(
       `SELECT
@@ -1270,6 +1340,10 @@ export async function getUnresolvedKvs() {
 }
 
 export async function getStateStats() {
+  return cached("state-stats", queryStateStats);
+}
+
+async function queryStateStats() {
   return await db
     .query(
       `SELECT

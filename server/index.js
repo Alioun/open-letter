@@ -105,6 +105,7 @@ import {
 } from "./email.js";
 import { buildZoomIcs } from "./ics.js";
 import { checkRateLimit } from "./ratelimit.js";
+import { stopCache } from "./cache.js";
 import { runBackup } from "./backup.js";
 import {
   initJobs,
@@ -1339,7 +1340,7 @@ const server = Bun.serve({
               const unsubscribeUrl = unsub
                 ? `${baseUrl}/abmelden/${unsub}`
                 : undefined;
-              await sendAlreadySignedEmail({
+              await queueEmail("already-signed", {
                 to: email,
                 name: verifiedName,
                 headers,
@@ -1359,7 +1360,7 @@ const server = Bun.serve({
           const unsubscribeUrl = unsub
             ? `${baseUrl}/abmelden/${unsub}`
             : undefined;
-          await sendVerificationEmail({
+          await queueEmail("verification", {
             to: email,
             name,
             token,
@@ -1525,7 +1526,7 @@ const server = Bun.serve({
             const unsubscribeUrl = unsub
               ? `${baseUrl}/abmelden/${unsub}`
               : undefined;
-            await sendVerificationEmail({
+            await queueEmail("verification", {
               to: email,
               name,
               token,
@@ -1608,7 +1609,7 @@ const server = Bun.serve({
             const unsubscribeUrl = unsub
               ? `${baseUrl}/abmelden/${unsub}`
               : undefined;
-            await sendDeletionEmail({
+            await queueEmail("deletion", {
               to: email,
               token,
               baseUrl,
@@ -2684,6 +2685,38 @@ console.log(
   `Server running on ${server.url} (${isDev ? "development" : "production"})`,
 );
 // ---- Honker durable jobs: campaign sends, zoom mailings, hourly backups ----
+
+// Transactional mail runs as a durable job instead of inside the request, so a
+// sign-up doesn't wait on the email provider's round-trip and a provider blip
+// retries with backoff instead of failing the request after the row is already
+// written. Falls back to sending inline if the queue is unavailable (Honker
+// extension missing), which keeps sign-ups working on a broken jobs setup.
+async function sendQueuedEmail(payload) {
+  switch (payload.kind) {
+    case "verification":
+      return await sendVerificationEmail(payload);
+    case "already-signed":
+      return await sendAlreadySignedEmail(payload);
+    case "deletion":
+      return await sendDeletionEmail(payload);
+    default:
+      throw new Error(`unknown email kind: ${payload.kind}`);
+  }
+}
+
+let jobsReady = false;
+async function queueEmail(kind, args) {
+  if (jobsReady) {
+    try {
+      await enqueueJob("emails", { kind, ...args }, { maxAttempts: 5 });
+      return;
+    } catch (err) {
+      console.error("[email] enqueue failed, sending inline:", err);
+    }
+  }
+  await sendQueuedEmail({ kind, ...args });
+}
+
 async function handleMaintenanceJob({ task }) {
   if (task === "campaign-reconcile") {
     const ids = await getDueCampaignIds();
@@ -2717,10 +2750,17 @@ try {
   await registerSchedule("purge-unverified", "maintenance", "30 3 * * *", {
     task: "purge-unverified",
   });
-  startWorker({
-    campaigns: handleCampaignJob,
-    maintenance: handleMaintenanceJob,
-  });
+  startWorker(
+    {
+      campaigns: handleCampaignJob,
+      maintenance: handleMaintenanceJob,
+      emails: sendQueuedEmail,
+    },
+    // Transactional mail is claimed in bigger batches and sent with overlap, so
+    // a sign-up burst drains at provider speed rather than one mail per tick.
+    { batch: 25, concurrency: { emails: 10 } },
+  );
+  jobsReady = true;
 } catch (err) {
   console.error("[jobs] init failed:", err);
 }
@@ -2740,6 +2780,8 @@ if (cfg.features.stateResolution) {
 function shutdown() {
   console.log("Shutting down...");
   stopWorker();
+  // Stop cache refreshes before the connection goes away.
+  stopCache();
   close().then(() => process.exit(0));
 }
 process.on("SIGTERM", shutdown);

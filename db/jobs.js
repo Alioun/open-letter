@@ -61,11 +61,16 @@ export async function registerSchedule(name, queue, expr, payload = {}, { priori
 }
 
 // Start the poll loop. `handlers` maps queue name -> async (payload, job) => {}.
+// `concurrency` (per queue, default 1) is how many claimed jobs run at once.
+// Transactional email needs more than 1: a provider round-trip is ~100-300ms,
+// so strictly sequential sends would cap the queue at a handful per second and
+// a sign-up burst would take minutes to drain.
 export function startWorker(handlers, {
   queues = Object.keys(handlers),
   intervalMs = 1000,
   batch = 5,
   visibilityS = 1800,
+  concurrency = {},
 } = {}) {
   if (started) return;
   started = true;
@@ -84,7 +89,8 @@ export function startWorker(handlers, {
         await sweep.get(queue);
         const res = await claim.get(queue, WORKER_ID, batch, visibilityS);
         const jobs = res?.rows ? JSON.parse(res.rows) : [];
-        for (const job of jobs) {
+
+        const runJob = async (job) => {
           let payload;
           try {
             payload = JSON.parse(job.payload);
@@ -101,6 +107,13 @@ export function startWorker(handlers, {
               `[jobs] ${queue}#${job.id} failed (attempt ${job.attempts}): ${err?.message || err}`,
             );
           }
+        };
+
+        // Handlers may overlap; ack/retry still go through the shared
+        // connection, which serialises them.
+        const width = Math.max(1, concurrency[queue] || 1);
+        for (let i = 0; i < jobs.length; i += width) {
+          await Promise.all(jobs.slice(i, i + width).map(runJob));
         }
       }
     } catch (err) {

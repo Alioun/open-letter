@@ -83,23 +83,66 @@ function requireKey(key) {
 
 // Wrap a raw node-sqlite3 Database in the promise-returning surface used across
 // the app. Statement objects returned by `query()` are cheap and may be reused.
+
+// Callback fired after any statement that changes rows, so the server's read
+// cache (server/cache.js) can drop stale entries. Registered by server/db.js;
+// unset for setup/seed/migration, where nothing is cached.
+let mutationHook = null;
+export function onMutation(fn) {
+  mutationHook = fn;
+}
+const MUTATION_RE = /^\s*(?:INSERT|UPDATE|DELETE|REPLACE)\b/i;
+
+// A write that provably cannot change any public response marks itself with
+// this comment and is skipped (see PUBLIC_NEUTRAL in server/db.js). The marker
+// lives in the statement text rather than in a flag around the call because
+// requests interleave at every await: a time-scoped flag set by one request
+// would swallow another request's invalidation.
+const PUBLIC_NEUTRAL_RE = /\/\* public-neutral \*\//;
+
+function noteMutation(sql) {
+  if (!mutationHook) return;
+  if (!MUTATION_RE.test(sql)) return;
+  if (PUBLIC_NEUTRAL_RE.test(sql)) return;
+  mutationHook();
+}
+
 function wrap(raw) {
+  // Calling into the driver after close() aborts the process at the NAPI layer
+  // rather than raising a catchable error, so anything still in flight at
+  // shutdown (a cache refresh, a job handler) must be rejected here instead.
+  let closed = false;
+  const ifOpen = (fn) =>
+    closed
+      ? Promise.reject(new Error("database connection is closed"))
+      : new Promise(fn);
+
   const stmt = (sql) => ({
+    // get/all also carry mutations: writes with a RETURNING clause read back
+    // their row through them.
     get: (...params) =>
-      new Promise((resolve, reject) =>
-        raw.get(sql, params, (err, row) => (err ? reject(err) : resolve(row))),
+      ifOpen((resolve, reject) =>
+        raw.get(sql, params, (err, row) => {
+          if (err) return reject(err);
+          noteMutation(sql);
+          return resolve(row);
+        }),
       ),
     all: (...params) =>
-      new Promise((resolve, reject) =>
-        raw.all(sql, params, (err, rows) =>
-          err ? reject(err) : resolve(rows),
-        ),
+      ifOpen((resolve, reject) =>
+        raw.all(sql, params, (err, rows) => {
+          if (err) return reject(err);
+          noteMutation(sql);
+          return resolve(rows);
+        }),
       ),
     run: (...params) =>
-      new Promise((resolve, reject) =>
+      ifOpen((resolve, reject) =>
         raw.run(sql, params, function (err) {
           // `this` carries lastID / changes (node-sqlite3 RunResult).
-          return err ? reject(err) : resolve(this);
+          if (err) return reject(err);
+          noteMutation(sql);
+          return resolve(this);
         }),
       ),
   });
@@ -111,16 +154,18 @@ function wrap(raw) {
     // handles bare PRAGMAs, DDL and multi-statement scripts (e.g. schema.sql).
     run: (sql, ...args) =>
       args.length
-        ? new Promise((resolve, reject) =>
+        ? ifOpen((resolve, reject) =>
             raw.run(sql, args, function (err) {
-              return err ? reject(err) : resolve(this);
+              if (err) return reject(err);
+              noteMutation(sql);
+              return resolve(this);
             }),
           )
-        : new Promise((resolve, reject) =>
+        : ifOpen((resolve, reject) =>
             raw.exec(sql, (err) => (err ? reject(err) : resolve())),
           ),
     exec: (sql) =>
-      new Promise((resolve, reject) =>
+      ifOpen((resolve, reject) =>
         raw.exec(sql, (err) => (err ? reject(err) : resolve())),
       ),
     loadExtension: (path) =>
@@ -128,9 +173,10 @@ function wrap(raw) {
         raw.loadExtension(path, (err) => (err ? reject(err) : resolve())),
       ),
     close: () =>
-      new Promise((resolve, reject) =>
-        raw.close((err) => (err ? reject(err) : resolve())),
-      ),
+      new Promise((resolve, reject) => {
+        closed = true;
+        raw.close((err) => (err ? reject(err) : resolve()));
+      }),
     // Minimal async transaction helper (used by the one-shot pg migration).
     async transaction(fn) {
       await this.run("BEGIN");

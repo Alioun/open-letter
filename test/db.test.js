@@ -114,6 +114,32 @@ describe("getSigners + fuzzy search", () => {
     const res = await q.getSigners({ search: "leipzig" });
     expect(res.total).toBe(1);
   });
+
+  test("fuzzy fallback still catches a misspelling nothing contains", async () => {
+    await addVerifiedSigner({ name: "Anna Schmidt", kreisverband: "Berlin" });
+    await addVerifiedSigner({ name: "Bob Jones", kreisverband: "Köln" });
+    // "schmitt" is a substring of nothing, so this exercises the fallback.
+    const res = await q.getSigners({ search: "Schmitt" });
+    expect(res.signers.map((s) => s.name)).toContain("Anna Schmidt");
+    expect(res.signers.map((s) => s.name)).not.toContain("Bob Jones");
+  });
+
+  test("search is case-insensitive and paginates on the substring path", async () => {
+    for (let i = 0; i < 5; i++) await addVerifiedSigner({ name: `Mira Wagner ${i}` });
+    await addVerifiedSigner({ name: "Unrelated Person" });
+    const res = await q.getSigners({ search: "WAGNER", limit: 2, offset: 0 });
+    expect(res.total).toBe(5);
+    expect(res.signers).toHaveLength(2);
+  });
+
+  test("LIKE wildcards in the query are treated as literal characters", async () => {
+    await addVerifiedSigner({ name: "Anna Berger" });
+    await addVerifiedSigner({ name: "100% Cotton" });
+    // Without escaping, '%' would match every signer.
+    const res = await q.getSigners({ search: "%" });
+    expect(res.total).toBe(1);
+    expect(res.signers[0].name).toBe("100% Cotton");
+  });
 });
 
 describe("stats", () => {

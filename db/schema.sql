@@ -36,6 +36,36 @@ CREATE TABLE IF NOT EXISTS signers (
 CREATE INDEX IF NOT EXISTS idx_signers_verified
   ON signers (verified, created_at DESC);
 
+-- Every public read filters on `verified = 1 AND show_publicly = 1` and then
+-- needs one more column. Without that column in the index SQLite walks the
+-- index and fetches each matching row from the table for it — at 100k signers
+-- that per-row fetch, not the aggregation, was the entire cost: the signer
+-- list's COUNT(*) took 632ms, the three GROUP BY endpoints ~710ms each, and
+-- the search scan 664ms. Covering the column each one reads brings them to
+-- 8ms, 5-36ms and 27ms respectively, for about 6 MB of index per 100k signers.
+--
+-- Keep these aligned with the queries in server/db.js: if a public read starts
+-- reading another column, it needs to be in the matching index or the fetch
+-- comes back.
+
+-- /api/signers: count + the created_at-ordered page.
+CREATE INDEX IF NOT EXISTS idx_signers_public
+  ON signers (verified, show_publicly, created_at);
+
+-- /api/kreisverband-stats and /api/state-stats (GROUP BY kreisverband, state).
+CREATE INDEX IF NOT EXISTS idx_signers_public_kv
+  ON signers (verified, show_publicly, kreisverband, state);
+
+-- /api/occupations (GROUP BY occupation).
+CREATE INDEX IF NOT EXISTS idx_signers_public_occ
+  ON signers (verified, show_publicly, occupation);
+
+-- /api/signers?search= — the LIKE scan can't use an index to seek, but keeping
+-- name and kreisverband in one makes it an index-only scan instead of 95k
+-- row fetches.
+CREATE INDEX IF NOT EXISTS idx_signers_public_name
+  ON signers (verified, show_publicly, name, kreisverband);
+
 CREATE INDEX IF NOT EXISTS idx_signers_created
   ON signers (created_at DESC);
 

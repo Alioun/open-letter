@@ -57,6 +57,52 @@ describe.skipIf(!hasExt)("Honker durable jobs", () => {
     expect(seen[0]).toBe("ping");
   });
 
+  test("concurrency lets a batch overlap instead of running one at a time", async () => {
+    let inFlight = 0;
+    let maxInFlight = 0;
+    let done = 0;
+    for (let i = 0; i < 8; i++) await enqueue("emails", { n: i });
+
+    startWorker(
+      {
+        emails: async () => {
+          maxInFlight = Math.max(maxInFlight, ++inFlight);
+          await sleep(40);
+          inFlight--;
+          done++;
+        },
+      },
+      { intervalMs: 30, batch: 8, concurrency: { emails: 4 } },
+    );
+    await sleep(400);
+    stopWorker();
+
+    expect(done).toBe(8);
+    expect(maxInFlight).toBeGreaterThan(1);
+    expect(maxInFlight).toBeLessThanOrEqual(4);
+  });
+
+  test("without concurrency, jobs run strictly one at a time", async () => {
+    let inFlight = 0;
+    let maxInFlight = 0;
+    for (let i = 0; i < 4; i++) await enqueue("emails", { n: i });
+
+    startWorker(
+      {
+        emails: async () => {
+          maxInFlight = Math.max(maxInFlight, ++inFlight);
+          await sleep(20);
+          inFlight--;
+        },
+      },
+      { intervalMs: 30, batch: 4 },
+    );
+    await sleep(300);
+    stopWorker();
+
+    expect(maxInFlight).toBe(1);
+  });
+
   test("job payloads are stored in the encrypted DB", async () => {
     await enqueue("secretq", { secret: "TOPSECRET_VALUE" });
     const bytes = Bun.file(process.env.DATABASE_PATH).size;
