@@ -46,6 +46,16 @@ export function resolvePrivacy(cfg) {
       );
     }
   }
+  // The privacy policy has to state how long analytics data is kept.
+  const analytics = cfg?.meta?.analytics;
+  if (analytics?.src) {
+    const months = analytics.retentionMonths;
+    if (!(typeof months === "number" && Number.isFinite(months) && months > 0)) {
+      throw new Error(
+        "config meta.analytics.retentionMonths must be a positive number when analytics is enabled",
+      );
+    }
+  }
   return {
     ...merged,
     confirmationLinkMs: merged.confirmationLinkHours * HOUR,

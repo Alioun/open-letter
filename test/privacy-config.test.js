@@ -30,6 +30,19 @@ describe("privacy config", () => {
     ).toThrow(/treffenRetentionDays/);
   });
 
+  test("analytics needs a stated retention period", () => {
+    const withAnalytics = (analytics) => ({ meta: { analytics } });
+    expect(() =>
+      resolvePrivacy(withAnalytics({ src: "https://stats.example.org/s.js" })),
+    ).toThrow(/retentionMonths/);
+    expect(() =>
+      resolvePrivacy(
+        withAnalytics({ src: "https://stats.example.org/s.js", retentionMonths: 12 }),
+      ),
+    ).not.toThrow();
+    expect(() => resolvePrivacy(withAnalytics({ src: "" }))).not.toThrow();
+  });
+
   test("shipped letters resolve", () => {
     expect(() => resolvePrivacy(gehaltsdeckel)).not.toThrow();
     expect(() => resolvePrivacy(example)).not.toThrow();

@@ -73,10 +73,12 @@ export default {
         "Initiative für eine Gehaltsobergrenze für Abgeordnete der Partei Die Linke",
     },
     // Optional privacy-friendly analytics (Umami-style). Leave src empty to
-    // disable (and to drop the host from the CSP).
+    // disable (and to drop the host from the CSP). retentionMonths is quoted in
+    // the privacy policy — the Umami server must actually purge older data.
     analytics: {
       src: "https://stats.gehaltsdeckel.jetzt/script.js",
       websiteId: "05e06fcd-fe90-4a03-a962-318c20e4107b",
+      retentionMonths: 12,
     },
   },
 

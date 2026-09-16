@@ -8,6 +8,7 @@ import {
   Fragment,
 } from "react";
 import cfg from "../config/letter.config.js";
+import { resolvePrivacy } from "../config/privacy.js";
 import { LetterArticle, FaqContent } from "../config/content.jsx";
 import { ZoomForm } from "./ZoomForm";
 
@@ -2339,6 +2340,22 @@ function ImpressumModal({ onClose }) {
   );
 }
 
+// Retention periods and link lifetimes quoted in the privacy policy — the same
+// values the server enforces (config/privacy.js).
+const privacy = resolvePrivacy(cfg);
+
+// Optional sections of "2. Welche Daten werden verarbeitet?" get consecutive
+// letters after the fixed a)–c), in the order they render.
+function sectionLetter(id) {
+  const order = [
+    cfg.features.zoomEvent && "zoom",
+    cfg.email?.provider === "resend" && "resend",
+    cfg.features.stateResolution && "state",
+    cfg.meta.analytics?.src && "analytics",
+  ].filter(Boolean);
+  return String.fromCharCode("d".charCodeAt(0) + order.indexOf(id));
+}
+
 function DatenschutzModal({ onClose }) {
   const trapRef = useFocusTrap(true);
   const [deletionEmail, setDeletionEmail] = useState("");
@@ -2421,11 +2438,24 @@ function DatenschutzModal({ onClose }) {
             (siehe unten) – nicht an unbeteiligte Dritte weitergegeben oder für
             andere Zwecke genutzt. Sie werden für die Dauer der Initiative
             gespeichert und bei Beendigung der Kampagne vollständig gelöscht,
-            spätestens jedoch 3 Jahre nach Unterzeichnung (§ 195 BGB) oder auf
-            frühere Anfrage. Nicht bestätigte Eintragungen – bei denen der
-            Bestätigungslink nicht angeklickt wurde – werden automatisch
-            gelöscht, sobald der 24 Stunden gültige Bestätigungslink abgelaufen
-            ist.
+            spätestens jedoch {privacy.signerRetentionYears} Jahre nach
+            Unterzeichnung (§ 195 BGB) oder auf frühere Anfrage. Nicht
+            bestätigte Eintragungen – bei denen der Bestätigungslink nicht
+            angeklickt wurde – werden automatisch gelöscht, sobald der{" "}
+            {privacy.confirmationLinkHours} Stunden gültige Bestätigungslink
+            abgelaufen ist.
+          </p>
+          <p>
+            Wenn du zustimmst, dass dein Name öffentlich angezeigt wird,
+            erscheinen dein Name
+            {cfg.features.kreisverbandField && ", dein Kreisverband"}
+            {cfg.features.stateResolution &&
+              " und das daraus ermittelte Bundesland"}{" "}
+            sowie das Datum der Unterzeichnung in der Liste auf dieser Website.
+            {cfg.features.occupationField &&
+              " Berufsangaben dieser Unterschriften werden nur als Anzahl je Beruf veröffentlicht, nicht zusammen mit dem Namen."}{" "}
+            Ohne diese Zustimmung wird deine Unterschrift nur mitgezählt. Du
+            kannst das über den Link in unseren E-Mails jederzeit ändern.
           </p>
           <p>
             <strong>c) Newsletter / Kampagnen-Updates</strong>
@@ -2435,19 +2465,53 @@ function DatenschutzModal({ onClose }) {
               ausschließlich versendet, wenn du beim Unterschreiben die
               entsprechende Checkbox aktiviert hast
             </strong>
-            . Du kannst diese Einwilligung jederzeit widerrufen - über das
-            Löschformular unten oder durch Antwort auf eine Kampagnen-E-Mail.
+            . Du kannst diese Einwilligung jederzeit widerrufen – über den
+            Abmeldelink in jeder E-Mail oder durch eine Nachricht an{" "}
+            <a href={`mailto:${cfg.legal.contactEmail}`}>
+              {cfg.legal.contactEmail}
+            </a>
+            . Deine Unterschrift bleibt davon unberührt. Über den Link in
+            unseren E-Mails kannst du außerdem deine Angaben ändern oder deine
+            Unterschrift löschen; dafür gilt er {privacy.settingsLinkDays} Tage
+            ab der letzten E-Mail, die ihn enthielt. Abmelden kannst du dich
+            damit unbegrenzt.
           </p>
+          {cfg.features.zoomEvent && (
+            <p>
+              <strong>
+                {sectionLetter("zoom")}) Anmeldung zum{" "}
+                {cfg.zoom?.navLabel || "Treffen"}
+              </strong>
+              <br />
+              Wenn du dich zum {cfg.zoom?.navLabel || "Treffen"} anmeldest,
+              speichern wir deinen Namen, deine E-Mail-Adresse, optional deinen
+              Kreisverband und gegebenenfalls die Angabe, ob du Delegierte*r
+              bist. Die Anmeldung wird erst wirksam, wenn du sie über den Link in
+              einer unserer E-Mails bestätigst; nicht bestätigte Anmeldungen
+              löschen wir nach {privacy.confirmationLinkHours} Stunden. Wir
+              nutzen die Daten ausschließlich, um dir Informationen, Zugangsdaten
+              und eine Erinnerung zum Treffen zu schicken
+              {cfg.email?.provider === "resend" &&
+                " (Versand über Resend, siehe unten)"}
+              . Rechtsgrundlage ist deine Einwilligung (Art. 6 Abs. 1 lit. a
+              DS-GVO), die du jederzeit über den Abmeldelink in jeder dieser
+              E-Mails widerrufen kannst. Die Anmeldungen werden{" "}
+              {privacy.treffenRetentionDays} Tage nach dem Treffen gelöscht. An
+              Anbieter von Videokonferenzen geben wir deine Daten nicht weiter.
+            </p>
+          )}
           {cfg.email?.provider === "resend" && (
             <p>
-              <strong>d) E-Mail-Versand über Resend</strong>
+              <strong>{sectionLetter("resend")}) E-Mail-Versand über Resend</strong>
               <br />
               Für den Versand von E-Mails (Bestätigungs-, Lösch- und
-              Kampagnen-E-Mails) nutzen wir den Dienst Resend der Resend, Inc.
-              Dabei werden deine E-Mail-Adresse und der Inhalt der jeweiligen
-              E-Mail an Resend übermittelt und auf Servern in Irland (EU) zum
-              Zweck des Versands verarbeitet und gespeichert. Resend ist als
-              Auftragsverarbeiter nach Art. 28 DS-GVO vertraglich gebunden (
+              Kampagnen-E-Mails
+              {cfg.features.zoomEvent && " sowie E-Mails zum Treffen"}) nutzen
+              wir den Dienst Resend der Resend, Inc. Dabei werden deine
+              E-Mail-Adresse und der Inhalt der jeweiligen E-Mail an Resend
+              übermittelt und auf Servern in Irland (EU) zum Zweck des Versands
+              verarbeitet und gespeichert. Resend ist als Auftragsverarbeiter
+              nach Art. 28 DS-GVO vertraglich gebunden (
               <a
                 href="https://resend.com/legal/dpa"
                 target="_blank"
@@ -2478,16 +2542,44 @@ function DatenschutzModal({ onClose }) {
               . Rechtsgrundlage ist Art. 6 Abs. 1 lit. a und lit. f DS-GVO.
             </p>
           )}
-          <p>
-            <strong>e) Ermittlung des Bundeslandes</strong>
-            <br />
-            Sofern du einen Kreisverband angibst, wird dieser zur Zuordnung des
-            Bundeslandes einmalig an den Dienst Nominatim der OpenStreetMap
-            Foundation (Server in der EU / im Vereinigten Königreich)
-            übermittelt. Dein Name und deine E-Mail-Adresse werden dabei nicht
-            übertragen. Rechtsgrundlage ist Art. 6 Abs. 1 lit. f DS-GVO
-            (berechtigtes Interesse an einer regionalen Auswertung).
-          </p>
+          {cfg.features.stateResolution && (
+            <p>
+              <strong>{sectionLetter("state")}) Ermittlung des Bundeslandes</strong>
+              <br />
+              Sofern du einen Kreisverband angibst, wird dieser zur Zuordnung des
+              Bundeslandes einmalig an den Dienst Nominatim der OpenStreetMap
+              Foundation (Server in der EU / im Vereinigten Königreich)
+              übermittelt. Dein Name und deine E-Mail-Adresse werden dabei nicht
+              übertragen. Rechtsgrundlage ist Art. 6 Abs. 1 lit. f DS-GVO
+              (berechtigtes Interesse an einer regionalen Auswertung).
+            </p>
+          )}
+          {cfg.meta.analytics?.src && (
+            <p>
+              <strong>{sectionLetter("analytics")}) Reichweitenmessung</strong>
+              <br />
+              Um die Reichweite dieser Website zu messen, nutzen wir die
+              Open-Source-Software Umami, die wir auf einem eigenen Server
+              betreiben; die Daten werden nicht an Dritte weitergegeben. Es
+              werden keine Cookies gesetzt und keine Profile über mehrere
+              Websites gebildet. Verarbeitet werden die aufgerufene Seite
+              (einschließlich URL-Parametern), die Referrer-URL, Browser,
+              Betriebssystem, Gerätetyp, Bildschirmgröße und Sprache sowie Land,
+              Region und Stadt, die aus deiner IP-Adresse abgeleitet werden. Die
+              IP-Adresse selbst wird nicht gespeichert. Seiten mit persönlichen
+              Links (E-Mail-Einstellungen, Bestätigungs- und Löschseiten) werden
+              nicht erfasst. Rechtsgrundlage ist Art. 6 Abs. 1 lit. f DS-GVO
+              (berechtigtes Interesse daran, die Reichweite der Kampagne zu
+              kennen). Die Daten werden nach{" "}
+              {cfg.meta.analytics.retentionMonths} Monaten gelöscht. Du kannst
+              der Verarbeitung jederzeit widersprechen (Art. 21 DS-GVO), z. B.
+              per E-Mail an{" "}
+              <a href={`mailto:${cfg.legal.contactEmail}`}>
+                {cfg.legal.contactEmail}
+              </a>
+              .
+            </p>
+          )}
           <p>
             <strong>Speicherung und Sicherungskopien</strong>
             <br />
@@ -2498,7 +2590,11 @@ function DatenschutzModal({ onClose }) {
             nach einer Löschanfrage oder einer abgelaufenen Bestätigung – können
             bis dahin noch in Sicherungskopien enthalten sein. Sicherungskopien
             werden ausschließlich zur Wiederherstellung nach einem technischen
-            Ausfall verwendet.
+            Ausfall verwendet. Damit eine Wiederherstellung gelöschte Daten nicht
+            zurückbringt, vermerken wir Löschungen und Abmeldungen für{" "}
+            {privacy.erasureLogDays} Tage – nur als nicht umkehrbarer Prüfwert
+            deiner E-Mail-Adresse, nicht die Adresse selbst – und wenden sie nach
+            einer Wiederherstellung erneut an.
           </p>
 
           <h5>3. Deine Rechte</h5>
@@ -2537,11 +2633,14 @@ function DatenschutzModal({ onClose }) {
 
           <hr />
 
-          <h5>Unterschrift löschen</h5>
+          <h5>Daten löschen</h5>
           <p>
-            Du kannst deine Unterschrift und alle damit gespeicherten Daten
-            jederzeit löschen lassen. Gib dazu deine E-Mail-Adresse ein - wir
-            schicken dir einen Löschlink.
+            Du kannst alle Daten, die wir zu deiner E-Mail-Adresse gespeichert
+            haben – deine Unterschrift
+            {cfg.features.zoomEvent && " und deine Anmeldung zum Treffen"} –
+            jederzeit löschen lassen. Gib dazu deine E-Mail-Adresse ein – wir
+            schicken dir einen Löschlink, der {privacy.confirmationLinkHours}{" "}
+            Stunden gültig ist.
           </p>
 
           {deletionStatus === "sent" ? (
