@@ -364,7 +364,8 @@ without it, a backup cannot be opened.
 
 ```bash
 # Restore the most recent backup (app stopped) — moves any existing DB aside
-# to <path>.pre-restore-<timestamp> first, then verifies row counts.
+# to <path>.pre-restore-<timestamp> first, then verifies row counts. The
+# aside copy is pruned with the backups after BACKUP_KEEP hours.
 DATABASE_PATH=/app/data/diaetendeckel.db DATABASE_ENCRYPTION_KEY=… \
   bun run db:restore --latest
 

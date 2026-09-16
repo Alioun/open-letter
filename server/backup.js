@@ -6,7 +6,7 @@
 // gzips the result. Old backups are pruned to BACKUP_KEEP.
 import { mkdir, readdir, unlink, rename } from "node:fs/promises";
 import { createReadStream, createWriteStream } from "node:fs";
-import { join } from "node:path";
+import { join, dirname, basename } from "node:path";
 import { createGzip } from "node:zlib";
 import { pipeline } from "node:stream/promises";
 import { openEncrypted, DB_PATH } from "../db/connection.js";
@@ -61,6 +61,12 @@ export async function runBackup() {
 
   try {
     await mkdir(BACKUP_DIR, { recursive: true });
+    // Make room before writing, not only after: drop to one below the limit so
+    // the new file lands in the slot the oldest one leaves. Steady-state disk
+    // use is unchanged, but on a full disk this frees roughly one backup's
+    // worth of space — without it every attempt failed, nothing was ever
+    // pruned, and backups never recovered on their own.
+    await pruneToCount(Math.max(1, BACKUP_KEEP - 1));
     await exportEncrypted(tmp);
 
     if (BACKUP_GZIP) {
@@ -75,7 +81,7 @@ export async function runBackup() {
     }
 
     console.log(`[backup] saved ${finalPath}`);
-    await prune();
+    await pruneToCount(BACKUP_KEEP);
   } catch (err) {
     console.error(`[backup] failed: ${err.message}`);
     for (const f of [tmp, finalPath]) {
@@ -83,17 +89,99 @@ export async function runBackup() {
         await unlink(f);
       } catch {}
     }
+  } finally {
+    // Retention is enforced whether or not this run succeeded: the privacy
+    // policy promises deleted data is gone from backups after BACKUP_KEEP (48)
+    // hours, and a run of failed backups must not quietly suspend that.
+    try {
+      await pruneExpired();
+      await prunePreRestore();
+    } catch (err) {
+      console.error(`[backup] prune failed: ${err.message}`);
+    }
   }
 }
 
-async function prune() {
-  const files = (await readdir(BACKUP_DIR))
-    .filter((f) => f.startsWith("backup-") && f.includes(".sqlite"))
-    .sort()
-    .reverse();
+// Timestamp embedded in backup and pre-restore file names:
+// YYYY-MM-DDTHH-MM-SS (UTC). Returns ms since epoch, or NaN.
+function nameTime(s) {
+  const m = s.match(/^(\d{4}-\d{2}-\d{2})T(\d{2})-(\d{2})-(\d{2})/);
+  return m ? Date.parse(`${m[1]}T${m[2]}:${m[3]}:${m[4]}Z`) : NaN;
+}
 
-  for (const f of files.slice(BACKUP_KEEP)) {
+// Only finished backups: a `.sqlite.tmp` left behind by an interrupted run is
+// not a restore point and must not count towards (or be kept as) the newest.
+const BACKUP_FILE_RE = /^backup-.+\.sqlite(\.gz)?$/;
+
+async function listBackups() {
+  return (await readdir(BACKUP_DIR))
+    .filter((f) => BACKUP_FILE_RE.test(f))
+    .sort()
+    .reverse(); // newest first
+}
+
+async function pruneToCount(keep) {
+  let files;
+  try {
+    files = await listBackups();
+  } catch {
+    return;
+  }
+  for (const f of files.slice(keep)) {
     await unlink(join(BACKUP_DIR, f));
+    console.log(`[backup] pruned ${f}`);
+  }
+}
+
+// Delete backups older than BACKUP_KEEP hours — except the newest one. While
+// backups are succeeding that exception never applies (the newest is at most
+// an hour old). If they keep failing, the last good backup is kept so there is
+// still something to restore from, and this logs an error every run so the
+// failure — and the fact that this copy is past the promised retention — gets
+// noticed rather than silently resolved by deleting it.
+async function pruneExpired() {
+  let files;
+  try {
+    files = await listBackups();
+  } catch {
+    return;
+  }
+  const cutoff = Date.now() - BACKUP_KEEP * ONE_HOUR;
+  const [newest, ...older] = files;
+  for (const f of older) {
+    const at = nameTime(f.slice("backup-".length));
+    if (Number.isNaN(at) || at >= cutoff) continue;
+    await unlink(join(BACKUP_DIR, f));
+    console.log(`[backup] pruned ${f} (older than ${BACKUP_KEEP}h)`);
+  }
+  const newestAt = newest ? nameTime(newest.slice("backup-".length)) : NaN;
+  if (!Number.isNaN(newestAt) && newestAt < cutoff) {
+    console.error(
+      `[backup] newest backup ${newest} is older than ${BACKUP_KEEP}h — backups are failing; kept as the only restore point, past the stated retention`,
+    );
+  }
+}
+
+// db/restore-backup.js moves the replaced database aside as
+// `<DATABASE_PATH>.pre-restore-<timestamp>[-wal|-shm]`. Those are full copies
+// of personal data, so they follow the same retention as the backups
+// themselves (BACKUP_KEEP hours, which the privacy policy states as 48) —
+// long enough to check a restore, not kept indefinitely.
+async function prunePreRestore() {
+  const dir = dirname(DB_PATH);
+  const prefix = `${basename(DB_PATH)}.pre-restore-`;
+  const cutoff = Date.now() - BACKUP_KEEP * ONE_HOUR;
+  let names;
+  try {
+    names = await readdir(dir);
+  } catch {
+    return;
+  }
+  for (const f of names) {
+    if (!f.startsWith(prefix)) continue;
+    const at = nameTime(f.slice(prefix.length));
+    if (Number.isNaN(at) || at >= cutoff) continue;
+    await unlink(join(dir, f));
     console.log(`[backup] pruned ${f}`);
   }
 }

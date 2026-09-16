@@ -1,5 +1,5 @@
 import { describe, test, expect, beforeEach, afterAll } from "bun:test";
-import { mkdtempSync, rmSync, existsSync, readdirSync } from "node:fs";
+import { mkdtempSync, rmSync, existsSync, readdirSync, writeFileSync, mkdirSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join, dirname } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -100,5 +100,83 @@ describe("backup + restore round-trip (isolated DB, via subprocess)", () => {
       env,
     );
     expect(verify.stdout.toString().trim()).toBe("3");
+  });
+});
+
+describe("pre-restore copies", () => {
+  test("are pruned with the backups once older than BACKUP_KEEP hours", () => {
+    const dataDir = tmp();
+    const backupDir = tmp();
+    const dbPath = join(dataDir, "live.db");
+    const iso = (msAgo) =>
+      new Date(Date.now() - msAgo).toISOString().replace(/[:.]/g, "-").slice(0, 19);
+    const old = `live.db.pre-restore-${iso(49 * 3600_000)}`;
+    const recent = `live.db.pre-restore-${iso(3600_000)}`;
+    for (const f of [old, `${old}-wal`, recent]) writeFileSync(join(dataDir, f), "x");
+    expect(readdirSync(dataDir)).toContain(old);
+
+    const res = run(
+      ["-e", "const { runBackup } = await import('./server/backup.js'); await runBackup();"],
+      { DATABASE_PATH: dbPath, BACKUP_DIR: backupDir, BACKUP_KEEP: "48" },
+    );
+    expect(res.exitCode).toBe(0);
+
+    const left = readdirSync(dataDir);
+    expect(left).not.toContain(old);
+    expect(left).not.toContain(`${old}-wal`);
+    expect(left).toContain(recent);
+  });
+});
+
+describe("backup retention", () => {
+  const stamp = (msAgo) =>
+    new Date(Date.now() - msAgo).toISOString().replace(/[:.]/g, "-").slice(0, 19);
+  const backupName = (msAgo) => `backup-${stamp(msAgo)}.sqlite.gz`;
+  const runBackupIn = (env) =>
+    run(["-e", "const { runBackup } = await import('./server/backup.js'); await runBackup();"], env);
+
+  test("a failed backup still prunes expired copies, but keeps the newest", () => {
+    const dataDir = tmp();
+    const backupDir = tmp();
+    const dbPath = join(dataDir, "live.db");
+    // Make the export fail mid-run: occupy every temp-file path the backup
+    // could pick in the next half minute with a directory, so ATTACH can't
+    // create its file there.
+    for (let s = 0; s < 30; s++) {
+      mkdirSync(join(backupDir, `backup-${stamp(-s * 1000)}.sqlite.tmp`), { recursive: true });
+    }
+
+    const newest = backupName(60 * 3600_000); // stale: backups have been failing
+    const expired = backupName(70 * 3600_000);
+    const preRestore = `live.db.pre-restore-${stamp(60 * 3600_000)}`;
+    for (const f of [newest, expired]) writeFileSync(join(backupDir, f), "x");
+    writeFileSync(join(dataDir, preRestore), "x");
+
+    const res = runBackupIn({ DATABASE_PATH: dbPath, BACKUP_DIR: backupDir, BACKUP_KEEP: "48" });
+    expect(res.exitCode).toBe(0);
+    expect(res.stderr.toString()).toContain("[backup] failed");
+
+    // No new backup was written, yet retention ran anyway.
+    expect(readdirSync(backupDir).filter((f) => !f.endsWith(".tmp"))).toEqual([newest]);
+    expect(readdirSync(dataDir)).not.toContain(preRestore);
+    // Keeping the last restore point past retention is flagged, not silent.
+    expect(res.stderr.toString()).toContain("older than 48h");
+  });
+
+  test("makes room before writing, so a full backup set stays at the limit", async () => {
+    await resetDb();
+    await addVerifiedSigner();
+    const backupDir = tmp();
+    const keep = 3;
+    const existing = [3, 2, 1].map((h) => backupName(h * 3600_000));
+    for (const f of existing) writeFileSync(join(backupDir, f), "x");
+
+    const res = runBackupIn({ BACKUP_DIR: backupDir, BACKUP_KEEP: String(keep) });
+    expect(res.exitCode).toBe(0);
+
+    const left = readdirSync(backupDir).sort();
+    expect(left).toHaveLength(keep);
+    expect(left).not.toContain(existing[0]); // the oldest made room
+    expect(left.filter((f) => !existing.includes(f))).toHaveLength(1); // the new one
   });
 });

@@ -53,7 +53,8 @@ async function counts(db) {
 async function resolveBackupFile(arg) {
   if (arg && arg !== "--latest") return arg;
   const files = (await readdir(BACKUP_DIR))
-    .filter((f) => f.startsWith("backup-") && f.includes(".sqlite"))
+    // Finished backups only — never a `.sqlite.tmp` from an interrupted run.
+    .filter((f) => /^backup-.+\.sqlite(\.gz)?$/.test(f))
     .sort()
     .reverse();
   if (files.length === 0) {
@@ -108,7 +109,9 @@ async function main() {
       if (existsSync(p)) {
         const aside = `${DB_PATH}.pre-restore-${ts}${suffix}`;
         await rename(p, aside);
-        console.log(`[restore] moved ${p} -> ${aside}`);
+        console.log(
+          `[restore] moved ${p} -> ${aside} (removed by the backup job after BACKUP_KEEP hours)`,
+        );
       }
     }
   }
