@@ -310,6 +310,7 @@ writeIfChanged(
     readFileSync(new URL("../index.template.html", import.meta.url), "utf8"),
     cfg,
     LETTER_NAME,
+    { preloadBoot: true },
   ),
 );
 writeIfChanged(
@@ -1182,6 +1183,26 @@ const server = Bun.serve({
       async GET() {
         const db = await healthCheck();
         return json({ ok: db, db }, db ? 200 : 503);
+      },
+    },
+
+    // Live initial state for the first render (counter, Treffen date), so the
+    // page never paints placeholders that flash. Preloaded from the homepage
+    // <head> and awaited in main.jsx; the fetches in App.jsx keep it live.
+    "/api/boot": {
+      async GET(req) {
+        const blocked = denyRate(req, "boot", 120, 60 * 1000);
+        if (blocked) return blocked;
+        try {
+          const [stats, zoom] = await Promise.all([
+            statsPayload(),
+            cfg.features.zoomEvent ? zoomPayload() : null,
+          ]);
+          return json({ stats, zoom }, 200, { "Cache-Control": "no-store" });
+        } catch (err) {
+          console.error("GET /api/boot error:", err);
+          return json({ error: "Internal server error" }, 500);
+        }
       },
     },
 

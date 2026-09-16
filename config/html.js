@@ -22,7 +22,7 @@ export function analyticsOrigin(cfg) {
   }
 }
 
-export function renderHead(cfg, letterName) {
+export function renderHead(cfg, letterName, { preloadBoot = false } = {}) {
   const m = cfg.meta;
   const canonical = m.canonicalUrl;
   const jsonLd = {
@@ -60,7 +60,14 @@ export function renderHead(cfg, letterName) {
 
   return `    <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width,initial-scale=1" />
-    <meta name="x-letter" content="${esc(letterName || "")}" />
+    <meta name="x-letter" content="${esc(letterName || "")}" />${
+      // Starts the initial-state request while the bundle downloads; main.jsx
+      // reuses this response. A <link> (unlike <script src="/…">) is left alone
+      // by Bun's HTML bundler, so the URL can stay relative.
+      preloadBoot
+        ? `\n    <link rel="preload" href="/api/boot" as="fetch" crossorigin />`
+        : ""
+    }
     <title>${esc(m.title)}</title>
     <meta name="description" content="${esc(m.description)}" />
     <link rel="canonical" href="${esc(canonical)}" />
@@ -86,8 +93,8 @@ ${JSON.stringify(jsonLd, null, 6).replace(/^/gm, "      ").trimStart()}
     </script>${analytics}`;
 }
 
-export function renderIndexHtml(template, cfg, letterName) {
+export function renderIndexHtml(template, cfg, letterName, headOptions) {
   return template
     .replace("{{LANG}}", esc(cfg.brand.lang || "de"))
-    .replace("{{HEAD}}", renderHead(cfg, letterName));
+    .replace("{{HEAD}}", renderHead(cfg, letterName, headOptions));
 }
