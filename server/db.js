@@ -537,7 +537,7 @@ export async function refreshZoomUnsubscribeToken(id) {
   const token = crypto.randomUUID();
   const row = await db
     .query(
-      `UPDATE zoom_registrations SET unsubscribe_token = ?
+      `UPDATE zoom_registrations /* public-neutral */ SET unsubscribe_token = ?
        WHERE id = ? RETURNING unsubscribe_token`,
     )
     .get(token, id);
@@ -900,7 +900,7 @@ export async function markCampaignFailed(id, recipientCount = null) {
 export async function incrementCampaignOffset(id, count) {
   await db
     .query(
-      `UPDATE campaigns SET sent_offset = sent_offset + ?, recipient_count = sent_offset + ?
+      `UPDATE campaigns /* public-neutral */ SET sent_offset = sent_offset + ?, recipient_count = sent_offset + ?
      WHERE id = ?`,
     )
     .run(count, count, id);
@@ -965,7 +965,7 @@ export async function refreshUnsubscribeToken(id) {
   const token = crypto.randomUUID();
   const row = await db
     .query(
-      `UPDATE signers SET unsubscribe_token = ?, unsubscribe_token_created_at = ?
+      `UPDATE signers /* public-neutral */ SET unsubscribe_token = ?, unsubscribe_token_created_at = ?
        WHERE id = ? RETURNING unsubscribe_token`,
     )
     .get(token, nowIso(), id);
