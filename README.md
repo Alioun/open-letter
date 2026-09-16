@@ -2,7 +2,7 @@
 
 A self-hosted platform for open letters and petitions. People sign, confirm by email, and appear on a public list with a live goal counter. One deployment serves one letter, and everything about a campaign — text, branding, theme, emails, features — is config.
 
-![Screenshot of the Gehaltsdeckel campaign](docs/screenshot.png)
+![Landing page with live signature counter](docs/screenshots/hero.png)
 
 ## Features
 
@@ -13,6 +13,14 @@ A self-hosted platform for open letters and petitions. People sign, confirm by e
 - **GDPR-minded** — retention periods set in config, enforced by the server and quoted in the privacy policy
 - **Optional modules** — German-state map, Kreisverband/occupation fields, Zoom or in-person event sign-up
 - **Cheap to run** — a 0.5 vCPU / 512 MB VPS serves 100,000 signers ([numbers](docs/hardware.md))
+
+<table>
+<tr><td width="33%"><a href="docs/screenshots/sign.png"><img src="docs/screenshots/sign.png" alt="Sign form"></a><br><sub>Sign form</sub></td><td width="33%"><a href="docs/screenshots/confirm.png"><img src="docs/screenshots/confirm.png" alt="Email confirmation"></a><br><sub>Email confirmation</sub></td><td width="33%"><a href="docs/screenshots/self-service.png"><img src="docs/screenshots/self-service.png" alt="Signer self-service"></a><br><sub>Signer self-service</sub></td></tr>
+<tr><td width="33%"><a href="docs/screenshots/list.png"><img src="docs/screenshots/list.png" alt="Signer list and search"></a><br><sub>Signer list and search</sub></td><td width="33%"><a href="docs/screenshots/map.png"><img src="docs/screenshots/map.png" alt="Signers by state"></a><br><sub>Signers by state</sub></td><td width="33%"><a href="docs/screenshots/event.png"><img src="docs/screenshots/event.png" alt="Event sign-up"></a><br><sub>Event sign-up</sub></td></tr>
+<tr><td width="33%"><a href="docs/screenshots/admin-templates.png"><img src="docs/screenshots/admin-templates.png" alt="Admin: email templates"></a><br><sub>Admin: email templates</sub></td><td width="33%"><a href="docs/screenshots/admin-campaigns.png"><img src="docs/screenshots/admin-campaigns.png" alt="Admin: scheduled mailings"></a><br><sub>Admin: scheduled mailings</sub></td><td width="33%"><a href="docs/screenshots/admin-signers.png"><img src="docs/screenshots/admin-signers.png" alt="Admin: signers and targeted sends"></a><br><sub>Admin: signers and targeted sends</sub></td></tr>
+</table>
+
+Screenshots show the bundled `example` letter with every optional module switched on. Click any image to enlarge it.
 
 ## Try it
 
