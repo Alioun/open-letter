@@ -3,6 +3,7 @@ import nodemailer from "nodemailer";
 import { getEmailTemplateBySlug, getNewsletterStats } from "./db.js";
 import cfg from "../config/letter.config.js";
 import { escapeHtml } from "./pages.js";
+import { resolvePrivacy } from "../config/privacy.js";
 
 // ---- Transport selection ---------------------------------------------------
 // The mail transport is chosen by the active letter config (email.provider),
@@ -144,7 +145,7 @@ export function interpolateTemplate(value, variables = {}) {
     (_, key, inner) => (variables[key] ? inner : ""),
   );
   return sectioned.replace(
-    /\{\{\s*(name|firstName|confirmUrl|deleteUrl|signerCount|unsubscribeUrl|eventLabel|eventWhen|linkInfo|zoomJaUrl|zoomJaDelegiertUrl)\s*\}\}/g,
+    /\{\{\s*(name|firstName|confirmUrl|deleteUrl|signerCount|unsubscribeUrl|eventLabel|eventWhen|linkInfo|zoomJaUrl|zoomJaDelegiertUrl|linkHours)\s*\}\}/g,
     (_, key) => {
       const raw = String(variables[key] ?? "");
       return URL_VARIABLES.has(key) ? raw : escapeHtml(raw);
@@ -170,6 +171,8 @@ export async function renderTemplateBySlug(slug, variables = {}) {
 
   const allVariables = {
     signerCount: stats.signerCount?.toLocaleString("de-DE") || "0",
+    // How long confirmation/deletion links stay valid (config privacy).
+    linkHours: String(resolvePrivacy(cfg).confirmationLinkHours),
     ...variables,
   };
 

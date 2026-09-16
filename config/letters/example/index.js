@@ -124,6 +124,14 @@ export default {
     disclaimer: "This is a private initiative.",
   },
 
+  // Retention periods and link lifetimes (defaults: config/privacy.js).
+  privacy: {
+    confirmationLinkHours: 24,
+    settingsLinkDays: 90,
+    emailJobRetentionHours: 24,
+    treffenRetentionDays: 14,
+  },
+
   email: {
     from: "Open Letter <noreply@example.org>",
     signoff: "Kind regards<br>The Open Letter team",
@@ -152,7 +160,7 @@ export default {
       <p>Hello {{name}},</p>
       <p>Thanks for signing the open letter.</p>
       <p><a href="{{confirmUrl}}">Click here to confirm your email</a></p>
-      <p>The link is valid for 24 hours.</p>
+      <p>The link is valid for {{linkHours}} hours.</p>
       <p>Kind regards<br>The Open Letter team</p>
     `,
       },
@@ -173,7 +181,7 @@ export default {
       <p>Hello,</p>
       <p>you requested deletion of your signature and all stored data.</p>
       <p><a href="{{deleteUrl}}">Click here to permanently delete your data</a></p>
-      <p>The link is valid for 24 hours. If you did not request this, ignore this email.</p>
+      <p>The link is valid for {{linkHours}} hours. If you did not request this, ignore this email.</p>
       <p>Kind regards<br>The Open Letter team</p>
     `,
       },

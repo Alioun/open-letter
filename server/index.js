@@ -4,6 +4,7 @@ import { readFileSync, writeFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { SignJWT, jwtVerify } from "jose";
 import cfg, { LETTER_NAME } from "../config/letter.config.js";
+import { resolvePrivacy } from "../config/privacy.js";
 import {
   renderIndexHtml,
   renderUnsubscribeHtml,
@@ -1004,9 +1005,12 @@ function treffenLinkError() {
   );
 }
 
-// The privacy policy promises Treffen registrations are deleted 14 days after
-// the event.
-const TREFFEN_RETENTION_MS = 14 * 24 * 60 * 60 * 1000;
+// Retention periods and link lifetimes from the letter config; the privacy
+// policy quotes the same values.
+const privacy = resolvePrivacy(cfg);
+const TREFFEN_RETENTION_MS = privacy.treffenRetentionMs;
+const confirmationExpiry = () =>
+  new Date(Date.now() + privacy.confirmationLinkMs);
 
 let zoomMailingRunning = false;
 
@@ -1392,7 +1396,7 @@ const server = Bun.serve({
           }
 
           const token = crypto.randomUUID();
-          const expiresAt = new Date(Date.now() + 24 * 60 * 60 * 1000);
+          const expiresAt = confirmationExpiry();
 
           const { ok, alreadyVerified } = await insertSigner({
             name,
@@ -1481,7 +1485,7 @@ const server = Bun.serve({
             kv,
             delegierter,
             token: crypto.randomUUID(),
-            expiresAt: new Date(Date.now() + 24 * 60 * 60 * 1000),
+            expiresAt: confirmationExpiry(),
           });
           if (pending.status === "pending") {
             await queueEmail("treffen-verification", {
@@ -1557,7 +1561,7 @@ const server = Bun.serve({
           if (!isValidEmail(email)) return json({ ok: true });
 
           const token = crypto.randomUUID();
-          const expiresAt = new Date(Date.now() + 24 * 60 * 60 * 1000);
+          const expiresAt = confirmationExpiry();
           const name = await refreshVerificationToken(email, token, expiresAt);
 
           if (name) {
@@ -1626,7 +1630,7 @@ const server = Bun.serve({
           }
 
           const token = crypto.randomUUID();
-          const expiresAt = new Date(Date.now() + 24 * 60 * 60 * 1000);
+          const expiresAt = confirmationExpiry();
 
           const requestId = await createDeletionRequest(
             email,
@@ -2792,10 +2796,9 @@ async function sendQueuedEmail(payload) {
   }
 }
 
-// A transactional mail that hasn't gone out within a day is useless (the
-// confirmation and deletion links are valid for 24h), and a dead-lettered one
-// is removed a day after it died.
-const EMAIL_JOB_TTL_S = 24 * 60 * 60;
+// A transactional mail that hasn't gone out within this window is dropped, and
+// a dead-lettered one is removed this long after it died (config privacy).
+const EMAIL_JOB_TTL_S = privacy.emailJobRetentionS;
 
 let jobsReady = false;
 async function queueEmail(kind, args) {
@@ -2857,7 +2860,7 @@ try {
   await registerSchedule("purge-unverified", "maintenance", "@every 300s", {
     task: "purge-unverified",
   });
-  // Failed transactional mails: drop their dead-letter rows after a day.
+  // Failed transactional mails: drop their dead-letter rows after the TTL.
   await registerSchedule("purge-dead-emails", "maintenance", "@every 3600s", {
     task: "purge-dead-emails",
   });

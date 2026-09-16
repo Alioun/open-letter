@@ -13,6 +13,7 @@ import { db, nowIso, isoAgo, onMutation } from "../db/connection.js";
 import { cached, invalidate } from "./cache.js";
 import { deleteJobsByPayload } from "../db/jobs.js";
 import cfg from "../config/letter.config.js";
+import { resolvePrivacy } from "../config/privacy.js";
 
 const DAY = 24 * 60 * 60 * 1000;
 
@@ -1190,7 +1191,7 @@ export async function getNewsletterRecipientsByIds(ids) {
 // token forever, but reading/editing/deleting data needs a token that was
 // mailed within TOKEN_EDIT_WINDOW. Every mail carrying the token goes only to
 // the address itself, so stamping it never hands access to anyone else.
-const TOKEN_EDIT_WINDOW = 90 * DAY;
+const TOKEN_EDIT_WINDOW = resolvePrivacy(cfg).settingsLinkMs;
 
 export async function issueUnsubscribeToken(id) {
   const row = await db

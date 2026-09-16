@@ -1,4 +1,8 @@
 import { useEffect, useMemo, useState } from "react";
+import cfg from "../config/letter.config.js";
+import { resolvePrivacy } from "../config/privacy.js";
+
+const { settingsLinkDays } = resolvePrivacy(cfg);
 
 function getToken() {
   const parts = window.location.pathname.split("/").filter(Boolean);
@@ -234,8 +238,8 @@ export default function UnsubscribeApp() {
 
                 {d.editable === false && (
                   <p className="sub2">
-                    Wir haben dir seit mehr als 90 Tagen keine E-Mail mit diesem
-                    Link geschickt. Abmelden kannst du dich weiterhin. Um deine Angaben zu ändern oder deine
+                    Wir haben dir seit mehr als {settingsLinkDays} Tagen keine
+                    E-Mail mit diesem Link geschickt. Abmelden kannst du dich weiterhin. Um deine Angaben zu ändern oder deine
                     Unterschrift zu löschen, nutze den Link aus einer neueren
                     E-Mail oder das Löschformular in der Datenschutzerklärung.
                   </p>

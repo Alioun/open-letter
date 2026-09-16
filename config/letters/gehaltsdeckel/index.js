@@ -167,6 +167,16 @@ export default {
       "Diese Website ist kein offizielles Angebot der Partei Die Linke. Es handelt sich um eine private Initiative von Parteimitgliedern an der Basis.",
   },
 
+  // ---- Privacy: retention periods and link lifetimes -------------------------
+  // Enforced by the server and quoted in the privacy policy. Omitted keys use
+  // the defaults in config/privacy.js.
+  privacy: {
+    confirmationLinkHours: 24,
+    settingsLinkDays: 90,
+    emailJobRetentionHours: 24,
+    treffenRetentionDays: 14,
+  },
+
   // ---- Email -----------------------------------------------------------------
   email: {
     // Verified sender. Overridable via EMAIL_FROM / RESEND_FROM.
@@ -199,7 +209,7 @@ export default {
       <p>Hallo {{name}},</p>
       <p>Danke für deine Unterschrift unter den offenen Brief „Gehaltsdeckel jetzt".</p>
       <p><a href="{{confirmUrl}}">Klicke hier, um deine E-Mail zu bestätigen</a></p>
-      <p>Der Link ist 24 Stunden gültig.</p>
+      <p>Der Link ist {{linkHours}} Stunden gültig.</p>
       <p>Mit solidarischen Grüßen<br>Initiative Gehaltsdeckel</p>
     `,
       },
@@ -221,7 +231,7 @@ export default {
       <p>Hallo,</p>
       <p>du hast die Löschung aller Daten angefordert, die wir zu dieser E-Mail-Adresse gespeichert haben – deine Unterschrift und deine Anmeldung zum Treffen, falls vorhanden.</p>
       <p><a href="{{deleteUrl}}">Klicke hier, um deine Daten unwiderruflich zu löschen</a></p>
-      <p>Der Link ist 24 Stunden gültig. Wenn du diese Anfrage nicht gestellt hast, kannst du diese E-Mail ignorieren.</p>
+      <p>Der Link ist {{linkHours}} Stunden gültig. Wenn du diese Anfrage nicht gestellt hast, kannst du diese E-Mail ignorieren.</p>
       <p>Mit solidarischen Grüßen<br>Initiative Gehaltsdeckel</p>
     `,
       },
@@ -233,7 +243,7 @@ export default {
       <p>Hallo {{firstName}},</p>
       <p>du möchtest am Auswertungstreffen der Unterzeichner*innen<strong>{{eventWhen}}</strong> teilnehmen.</p>
       <p><a href="{{confirmUrl}}">Klicke hier, um deine Anmeldung zu bestätigen</a></p>
-      <p>Der Link ist 24 Stunden gültig. Erst nach der Bestätigung bist du angemeldet und bekommst Infos zum Treffen. Wenn du dich nicht angemeldet hast, kannst du diese E-Mail ignorieren – wir löschen die Angaben dann automatisch.</p>
+      <p>Der Link ist {{linkHours}} Stunden gültig. Erst nach der Bestätigung bist du angemeldet und bekommst Infos zum Treffen. Wenn du dich nicht angemeldet hast, kannst du diese E-Mail ignorieren – wir löschen die Angaben dann automatisch.</p>
       <p>Mit solidarischen Grüßen<br>Initiative Gehaltsdeckel</p>
     `,
       },
