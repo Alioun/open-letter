@@ -413,10 +413,12 @@ A backup predates any deletion or opt-out made after it. So before replacing the
 database, the restore reads its `erasure_log` (an HMAC of the address, what
 happened, and when; kept `privacy.erasureLogDays`) and afterwards re-applies it
 to the restored data: erased addresses are deleted again, newsletter and Treffen
-opt-outs are applied again. Rows created after the logged event are left alone.
+opt-outs and names taken off the public list are applied again. Rows created
+after the logged event are left alone.
 If the old database can't be read, the restore says so loudly — then re-apply
-those requests by hand before starting the app. Edits made on the settings page
-(name, public display) are not logged and are lost with a restore.
+those requests by hand before starting the app. Other edits on the settings page
+(name, Kreisverband, occupation) are not logged and are lost with a restore —
+the log holds no personal data to restore them from.
 
 ## Hardware requirements
 

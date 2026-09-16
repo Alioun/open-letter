@@ -24,6 +24,7 @@ const ERASURE_LOG_DDL = `CREATE TABLE IF NOT EXISTS erasure_log (
 export const ERASE = "erase"; // everything for the address
 export const NEWSLETTER_OPT_OUT = "newsletter-opt-out";
 export const TREFFEN_OPT_OUT = "treffen-opt-out";
+export const HIDE_PUBLICLY = "hide-publicly"; // name taken off the public list
 
 function hmacKey() {
   const key = process.env.DATABASE_ENCRYPTION_KEY || "";
@@ -78,7 +79,12 @@ export async function applyErasureLog(db, entries) {
     if (!byHmac.has(e.email_hmac)) byHmac.set(e.email_hmac, []);
     byHmac.get(e.email_hmac).push(e);
   }
-  const applied = { [ERASE]: 0, [NEWSLETTER_OPT_OUT]: 0, [TREFFEN_OPT_OUT]: 0 };
+  const applied = {
+    [ERASE]: 0,
+    [NEWSLETTER_OPT_OUT]: 0,
+    [TREFFEN_OPT_OUT]: 0,
+    [HIDE_PUBLICLY]: 0,
+  };
   if (byHmac.size === 0) return applied;
 
   // A backup from before a table existed simply doesn't have it.
@@ -117,6 +123,14 @@ export async function applyErasureLog(db, entries) {
           .query(
             `UPDATE signers SET newsletter = 0
              WHERE email = ? AND newsletter = 1 AND created_at < ?`,
+          )
+          .run(email, at);
+        if (res?.changes) applied[kind]++;
+      } else if (kind === HIDE_PUBLICLY) {
+        const res = await db
+          .query(
+            `UPDATE signers SET show_publicly = 0
+             WHERE email = ? AND show_publicly = 1 AND created_at < ?`,
           )
           .run(email, at);
         if (res?.changes) applied[kind]++;

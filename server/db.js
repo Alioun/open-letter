@@ -19,6 +19,7 @@ import {
   ERASE,
   NEWSLETTER_OPT_OUT,
   TREFFEN_OPT_OUT,
+  HIDE_PUBLICLY,
 } from "../db/erasure-log.js";
 import cfg from "../config/letter.config.js";
 import { resolvePrivacy } from "../config/privacy.js";
@@ -1443,6 +1444,9 @@ export async function updateSignerByEmail(
   if (row) {
     if (newsletter) await forgetErasure(db, email, NEWSLETTER_OPT_OUT);
     else await recordErasure(db, email, NEWSLETTER_OPT_OUT);
+    // Taking the name off the public list must survive a restore as well.
+    if (showPublicly) await forgetErasure(db, email, HIDE_PUBLICLY);
+    else await recordErasure(db, email, HIDE_PUBLICLY);
   }
   return Boolean(row);
 }

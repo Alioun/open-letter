@@ -2592,7 +2592,8 @@ function DatenschutzModal({ onClose }) {
             bis dahin noch in Sicherungskopien enthalten sein. Sicherungskopien
             werden ausschließlich zur Wiederherstellung nach einem technischen
             Ausfall verwendet. Damit eine Wiederherstellung gelöschte Daten nicht
-            zurückbringt, vermerken wir Löschungen und Abmeldungen für{" "}
+            zurückbringt, vermerken wir Löschungen, Abmeldungen und das Ausblenden
+            deines Namens aus der öffentlichen Liste für{" "}
             {privacy.erasureLogDays} Tage – nur als nicht umkehrbarer Prüfwert
             deiner E-Mail-Adresse, nicht die Adresse selbst – und wenden sie nach
             einer Wiederherstellung erneut an.

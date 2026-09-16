@@ -19,6 +19,7 @@ import {
   ERASE,
   NEWSLETTER_OPT_OUT,
   TREFFEN_OPT_OUT,
+  HIDE_PUBLICLY,
 } from "../db/erasure-log.js";
 
 beforeEach(resetDb);
@@ -120,6 +121,29 @@ describe("erasure log", () => {
       showPublicly: true,
     });
     expect((await readErasureLog(db)).map((e) => e.kind)).toEqual([TREFFEN_OPT_OUT]);
+  });
+
+  test("taking the name off the public list survives a restore", async () => {
+    const s = await addVerifiedSigner({ email: "hide@example.org", created_at: isoAgoDays(5) });
+    await copyRow("signers", s.email, isoAgoDays(5));
+    const edit = (showPublicly) =>
+      q.updateSignerByEmail(s.email, {
+        name: "X",
+        kreisverband: "",
+        occupation: "",
+        newsletter: true,
+        showPublicly,
+      });
+
+    await edit(false);
+    const applied = await applyErasureLog(restored, await readErasureLog(db));
+    expect(applied[HIDE_PUBLICLY]).toBe(1);
+    expect(
+      (await restored.query("SELECT show_publicly FROM signers").get()).show_publicly,
+    ).toBe(0);
+
+    await edit(true); // shown again: nothing to re-apply
+    expect((await readErasureLog(db)).map((e) => e.kind)).not.toContain(HIDE_PUBLICLY);
   });
 
   test("old entries are purged", async () => {
