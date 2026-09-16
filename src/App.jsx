@@ -413,10 +413,21 @@ export default function App({ boot = null }) {
       setShowDeleted(true);
       window.history.replaceState({}, "", window.location.pathname);
     } else if (params.get("error") === "token-expired") {
+      // Used tokens aren't kept, so a second click (or a link already opened
+      // by a mail scanner) can't be told apart from an expired one. Instead of
+      // "sign again", route the person through the sign form's existing check:
+      // an already confirmed address gets the "already signed" mail, an
+      // unconfirmed one its confirmation link again — without the page revealing
+      // which.
       setSubmitError(
-        "Der Bestätigungslink ist abgelaufen. Bitte unterschreibe erneut.",
+        "Dieser Bestätigungslink wurde schon verwendet oder ist abgelaufen. Vielleicht ist deine Unterschrift also schon bestätigt: Trag einfach noch einmal dieselbe E-Mail-Adresse ein. Ist sie schon bestätigt, bekommst du eine E-Mail, dass alles passt – sonst noch einmal einen Bestätigungslink.",
       );
       window.history.replaceState({}, "", window.location.pathname);
+      requestAnimationFrame(() => {
+        const field = document.getElementById("sign-name");
+        field?.closest("details")?.setAttribute("open", "");
+        field?.scrollIntoView({ block: "center" });
+      });
     } else if (params.get("error") === "delete-token-expired") {
       setSubmitError(
         "Der Löschlink ist abgelaufen. Bitte fordere über die Datenschutzseite einen neuen an.",
