@@ -180,6 +180,7 @@ export default {
     signerRetentionYears: 3,
     backupRetentionHours: 48,
     erasureLogDays: 7,
+    deliveryLogDays: 30,
   },
 
   // ---- Email -----------------------------------------------------------------

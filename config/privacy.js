@@ -27,6 +27,11 @@ export const PRIVACY_DEFAULTS = {
   // Erasures and opt-outs are logged (as an HMAC of the address) for this long,
   // so restoring a backup can re-apply them. Must cover backupRetentionHours.
   erasureLogDays: 7,
+  // Campaign and Treffen mailings log which address got the mail when, so an
+  // interrupted send resumes without skipping or repeating anyone. Entries are
+  // deleted this many days after sending, and an aborted campaign can only be
+  // retried within that window (after it the log that prevents repeats is gone).
+  deliveryLogDays: 30,
 };
 
 // Backup retention in effect: BACKUP_KEEP from the environment when set,
@@ -88,5 +93,6 @@ export function resolvePrivacy(cfg) {
     emailJobRetentionS: Math.round(merged.emailJobRetentionHours * 3600),
     treffenRetentionMs: merged.treffenRetentionDays * DAY,
     erasureLogMs: merged.erasureLogDays * DAY,
+    deliveryLogMs: merged.deliveryLogDays * DAY,
   };
 }

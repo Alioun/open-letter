@@ -2434,7 +2434,15 @@ const server = Bun.serve({
       async POST(req) {
         return adminJson(req, async () => {
           const ok = await retryAbortedCampaign(parseInt(req.params.id, 10));
-          if (!ok) return json({ error: "Campaign is not aborted" }, 400);
+          if (!ok) {
+            return json(
+              {
+                error:
+                  "Kampagne ist nicht abgebrochen, oder ihr Versandprotokoll ist zu alt, um Doppelversand auszuschließen.",
+              },
+              400,
+            );
+          }
           return json({ ok: true });
         });
       },

@@ -2490,6 +2490,14 @@ function DatenschutzModal({ onClose }) {
             löschen; dafür gilt er {privacy.settingsLinkDays} Tage ab der letzten
             E-Mail, die ihn enthielt. Abmelden kannst du dich damit unbegrenzt.
           </p>
+          <p>
+            Damit bei einer unterbrochenen Sendung niemand eine E-Mail doppelt
+            oder gar nicht bekommt, speichern wir zu jeder Kampagnen-E-Mail
+            {cfg.features.zoomEvent && " und jeder E-Mail zum Treffen"}, an
+            welche E-Mail-Adresse sie wann verschickt wurde. Diese Einträge
+            löschen wir {privacy.deliveryLogDays} Tage nach dem Versand, und
+            sofort, wenn du deine Daten löschen lässt.
+          </p>
           {cfg.features.zoomEvent && (
             <p>
               <strong>

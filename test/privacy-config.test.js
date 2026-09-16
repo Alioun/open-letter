@@ -23,6 +23,9 @@ describe("privacy config", () => {
     expect(p.treffenRetentionMs).toBe(30 * 24 * 3600 * 1000);
     expect(p.confirmationLinkMs).toBe(48 * 3600 * 1000);
     expect(p.settingsLinkDays).toBe(90);
+    expect(resolvePrivacy({ privacy: { deliveryLogDays: 10 } }).deliveryLogMs).toBe(
+      10 * 24 * 3600 * 1000,
+    );
   });
 
   test("invalid values fail loudly", () => {

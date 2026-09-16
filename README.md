@@ -345,6 +345,7 @@ policy quotes the same values, so change them there, not in code.
 | `signerRetentionYears` | 3 | daily job deletes signatures and Treffen registrations older than this |
 | `backupRetentionHours` | 48 | hourly backups (and pre-restore copies) are deleted after this; `BACKUP_KEEP` overrides it |
 | `erasureLogDays` | 7 | erasures/opt-outs are kept (hashed) this long so a restore can re-apply them; must cover `backupRetentionHours` |
+| `deliveryLogDays` | 30 | campaign/Treffen mailings log which address got the mail, so an interrupted send resumes without repeats; rows are deleted this long after sending, and an aborted campaign can only be retried within it |
 
 ### Ending a campaign
 

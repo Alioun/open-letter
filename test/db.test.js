@@ -365,6 +365,21 @@ describe("campaigns", () => {
     expect(await q.getDeliveredEmails(`campaign:${open.id}`)).not.toContain(s.email);
   });
 
+  test("an aborted campaign's log ages out, and its retry is refused after that", async () => {
+    const t = await addTemplate();
+    const c = await q.createCampaign({ templateId: t.id, subject: "a", scheduledAt: past() });
+    await q.claimCampaignById(c.id);
+    await db.query("UPDATE campaigns SET attempts = ? WHERE id = ?").run(q.MAX_MAILING_ATTEMPTS, c.id);
+    await q.markCampaignFailed(c.id); // -> aborted
+    await q.markDelivered(`campaign:${c.id}`, ["y@x.org"]);
+    const old = new Date(Date.now() - 31 * 86400_000).toISOString();
+    await db.query("UPDATE mailing_deliveries SET sent_at = ?").run(old);
+
+    // Retrying now could re-mail y@x.org once the log is purged: refused.
+    expect(await q.retryAbortedCampaign(c.id)).toBe(false);
+    expect(await q.deleteOldDeliveries()).toBe(1);
+  });
+
   test("the delivery log records each address once per mailing", async () => {
     await q.markDelivered("campaign:1", ["a@x.org", "b@x.org"]);
     await q.markDelivered("campaign:1", ["b@x.org"]); // retry reports it again

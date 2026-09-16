@@ -867,7 +867,12 @@ export default function AdminApp() {
     const res = await api(`/api/admin/campaigns/${id}/retry`, {
       method: "POST",
     });
-    if (res.ok) reloadCampaigns();
+    if (res.ok) {
+      reloadCampaigns();
+    } else {
+      const data = await res.json().catch(() => ({}));
+      alert(data.error || "Erneuter Versuch nicht möglich.");
+    }
   }
 
   function toggleSigner(id) {

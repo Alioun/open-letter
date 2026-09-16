@@ -990,10 +990,12 @@ export async function markDelivered(mailing, emails) {
     .run(...emails.flatMap((e) => [mailing, e, now]));
 }
 
-// The delivery log holds addresses, so it's kept only as long as a resume can
-// need it: rows older than DELIVERY_LOG_DAYS go, except for campaigns that are
-// still unfinished (sending, failed, or aborted and awaiting an admin retry).
-const DELIVERY_LOG_DAYS = 30;
+// The delivery log holds addresses, so rows go privacy.deliveryLogDays after
+// sending (the privacy policy quotes it). Only a campaign still running or
+// between retries keeps its rows — that state ends within hours (backoff, then
+// 'aborted'). An aborted campaign doesn't hold them: its log ages out like any
+// other, and retryAbortedCampaign refuses once that could have happened.
+const DELIVERY_LOG_MS = resolvePrivacy(cfg).deliveryLogMs;
 
 export async function deleteOldDeliveries() {
   const res = await db
@@ -1003,9 +1005,9 @@ export async function deleteOldDeliveries() {
          AND NOT EXISTS (
            SELECT 1 FROM campaigns c
            WHERE 'campaign:' || c.id = mailing_deliveries.mailing
-             AND c.status IN ('sending', 'failed', 'aborted'))`,
+             AND c.status IN ('sending', 'failed'))`,
     )
-    .run(isoAgo(DELIVERY_LOG_DAYS * DAY));
+    .run(isoAgo(DELIVERY_LOG_MS));
   return res?.changes ?? 0;
 }
 
@@ -1383,14 +1385,20 @@ export async function markCampaignFailed(id) {
 }
 
 // Admin: give an aborted campaign a fresh set of attempts. Already-reached
-// recipients stay in the delivery log and are not mailed again.
+// recipients are in the delivery log and are not mailed again — which only
+// holds while that log is complete, so the retry is refused once the campaign's
+// oldest delivery could have aged out (see deleteOldDeliveries).
 export async function retryAbortedCampaign(id) {
   const row = await db
     .query(
       `UPDATE campaigns SET status = 'failed', attempts = 0
-       WHERE id = ? AND status = 'aborted' RETURNING id`,
+       WHERE id = ? AND status = 'aborted'
+         AND NOT EXISTS (
+           SELECT 1 FROM mailing_deliveries d
+           WHERE d.mailing = 'campaign:' || campaigns.id AND d.sent_at < ?)
+       RETURNING id`,
     )
-    .get(id);
+    .get(id, isoAgo(DELIVERY_LOG_MS));
   return Boolean(row);
 }
 
