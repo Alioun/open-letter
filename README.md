@@ -326,6 +326,36 @@ relays) for `smtp`. The app fails closed at startup if they're missing.
 - **Token security**: `crypto.randomUUID()` (128-bit), 24h expiry, cleared after use.
 - **No email exposure**: `/api/signers` never returns email addresses. `/api/sign` returns the same response whether the email exists or not.
 
+## Data retention
+
+Retention periods and link lifetimes are set per letter in `privacy` of the
+letter config (defaults and validation in `config/privacy.js`). The privacy
+policy quotes the same values, so change them there, not in code.
+
+| Key | Default | Enforced by |
+| --- | --- | --- |
+| `confirmationLinkHours` | 24 | sign-up, Treffen and deletion links expire; unconfirmed rows are swept every 5 min |
+| `settingsLinkDays` | 90 | an unsubscribe link can show/edit/delete data for this long after the last mail carrying it; opting out never expires |
+| `emailJobRetentionHours` | 24 | queued mail jobs expire; dead-lettered mail jobs are deleted hourly after this |
+| `treffenRetentionDays` | 14 | all Treffen registrations are deleted this long after the event date |
+| `signerRetentionYears` | 3 | daily job deletes signatures and Treffen registrations older than this |
+
+### Ending a campaign
+
+The privacy policy promises complete deletion when the campaign ends. Nothing
+does that automatically — when the campaign is over:
+
+1. Export anything that must be kept (aggregate numbers only — no personal data).
+2. Stop the app and delete the database file (`DATABASE_PATH` plus `-wal`/`-shm`)
+   and any `*.pre-restore-*` copies next to it.
+3. Delete every file in `BACKUP_DIR`, and any off-site copies of it.
+4. Delete any signer or Treffen lists copied out of the admin (the app has no
+   export, but tables get copied into spreadsheets, mails and shared drives) and
+   ask everyone who received one to do the same.
+5. Delete the sent-mail logs held by the mail provider (Resend) and the
+   analytics data for the site.
+6. Note the date and what was deleted, in case someone asks.
+
 ## Durable jobs (Honker)
 
 Background work — scheduled **campaign sends**, **zoom event mailings**, and

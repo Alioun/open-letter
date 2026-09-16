@@ -17,7 +17,18 @@ export const PRIVACY_DEFAULTS = {
   emailJobRetentionHours: 24,
   // Treffen registrations are deleted this many days after the event.
   treffenRetentionDays: 14,
+  // Longest any signature or Treffen registration is kept, counted from when
+  // it was made — even if the campaign is still running.
+  signerRetentionYears: 3,
 };
+
+// The cutoff for signerRetentionYears as of `now`: everything created before
+// it is due for deletion. Calendar years, so leap days don't shift it.
+export function retentionCutoff(privacy, now = new Date()) {
+  const cutoff = new Date(now);
+  cutoff.setUTCFullYear(cutoff.getUTCFullYear() - privacy.signerRetentionYears);
+  return cutoff;
+}
 
 const HOUR = 60 * 60 * 1000;
 const DAY = 24 * HOUR;

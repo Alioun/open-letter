@@ -1291,6 +1291,28 @@ export async function deleteExpiredUnverifiedSigners() {
   return res?.changes ?? 0;
 }
 
+// Upper bound on how long anything is kept (privacy.signerRetentionYears after
+// signing / registering), independent of the campaign ending. Checks first so
+// the daily run doesn't drop the public read cache when nothing is due.
+// Returns the number of signatures and Treffen registrations deleted.
+export async function deleteExpiredByAge(cutoff) {
+  const at = iso(cutoff);
+  const due = await db
+    .query(
+      `SELECT 1 FROM signers WHERE created_at < ?
+       UNION ALL SELECT 1 FROM zoom_registrations WHERE created_at < ? LIMIT 1`,
+    )
+    .get(at, at);
+  if (!due) return 0;
+  const signers = await db
+    .query(`DELETE FROM signers WHERE created_at < ?`)
+    .run(at);
+  const zoom = await db
+    .query(`DELETE FROM zoom_registrations WHERE created_at < ?`)
+    .run(at);
+  return (signers?.changes ?? 0) + (zoom?.changes ?? 0);
+}
+
 // Resolve email from either a signer or zoom unsubscribe token. Signer tokens
 // only count within TOKEN_EDIT_WINDOW unless `optOut` is set — opting out must
 // work with a link from any mail, however old. Treffen tokens have no window;

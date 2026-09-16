@@ -4,7 +4,7 @@ import { readFileSync, writeFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { SignJWT, jwtVerify } from "jose";
 import cfg, { LETTER_NAME } from "../config/letter.config.js";
-import { resolvePrivacy } from "../config/privacy.js";
+import { resolvePrivacy, retentionCutoff } from "../config/privacy.js";
 import {
   renderIndexHtml,
   renderUnsubscribeHtml,
@@ -47,6 +47,7 @@ import {
   getZoomPendingByToken,
   confirmZoomPending,
   deleteExpiredZoomPending,
+  deleteExpiredByAge,
   healthCheck,
   close,
   listEmailTemplates,
@@ -2852,6 +2853,13 @@ async function handleMaintenanceJob({ task }) {
     if (removed > 0) {
       console.log(`[purge] deleted ${removed} dead-lettered email job(s)`);
     }
+  } else if (task === "purge-by-age") {
+    const removed = await deleteExpiredByAge(retentionCutoff(privacy));
+    if (removed > 0) {
+      console.log(
+        `[purge] deleted ${removed} entr(y/ies) older than ${privacy.signerRetentionYears} years`,
+      );
+    }
   }
 }
 
@@ -2877,6 +2885,10 @@ try {
   // Failed transactional mails: drop their dead-letter rows after the TTL.
   await registerSchedule("purge-dead-emails", "maintenance", "@every 3600s", {
     task: "purge-dead-emails",
+  });
+  // Signatures and Treffen registrations past privacy.signerRetentionYears.
+  await registerSchedule("purge-by-age", "maintenance", "30 3 * * *", {
+    task: "purge-by-age",
   });
   startWorker(
     {

@@ -130,6 +130,7 @@ export default {
     settingsLinkDays: 90,
     emailJobRetentionHours: 24,
     treffenRetentionDays: 14,
+    signerRetentionYears: 3,
   },
 
   email: {
