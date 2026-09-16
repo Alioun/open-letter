@@ -1191,7 +1191,9 @@ const server = Bun.serve({
     // <head> and awaited in main.jsx; the fetches in App.jsx keep it live.
     "/api/boot": {
       async GET(req) {
-        const blocked = denyRate(req, "boot", 120, 60 * 1000);
+        // No token (the preload runs before one exists), so share the token-
+        // gated reads' per-IP budget instead of adding a separate one.
+        const blocked = denyRate(req, "public-read", 120, 60 * 1000);
         if (blocked) return blocked;
         try {
           const [stats, zoom] = await Promise.all([
