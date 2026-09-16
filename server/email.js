@@ -47,6 +47,17 @@ const transportSummary =
     : `resend auth=${resendApiKey ? "yes" : "no"}`;
 
 if (process.env.NODE_ENV === "production") {
+  // The published privacy policy names the email processor from the letter
+  // config (src/App.jsx reads cfg.email.provider), so an EMAIL_PROVIDER that
+  // disagrees would send every address through a processor the policy doesn't
+  // name — or name one that isn't used. Fail closed instead.
+  const published = String(cfg.email.provider || "").toLowerCase();
+  if (published !== provider) {
+    throw new Error(
+      `EMAIL_PROVIDER=${provider} does not match email.provider="${published}" in the letter config. ` +
+        "The privacy policy names the processor from the config — change the config (and redeploy) instead of overriding it.",
+    );
+  }
   if (provider === "resend" && !resendApiKey) {
     throw new Error("Production email requires RESEND_API_KEY");
   }

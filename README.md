@@ -151,7 +151,7 @@ This creates the encrypted SQLite database, seeds 200 verified signers, trickles
 | `TRUST_PROXY`      | No         | `false`                 | Trust `X-Forwarded-For` for the client IP — set `true` behind a reverse proxy so per-IP rate-limiting is accurate. Warns at startup in production when unset. |
 | `DATABASE_JOURNAL_MODE` | No    | SQLite default (`DELETE` in compose) | SQLite journal mode (`PRAGMA journal_mode`). Compose sets `DELETE`.                                   |
 | `GIT_COMMIT`       | No         | —                       | Commit SHA surfaced at `/api/version`. Falls back to `COMMIT_SHA`, `SOURCE_COMMIT`, `GIT_SHA`, `SOURCE_VERSION`, and PaaS vars (`RAILWAY_`/`RENDER_`/`VERCEL_GIT_COMMIT_SHA`). |
-| `EMAIL_PROVIDER`   | No         | `email.provider` (config) | Mail transport: `resend` or `smtp`. Overrides the active letter config.                                            |
+| `EMAIL_PROVIDER`   | No         | `email.provider` (config) | Mail transport: `resend` or `smtp`. In production it must match the letter config's `email.provider` (the app refuses to start otherwise), because the privacy policy names the processor from the config. |
 | `EMAIL_FROM`       | No         | `email.from` (config)   | Verified sender for either provider (alias of `RESEND_FROM`)                                                          |
 | `RESEND_API_KEY`   | Yes when provider=resend (prod) | —          | Resend API key used to send transactional email                                                                       |
 | `RESEND_FROM`      | No         | `Gehaltsdeckel Initiative <noreply@gehaltsdeckel.jetzt>` | Verified sender used for outbound email                                                  |
@@ -284,8 +284,10 @@ the app stopped, then start the app pointed at the new file.
 
 ## Email
 
-The mail transport is chosen per letter via `email.provider` in the config, or
-overridden per-deployment with the `EMAIL_PROVIDER` env var. Two providers are
+The mail transport is chosen per letter via `email.provider` in the config.
+`EMAIL_PROVIDER` can override it outside production; in production the two must
+match, because the Datenschutzerklärung names the email processor from the
+config, and the server refuses to start on a mismatch. Two providers are
 supported:
 
 - **`resend`** (default) — Resend's HTTP Email API. Set `RESEND_API_KEY`. See
