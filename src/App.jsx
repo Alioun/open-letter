@@ -2471,10 +2471,10 @@ function DatenschutzModal({ onClose }) {
               {cfg.legal.contactEmail}
             </a>
             . Deine Unterschrift bleibt davon unberührt. Über den Link in
-            unseren E-Mails kannst du außerdem deine Angaben ändern oder deine
-            Unterschrift löschen; dafür gilt er {privacy.settingsLinkDays} Tage
-            ab der letzten E-Mail, die ihn enthielt. Abmelden kannst du dich
-            damit unbegrenzt.
+            unseren E-Mails zu deiner Unterschrift und in Kampagnen-E-Mails
+            kannst du außerdem deine Angaben ändern oder deine Unterschrift
+            löschen; dafür gilt er {privacy.settingsLinkDays} Tage ab der letzten
+            E-Mail, die ihn enthielt. Abmelden kannst du dich damit unbegrenzt.
           </p>
           {cfg.features.zoomEvent && (
             <p>
@@ -2496,8 +2496,11 @@ function DatenschutzModal({ onClose }) {
               . Rechtsgrundlage ist deine Einwilligung (Art. 6 Abs. 1 lit. a
               DS-GVO), die du jederzeit über den Abmeldelink in jeder dieser
               E-Mails widerrufen kannst. Die Anmeldungen werden{" "}
-              {privacy.treffenRetentionDays} Tage nach dem Treffen gelöscht. An
-              Anbieter von Videokonferenzen geben wir deine Daten nicht weiter.
+              {privacy.treffenRetentionDays} Tage nach dem Treffen gelöscht. Mit
+              dem Link in den E-Mails zum Treffen kannst du, solange deine
+              Anmeldung besteht, deine Angaben ändern, dich abmelden oder alle zu
+              deiner E-Mail-Adresse gespeicherten Daten löschen. An Anbieter von
+              Videokonferenzen geben wir deine Daten nicht weiter.
             </p>
           )}
           {cfg.email?.provider === "resend" && (

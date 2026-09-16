@@ -337,7 +337,7 @@ policy quotes the same values, so change them there, not in code.
 | Key | Default | Enforced by |
 | --- | --- | --- |
 | `confirmationLinkHours` | 24 | sign-up, Treffen and deletion links expire; unconfirmed rows are swept every 5 min |
-| `settingsLinkDays` | 90 | an unsubscribe link can show/edit/delete data for this long after the last mail carrying it; opting out never expires |
+| `settingsLinkDays` | 90 | a signer's unsubscribe link can show/edit/delete data for this long after the last mail carrying it; opting out never expires. Treffen links work for as long as the registration exists |
 | `emailJobRetentionHours` | 24 | queued mail jobs expire; dead-lettered mail jobs are deleted hourly after this |
 | `treffenRetentionDays` | 14 | all Treffen registrations are deleted this long after the event date |
 | `signerRetentionYears` | 3 | daily job deletes signatures and Treffen registrations older than this |
