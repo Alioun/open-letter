@@ -201,14 +201,19 @@ async function apiFetch(path, opts = {}) {
   return res;
 }
 
-export default function App() {
+// `boot` is the live initial state from /api/boot (loaded in main.jsx before
+// the first render), so the counter and Treffen date never flash. null if it
+// failed or timed out.
+export default function App({ boot = null }) {
   const [signers, setSigners] = useState([]);
-  const [stats, setStats] = useState({
-    total: 0,
-    today: 0,
-    week: 0,
-    kvCount: 0,
-  });
+  const [stats, setStats] = useState(
+    boot?.stats ?? {
+      total: 0,
+      today: 0,
+      week: 0,
+      kvCount: 0,
+    },
+  );
   const [signersTotal, setSignersTotal] = useState(0);
   const [filter, setFilter] = useState("alle");
   const [search, setSearch] = useState("");
@@ -238,21 +243,29 @@ export default function App() {
   const [signFormKvNames, setSignFormKvNames] = useState([]);
   const [signFormOccNames, setSignFormOccNames] = useState([]);
   const [zoomError, setZoomError] = useState(null);
-  const [zoomCount, setZoomCount] = useState(0);
-  const [zoomEventAt, setZoomEventAt] = useState(null);
+  const bootZoom = boot?.zoom;
+  const [zoomCount, setZoomCount] = useState(bootZoom?.count || 0);
+  const [zoomEventAt, setZoomEventAt] = useState(bootZoom?.eventAt || null);
   // Runtime-editable Treffen settings (admin panel → /api/zoom-count). Seeded
-  // from the bundled config so there's no flash before the fetch resolves.
+  // from /api/boot, else the bundled config, so there's no flash before the
+  // fetch resolves.
   const [zoomShowDelegierter, setZoomShowDelegierter] = useState(
-    Boolean(cfg.zoom?.form?.showDelegierter),
+    typeof bootZoom?.showDelegierter === "boolean"
+      ? bootZoom.showDelegierter
+      : Boolean(cfg.zoom?.form?.showDelegierter),
   );
-  const [zoomMode, setZoomMode] = useState(cfg.zoom?.mode || "online");
-  const [zoomLocation, setZoomLocation] = useState({
-    name: cfg.zoom?.location?.name || "",
-    address: cfg.zoom?.location?.address || "",
-    mapsUrl: cfg.zoom?.location?.mapsUrl || "",
-  });
+  const [zoomMode, setZoomMode] = useState(
+    bootZoom?.mode || cfg.zoom?.mode || "online",
+  );
+  const [zoomLocation, setZoomLocation] = useState(
+    bootZoom?.location || {
+      name: cfg.zoom?.location?.name || "",
+      address: cfg.zoom?.location?.address || "",
+      mapsUrl: cfg.zoom?.location?.mapsUrl || "",
+    },
+  );
   const [zoomNavLabelRt, setZoomNavLabelRt] = useState(
-    cfg.zoom?.navLabel || "Treffen",
+    bootZoom?.navLabel || cfg.zoom?.navLabel || "Treffen",
   );
 
   const emailTrapRef = useFocusTrap(!!emailModal);

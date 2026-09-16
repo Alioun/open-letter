@@ -13,12 +13,30 @@ injectThemeCss(cfg.theme);
 // The admin dashboard has its own entrypoint (admin.html → src/admin-main.jsx),
 // served at the secret /${ADMIN_PATH} route, so AdminApp is bundled separately
 // and never ships in this public bundle.
-function getRootComponent() {
-  const parts = window.location.pathname.split("/").filter(Boolean);
-  if (parts[0] === "abmelden" && parts[1]) return <UnsubscribeApp />;
-  return <App />;
+function render(root) {
+  createRoot(document.getElementById("root")).render(
+    <ErrorBoundary>{root}</ErrorBoundary>,
+  );
 }
 
-createRoot(document.getElementById("root")).render(
-  <ErrorBoundary>{getRootComponent()}</ErrorBoundary>,
-);
+// Wait for the live initial state (preloaded in <head>) so the first render
+// already has the real counter and Treffen date. Capped, so a slow or failed
+// request falls back to rendering with placeholders instead of a blank page.
+const BOOT_TIMEOUT_MS = 1500;
+
+function loadBoot() {
+  const request = fetch("/api/boot")
+    .then((res) => (res.ok ? res.json() : null))
+    .catch(() => null);
+  const timeout = new Promise((resolve) =>
+    setTimeout(() => resolve(null), BOOT_TIMEOUT_MS),
+  );
+  return Promise.race([request, timeout]);
+}
+
+const parts = window.location.pathname.split("/").filter(Boolean);
+if (parts[0] === "abmelden" && parts[1]) {
+  render(<UnsubscribeApp />);
+} else {
+  loadBoot().then((boot) => render(<App boot={boot} />));
+}
