@@ -20,3 +20,7 @@ bun.lock
 
 .DS_Store
 design-export
+
+# Load test: throwaway secrets and raw run output
+loadtest/.env.loadtest
+loadtest/results/*/raw/
