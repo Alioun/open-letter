@@ -80,10 +80,26 @@ function levenshtein(a, b) {
   return prev[n];
 }
 
+// A multi-word query ("anna schmitt") can never be close to any single name
+// word, so when the whole query doesn't match, each word is matched on its own
+// and all of them have to hit; the score is their average.
+function fuzzyMatch(name, kv, q) {
+  const whole = fuzzyMatchTerm(name, kv, q);
+  const terms = q.split(/\s+/).filter((t) => t.length >= 2);
+  if (whole.match || terms.length < 2) return whole;
+  let total = 0;
+  for (const term of terms) {
+    const r = fuzzyMatchTerm(name, kv, term);
+    if (!r.match) return whole;
+    total += r.score;
+  }
+  return { match: true, score: total / terms.length };
+}
+
 // Mirrors the old SQL fuzzy clause + match_score:
 //   match  -> substring OR per-word name Levenshtein OR whole-KV Levenshtein
 //   score  -> best similarity ratio in [0,1] used for ranking
-function fuzzyMatch(name, kv, q) {
+function fuzzyMatchTerm(name, kv, q) {
   const nameLower = (name || "").toLowerCase();
   const kvLower = (kv || "").toLowerCase();
   let match = false;

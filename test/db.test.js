@@ -185,6 +185,13 @@ describe("getSigners + fuzzy search", () => {
     expect(res.signers.map((s) => s.name)).not.toContain("Bob Jones");
   });
 
+  test("fuzzy fallback matches a misspelled multi-word query word by word", async () => {
+    await addVerifiedSigner({ name: "Anna Schmidt", kreisverband: "Berlin" });
+    await addVerifiedSigner({ name: "Anna Jones", kreisverband: "Köln" });
+    const res = await q.getSigners({ search: "Anna Schmitt" });
+    expect(res.signers.map((s) => s.name)).toEqual(["Anna Schmidt"]);
+  });
+
   test("search is case-insensitive and paginates on the substring path", async () => {
     for (let i = 0; i < 5; i++) await addVerifiedSigner({ name: `Mira Wagner ${i}` });
     await addVerifiedSigner({ name: "Unrelated Person" });
