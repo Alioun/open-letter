@@ -11,6 +11,7 @@
 //     SQL functions.
 import { db, nowIso, isoAgo, onMutation } from "../db/connection.js";
 import { cached, invalidate } from "./cache.js";
+import { deleteJobsByPayload } from "../db/jobs.js";
 import cfg from "../config/letter.config.js";
 
 const DAY = 24 * 60 * 60 * 1000;
@@ -488,7 +489,32 @@ export async function deleteSigner(token) {
        WHERE deletion_token = ? AND deletion_token_expires_at > ? RETURNING id`,
     )
     .get(token, nowIso());
+  if (row) await deleteEmailJobsForSigner(row.id);
   return Boolean(row);
+}
+
+export async function getSignerIdByEmail(email) {
+  const row = await db.query(`SELECT id FROM signers WHERE email = ?`).get(email);
+  return row ? row.id : null;
+}
+
+// Everything a queued transactional mail needs, read when it is sent — so the
+// job payload holds only the signer id, and a mail for a row that has since
+// been deleted is simply not sent.
+export async function getSignerForMail(id) {
+  return (
+    (await db
+      .query(
+        `SELECT id, name, email, verified, verification_token, token_expires_at,
+                deletion_token, deletion_token_expires_at
+         FROM signers WHERE id = ?`,
+      )
+      .get(id)) || null
+  );
+}
+
+export async function deleteEmailJobsForSigner(id) {
+  return deleteJobsByPayload("emails", "signerId", id);
 }
 
 // ---- zoom registrations ----------------------------------------------------
@@ -1055,6 +1081,7 @@ export async function deleteSignerByUnsubscribeToken(token) {
        WHERE unsubscribe_token = ? AND unsubscribe_token_created_at > ? RETURNING id`,
     )
     .get(token, isoAgo(TOKEN_EDIT_WINDOW));
+  if (row) await deleteEmailJobsForSigner(row.id);
   return Boolean(row);
 }
 

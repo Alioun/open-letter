@@ -47,6 +47,50 @@ export async function enqueue(
   return row.id;
 }
 
+// Honker's tables only exist once initJobs() ran; without the extension there
+// are no jobs to clean up.
+async function ignoreMissingTables(fn) {
+  try {
+    return await fn();
+  } catch (err) {
+    if (/no such table/i.test(String(err?.message))) return 0;
+    throw err;
+  }
+}
+
+// Remove dead-lettered jobs of `queue` that died more than `olderThanS` seconds
+// ago. Honker never deletes from _honker_dead by itself (expired jobs land there
+// too), so without this a failed mail's payload would be kept forever.
+export async function purgeDeadJobs(queue, olderThanS) {
+  return ignoreMissingTables(async () => {
+    const res = await db
+      .query(
+        `DELETE FROM _honker_dead /* public-neutral */
+         WHERE queue = ? AND died_at < unixepoch() - ?`,
+      )
+      .run(queue, olderThanS);
+    return res?.changes ?? 0;
+  });
+}
+
+// Remove pending and dead jobs of `queue` whose JSON payload has `field` equal
+// to `value` — used when the person a job is about gets erased.
+export async function deleteJobsByPayload(queue, field, value) {
+  return ignoreMissingTables(async () => {
+    let removed = 0;
+    for (const table of ["_honker_live", "_honker_dead"]) {
+      const res = await db
+        .query(
+          `DELETE FROM ${table} /* public-neutral */
+           WHERE queue = ? AND json_extract(payload, '$.' || ?) = ?`,
+        )
+        .run(queue, field, value);
+      removed += res?.changes ?? 0;
+    }
+    return removed;
+  });
+}
+
 // Register an idempotent recurring task (cron or `@every Ns`) that enqueues
 // `payload` into `queue` when due.
 export async function registerSchedule(name, queue, expr, payload = {}, { priority = 0, expires = null } = {}) {

@@ -8,12 +8,16 @@ import {
   registerSchedule,
   startWorker,
   stopWorker,
+  purgeDeadJobs,
+  deleteJobsByPayload,
 } from "../db/jobs.js";
 
 const hasExt = existsSync(process.env.HONKER_EXTENSION_PATH || "");
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 const liveCount = async () =>
   (await db.query("SELECT COUNT(*) c FROM _honker_live").get()).c;
+const deadCount = async () =>
+  (await db.query("SELECT COUNT(*) c FROM _honker_dead").get()).c;
 
 describe.skipIf(!hasExt)("Honker durable jobs", () => {
   beforeAll(() => initJobs());
@@ -110,5 +114,44 @@ describe.skipIf(!hasExt)("Honker durable jobs", () => {
     // value is retrievable through the keyed connection
     const row = await db.query("SELECT COUNT(*) c FROM _honker_live WHERE queue='secretq'").get();
     expect(row.c).toBe(1);
+  });
+
+  test("an exhausted email job is dead-lettered, then purged after the TTL", async () => {
+    await enqueue("emails", { kind: "verification", signerId: 7 }, { maxAttempts: 1 });
+    startWorker(
+      { emails: async () => { throw new Error("provider down"); } },
+      { intervalMs: 30 },
+    );
+    await sleep(250);
+    stopWorker();
+    expect(await liveCount()).toBe(0);
+    expect(await deadCount()).toBe(1);
+
+    // Died just now: kept for the TTL.
+    expect(await purgeDeadJobs("emails", 24 * 3600)).toBe(0);
+    await db.run("UPDATE _honker_dead SET died_at = unixepoch() - 25 * 3600");
+    expect(await purgeDeadJobs("emails", 24 * 3600)).toBe(1);
+    expect(await deadCount()).toBe(0);
+  });
+
+  test("purging dead jobs leaves other queues alone", async () => {
+    await db.run(
+      `INSERT INTO _honker_dead (id, queue, payload, died_at)
+       VALUES (1, 'emails', '{}', unixepoch() - 90000),
+              (2, 'campaigns', '{}', unixepoch() - 90000)`,
+    );
+    expect(await purgeDeadJobs("emails", 24 * 3600)).toBe(1);
+    expect(await deadCount()).toBe(1);
+  });
+
+  test("erasing a signer removes their pending and dead email jobs", async () => {
+    await enqueue("emails", { kind: "verification", signerId: 42 });
+    await enqueue("emails", { kind: "verification", signerId: 43 });
+    await db.run(
+      `INSERT INTO _honker_dead (id, queue, payload) VALUES (99, 'emails', '{"kind":"deletion","signerId":42}')`,
+    );
+    expect(await deleteJobsByPayload("emails", "signerId", 42)).toBe(2);
+    expect(await liveCount()).toBe(1);
+    expect(await deadCount()).toBe(0);
   });
 });

@@ -36,7 +36,7 @@ import {
   setZoomSettings,
   confirmSigner,
   refreshVerificationToken,
-  getVerifiedSignerName,
+  getSignerIdByEmail,
   createDeletionToken,
   deleteSigner,
   healthCheck,
@@ -63,7 +63,6 @@ import {
   getNewsletterRecipientByEmail,
   getZoomRecipientByEmail,
   issueUnsubscribeToken,
-  issueUnsubscribeTokenByEmail,
   getUnsubscribeState,
   getUnifiedUnsubscribeState,
   getShowDelegierter,
@@ -118,7 +117,9 @@ import {
   registerSchedule,
   startWorker,
   stopWorker,
+  purgeDeadJobs,
 } from "../db/jobs.js";
+import { prepareQueuedEmail } from "./queued-email.js";
 import {
   enqueueStateResolution,
   startStateWorker,
@@ -1356,46 +1357,20 @@ const server = Bun.serve({
             expiresAt,
           });
 
+          const signerId = await getSignerIdByEmail(email);
           if (!ok && alreadyVerified) {
-            const verifiedName = await getVerifiedSignerName(email);
-            if (verifiedName) {
-              const unsub = await issueUnsubscribeTokenByEmail(email);
-              const baseUrl = getBaseUrl(req);
-              const headers = unsub
-                ? buildUnsubscribeHeaders(
-                    `${baseUrl}/api/unsubscribe/${unsub}/opt-out`,
-                  )
-                : undefined;
-              const unsubscribeUrl = unsub
-                ? `${baseUrl}/abmelden/${unsub}`
-                : undefined;
+            if (signerId) {
               await queueEmail("already-signed", {
-                to: email,
-                name: verifiedName,
-                headers,
-                unsubscribeUrl,
+                signerId,
+                baseUrl: getBaseUrl(req),
               });
             }
             return json({ ok: true });
           }
 
-          const unsub = await issueUnsubscribeTokenByEmail(email);
-          const baseUrl = getBaseUrl(req);
-          const unsubHeaders = unsub
-            ? buildUnsubscribeHeaders(
-                `${baseUrl}/api/unsubscribe/${unsub}/opt-out`,
-              )
-            : undefined;
-          const unsubscribeUrl = unsub
-            ? `${baseUrl}/abmelden/${unsub}`
-            : undefined;
           await queueEmail("verification", {
-            to: email,
-            name,
-            token,
-            baseUrl,
-            headers: unsubHeaders,
-            unsubscribeUrl,
+            signerId,
+            baseUrl: getBaseUrl(req),
           });
 
           return json({ ok: true });
@@ -1533,23 +1508,9 @@ const server = Bun.serve({
           const name = await refreshVerificationToken(email, token, expiresAt);
 
           if (name) {
-            const unsub = await issueUnsubscribeTokenByEmail(email);
-            const baseUrl = getBaseUrl(req);
-            const unsubHeaders = unsub
-              ? buildUnsubscribeHeaders(
-                  `${baseUrl}/api/unsubscribe/${unsub}/opt-out`,
-                )
-              : undefined;
-            const unsubscribeUrl = unsub
-              ? `${baseUrl}/abmelden/${unsub}`
-              : undefined;
             await queueEmail("verification", {
-              to: email,
-              name,
-              token,
-              baseUrl,
-              headers: unsubHeaders,
-              unsubscribeUrl,
+              signerId: await getSignerIdByEmail(email),
+              baseUrl: getBaseUrl(req),
             });
           }
 
@@ -1616,22 +1577,9 @@ const server = Bun.serve({
 
           const found = await createDeletionToken(email, token, expiresAt);
           if (found) {
-            const unsub = await issueUnsubscribeTokenByEmail(email);
-            const baseUrl = getBaseUrl(req);
-            const unsubHeaders = unsub
-              ? buildUnsubscribeHeaders(
-                  `${baseUrl}/api/unsubscribe/${unsub}/opt-out`,
-                )
-              : undefined;
-            const unsubscribeUrl = unsub
-              ? `${baseUrl}/abmelden/${unsub}`
-              : undefined;
             await queueEmail("deletion", {
-              to: email,
-              token,
-              baseUrl,
-              headers: unsubHeaders,
-              unsubscribeUrl,
+              signerId: await getSignerIdByEmail(email),
+              baseUrl: getBaseUrl(req),
             });
           }
 
@@ -2715,23 +2663,34 @@ console.log(
 // written. Falls back to sending inline if the queue is unavailable (Honker
 // extension missing), which keeps sign-ups working on a broken jobs setup.
 async function sendQueuedEmail(payload) {
-  switch (payload.kind) {
+  const args = await prepareQueuedEmail(payload);
+  if (!args) return; // row gone, already confirmed or link expired
+  switch (args.kind) {
     case "verification":
-      return await sendVerificationEmail(payload);
+      return await sendVerificationEmail(args);
     case "already-signed":
-      return await sendAlreadySignedEmail(payload);
+      return await sendAlreadySignedEmail(args);
     case "deletion":
-      return await sendDeletionEmail(payload);
+      return await sendDeletionEmail(args);
     default:
-      throw new Error(`unknown email kind: ${payload.kind}`);
+      throw new Error(`unknown email kind: ${args.kind}`);
   }
 }
+
+// A transactional mail that hasn't gone out within a day is useless (the
+// confirmation and deletion links are valid for 24h), and a dead-lettered one
+// is removed a day after it died.
+const EMAIL_JOB_TTL_S = 24 * 60 * 60;
 
 let jobsReady = false;
 async function queueEmail(kind, args) {
   if (jobsReady) {
     try {
-      await enqueueJob("emails", { kind, ...args }, { maxAttempts: 5 });
+      await enqueueJob(
+        "emails",
+        { kind, ...args },
+        { maxAttempts: 5, expires: EMAIL_JOB_TTL_S },
+      );
       return;
     } catch (err) {
       console.error("[email] enqueue failed, sending inline:", err);
@@ -2754,6 +2713,11 @@ async function handleMaintenanceJob({ task }) {
     if (removed > 0) {
       console.log(`[purge] deleted ${removed} expired unverified sign-up(s)`);
     }
+  } else if (task === "purge-dead-emails") {
+    const removed = await purgeDeadJobs("emails", EMAIL_JOB_TTL_S);
+    if (removed > 0) {
+      console.log(`[purge] deleted ${removed} dead-lettered email job(s)`);
+    }
   }
 }
 
@@ -2775,6 +2739,10 @@ try {
   // under the same name updates an existing deployment's schedule.
   await registerSchedule("purge-unverified", "maintenance", "@every 300s", {
     task: "purge-unverified",
+  });
+  // Failed transactional mails: drop their dead-letter rows after a day.
+  await registerSchedule("purge-dead-emails", "maintenance", "@every 3600s", {
+    task: "purge-dead-emails",
   });
   startWorker(
     {
