@@ -4,7 +4,11 @@ import { readFileSync, writeFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { SignJWT, jwtVerify } from "jose";
 import cfg, { LETTER_NAME } from "../config/letter.config.js";
-import { renderIndexHtml, analyticsOrigin } from "../config/html.js";
+import {
+  renderIndexHtml,
+  renderUnsubscribeHtml,
+  analyticsOrigin,
+} from "../config/html.js";
 import {
   getSigners,
   getStats,
@@ -305,14 +309,17 @@ function writeIfChanged(relPath, content) {
   }
 }
 
+const indexTemplate = readFileSync(
+  new URL("../index.template.html", import.meta.url),
+  "utf8",
+);
 writeIfChanged(
   "index.generated.html",
-  renderIndexHtml(
-    readFileSync(new URL("../index.template.html", import.meta.url), "utf8"),
-    cfg,
-    LETTER_NAME,
-    { preloadBoot: true },
-  ),
+  renderIndexHtml(indexTemplate, cfg, LETTER_NAME, { preloadBoot: true }),
+);
+writeIfChanged(
+  "unsubscribe.generated.html",
+  renderUnsubscribeHtml(indexTemplate, cfg, LETTER_NAME),
 );
 writeIfChanged(
   "admin.generated.html",
@@ -322,6 +329,9 @@ writeIfChanged(
 );
 
 const { default: homepage } = await import("../index.generated.html");
+const { default: unsubscribePage } = await import(
+  "../unsubscribe.generated.html"
+);
 const { default: admin } = await import("../admin.generated.html");
 
 const adminRoute = `/${ADMIN_PATH}`;
@@ -1081,7 +1091,7 @@ const server = Bun.serve({
   routes: {
     "/": homepage,
     [adminRoute]: admin,
-    "/abmelden/:token": homepage,
+    "/abmelden/:token": unsubscribePage,
 
     "/og.png": {
       async GET() {

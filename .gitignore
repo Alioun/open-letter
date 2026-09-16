@@ -6,6 +6,7 @@ node_modules
 # Generated at server startup from *.template.html + the active letter config
 index.generated.html
 admin.generated.html
+unsubscribe.generated.html
 
 # Encrypted SQLite database, WAL/SHM sidecars, backups
 data/

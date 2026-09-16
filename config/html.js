@@ -22,7 +22,18 @@ export function analyticsOrigin(cfg) {
   }
 }
 
-export function renderHead(cfg, letterName, { preloadBoot = false } = {}) {
+// `analytics: false` drops the analytics script, `private: true` adds noindex +
+// no-referrer (for pages whose URL carries a personal token), `preloadBoot`
+// preloads the initial page state.
+export function renderHead(
+  cfg,
+  letterName,
+  {
+    analytics: withAnalytics = true,
+    private: isPrivate = false,
+    preloadBoot = false,
+  } = {},
+) {
   const m = cfg.meta;
   const canonical = m.canonicalUrl;
   const jsonLd = {
@@ -54,12 +65,16 @@ export function renderHead(cfg, letterName, { preloadBoot = false } = {}) {
     ],
   };
 
-  const analytics = m.analytics?.src
+  const analytics = withAnalytics && m.analytics?.src
     ? `\n    <script\n      defer\n      src="${esc(m.analytics.src)}"\n      data-website-id="${esc(m.analytics.websiteId || "")}"\n    ></script>`
     : "";
 
   return `    <meta charset="utf-8" />
-    <meta name="viewport" content="width=device-width,initial-scale=1" />
+    <meta name="viewport" content="width=device-width,initial-scale=1" />${
+      isPrivate
+        ? `\n    <meta name="robots" content="noindex" />\n    <meta name="referrer" content="no-referrer" />`
+        : ""
+    }
     <meta name="x-letter" content="${esc(letterName || "")}" />${
       // Starts the initial-state request while the bundle downloads; main.jsx
       // reuses this response. A <link> (unlike <script src="/…">) is left alone
@@ -97,4 +112,14 @@ export function renderIndexHtml(template, cfg, letterName, headOptions) {
   return template
     .replace("{{LANG}}", esc(cfg.brand.lang || "de"))
     .replace("{{HEAD}}", renderHead(cfg, letterName, headOptions));
+}
+
+// The /abmelden/<token> page. The token alone reads, edits and deletes a
+// signer's data, so this page must never report its URL (or pass it on as a
+// referrer) to analytics.
+export function renderUnsubscribeHtml(template, cfg, letterName) {
+  return renderIndexHtml(template, cfg, letterName, {
+    analytics: false,
+    private: true,
+  });
 }
