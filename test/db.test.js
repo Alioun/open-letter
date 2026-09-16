@@ -422,6 +422,42 @@ describe("unsubscribe tokens: stable, opt-out never expires", () => {
     expect(await applyDataMigrations(db)).toEqual([]);
     expect(await q.resolveEmailFromToken(fresh)).toBe(s.email);
   });
+
+  test("a deletion link issued before the deploy still works afterwards", async () => {
+    const { applyDataMigrations } = await import("../db/data-migrations.js");
+    const s = await addVerifiedSigner();
+    await db
+      .query(
+        `UPDATE signers SET deletion_token = 'old-del', deletion_token_expires_at = ? WHERE id = ?`,
+      )
+      .run(new Date(Date.now() + 3600_000).toISOString(), s.id);
+    await applyDataMigrations(db);
+    expect(await q.deleteByDeletionToken("old-del")).toBe(true);
+    expect((await db.query("SELECT COUNT(*) c FROM signers").get()).c).toBe(0);
+  });
+
+  test("re-submitting a pending sign-up renews its link but keeps its values", async () => {
+    const base = {
+      name: "Pia",
+      email: "renew@example.org",
+      kv: "",
+      occupation: "",
+      newsletter: false,
+      showPublicly: true,
+    };
+    await q.insertSigner({ ...base, token: "t1", expiresAt: new Date(Date.now() + 60_000) });
+    const later = new Date(Date.now() + 24 * 3600_000);
+    const r = await q.insertSigner({ ...base, name: "Other", token: "t2", expiresAt: later });
+    expect(r.pendingKept).toBe(true);
+    const row = await db
+      .query("SELECT name, verification_token, token_expires_at FROM signers WHERE email = ?")
+      .get(base.email);
+    expect(row).toEqual({
+      name: "Pia",
+      verification_token: "t1",
+      token_expires_at: later.toISOString(),
+    });
+  });
 });
 
 describe("self-service edit (previously broken merge code)", () => {

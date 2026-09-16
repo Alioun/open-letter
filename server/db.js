@@ -460,6 +460,14 @@ export async function insertSigner({
     .query(`SELECT verified FROM signers WHERE email = ?`)
     .get(email);
   if (existing?.verified) return { ok: false, alreadyVerified: true };
+  // The original confirmation is mailed again and says it is valid for the full
+  // period, so the kept link gets that period from now. The entered values stay.
+  await db
+    .query(
+      `UPDATE signers /* public-neutral */ SET token_expires_at = ?
+       WHERE email = ? AND verified = 0`,
+    )
+    .run(iso(expiresAt), email);
   return { ok: true, alreadyVerified: false, pendingKept: true };
 }
 
@@ -629,7 +637,10 @@ export async function insertZoomRegistration({ name, email, kv, delegierter }) {
        ON CONFLICT (email) DO UPDATE
          SET name = excluded.name,
              kreisverband = excluded.kreisverband,
-             delegierter = excluded.delegierter
+             delegierter = excluded.delegierter,
+             -- Every caller proved the address; a renewed registration counts
+             -- as made now, so a previous event's purge leaves it alone.
+             created_at = strftime('%Y-%m-%dT%H:%M:%fZ','now')
        RETURNING id`,
     )
     .get(name, email, kv || "", B(delegierter));
@@ -714,10 +725,9 @@ export async function deleteZoomRegistrationByUnsubscribeToken(token) {
 // Returns { status: "registered" } when the address is already registered,
 // otherwise { status: "pending", id } — an unexpired pending sign-up is kept as
 // it was (its link is simply mailed again), an expired one is replaced.
-export async function insertZoomPending({ name, email, kv, delegierter, token, expiresAt }) {
-  const registered = await db
-    .query(`SELECT id FROM zoom_registrations WHERE email = ?`)
-    .get(email);
+export async function insertZoomPending(args, attempt = 0) {
+  const { name, email, kv, delegierter, token, expiresAt } = args;
+  const registered = await getCurrentZoomRegistrationByEmail(email);
   if (registered) return { status: "registered", id: registered.id };
   const row = await db
     .query(
@@ -736,10 +746,18 @@ export async function insertZoomPending({ name, email, kv, delegierter, token, e
     )
     .get(name, email, kv || "", B(delegierter), token, iso(expiresAt), nowIso());
   if (row) return { status: "pending", id: row.id };
+  // An unexpired sign-up is kept; its link is mailed again with the full
+  // validity from now, which the mail states.
   const existing = await db
-    .query(`SELECT id FROM zoom_pending WHERE email = ?`)
-    .get(email);
-  return { status: "pending", id: existing.id };
+    .query(
+      `UPDATE zoom_pending /* public-neutral */ SET expires_at = ?
+       WHERE email = ? RETURNING id`,
+    )
+    .get(iso(expiresAt), email);
+  if (existing) return { status: "pending", id: existing.id };
+  // Confirmed or purged by a concurrent request in between: start over once.
+  if (attempt === 0) return insertZoomPending(args, 1);
+  throw new Error("Treffen sign-up changed concurrently");
 }
 
 export async function getZoomPendingForMail(id) {
@@ -811,41 +829,76 @@ export async function deleteExpiredZoomPending() {
   return res?.changes ?? 0;
 }
 
-// When the date of a Treffen that already happened is replaced, the existing
-// registrations (made before now) still have to go at `purgeAt` — the old
-// event's deadline, not the new one's. An earlier pending deadline is kept.
-export async function scheduleTreffenPurge(purgeAt) {
-  const prev = await getPreviousTreffenPurge();
-  const at =
-    prev && prev.purgeAt < purgeAt.toISOString() ? prev.purgeAt : purgeAt.toISOString();
+// When the date of a Treffen that already happened is replaced, the
+// registrations made until then belong to that event and must go at its
+// deadline (`purgeAt`), not at the new event's. Each replacement records its own
+// { purgeAt, createdBefore }, so changing the date again doesn't move an earlier
+// event's deadline onto later registrations.
+const PREVIOUS_PURGES_KEY = "treffen_previous_purges";
+
+async function getPreviousTreffenPurges() {
+  const row = await db
+    .query(`SELECT value FROM app_settings WHERE key = ?`)
+    .get(PREVIOUS_PURGES_KEY);
+  return row ? JSON.parse(row.value) : [];
+}
+
+async function setPreviousTreffenPurges(list) {
+  if (list.length === 0) {
+    await db
+      .query(`DELETE FROM app_settings /* public-neutral */ WHERE key = ?`)
+      .run(PREVIOUS_PURGES_KEY);
+    return;
+  }
   await db
     .query(
       `INSERT INTO app_settings /* public-neutral */ (key, value, updated_at)
-       VALUES ('treffen_previous_purge', ?, ?)
+       VALUES (?, ?, ?)
        ON CONFLICT (key) DO UPDATE SET value = excluded.value, updated_at = excluded.updated_at`,
     )
-    .run(JSON.stringify({ purgeAt: at, createdBefore: nowIso() }), nowIso());
+    .run(PREVIOUS_PURGES_KEY, JSON.stringify(list), nowIso());
 }
 
-async function getPreviousTreffenPurge() {
-  const row = await db
-    .query(`SELECT value FROM app_settings WHERE key = 'treffen_previous_purge'`)
-    .get();
-  return row ? JSON.parse(row.value) : null;
+export async function scheduleTreffenPurge(purgeAt) {
+  const list = await getPreviousTreffenPurges();
+  list.push({ purgeAt: purgeAt.toISOString(), createdBefore: nowIso() });
+  await setPreviousTreffenPurges(list);
 }
 
 export async function purgePreviousTreffenRegistrations() {
-  const pending = await getPreviousTreffenPurge();
-  if (!pending || nowIso() < pending.purgeAt) return 0;
-  const res = await db
-    .query(`DELETE FROM zoom_registrations WHERE created_at < ?`)
-    .run(pending.createdBefore);
-  await db
+  const list = await getPreviousTreffenPurges();
+  const now = nowIso();
+  const due = list.filter((m) => m.purgeAt <= now);
+  if (due.length === 0) return 0;
+  let removed = 0;
+  for (const m of due) {
+    const res = await db
+      .query(`DELETE FROM zoom_registrations WHERE created_at < ?`)
+      .run(m.createdBefore);
+    removed += res?.changes ?? 0;
+  }
+  await setPreviousTreffenPurges(list.filter((m) => m.purgeAt > now));
+  return removed;
+}
+
+// A registration made for an earlier Treffen whose date was replaced — it only
+// waits for that event's deadline and does not count as registered for the
+// current one, so the person can sign up again (which renews it).
+async function isForPreviousTreffen(createdAt) {
+  const list = await getPreviousTreffenPurges();
+  return list.some((m) => createdAt < m.createdBefore);
+}
+
+// The registration for the current Treffen, or null.
+export async function getCurrentZoomRegistrationByEmail(email) {
+  const row = await db
     .query(
-      `DELETE FROM app_settings /* public-neutral */ WHERE key = 'treffen_previous_purge'`,
+      `SELECT id, delegierter, unsubscribe_token, created_at FROM zoom_registrations
+       WHERE email = ?`,
     )
-    .run();
-  return res?.changes ?? 0;
+    .get(email);
+  if (!row || (await isForPreviousTreffen(row.created_at))) return null;
+  return boolify(row, ["delegierter"]);
 }
 
 // Treffen registrations are only kept for the event itself: once

@@ -96,16 +96,63 @@ describe("Treffen sign-up with double opt-in", () => {
     expect(await count("zoom_registrations")).toBe(0);
   });
 
+  const isoAt = (msFromNow) => new Date(Date.now() + msFromNow).toISOString();
+
   test("replacing a past event's date still purges its registrations on time", async () => {
-    await addZoomRegistration({ created_at: new Date(Date.now() - 60_000).toISOString() });
+    await addZoomRegistration({ created_at: isoAt(-60_000) });
     await q.scheduleTreffenPurge(new Date(Date.now() + 3600_000));
     expect(await q.purgePreviousTreffenRegistrations()).toBe(0); // not due yet
-    await q.scheduleTreffenPurge(new Date(Date.now() - 1000)); // earlier deadline wins
+    await db.run(
+      `UPDATE app_settings SET value = json_set(value, '$[0].purgeAt', '2000-01-01T00:00:00.000Z')
+       WHERE key = 'treffen_previous_purges'`,
+    );
     // Registered for the next event after the date changed: kept.
-    await addZoomRegistration({ created_at: new Date(Date.now() + 60_000).toISOString() });
+    await addZoomRegistration({ created_at: isoAt(60_000) });
     expect(await q.purgePreviousTreffenRegistrations()).toBe(1);
     expect(await count("zoom_registrations")).toBe(1);
     expect(await q.purgePreviousTreffenRegistrations()).toBe(0);
+  });
+
+  test("someone from the previous Treffen can register again and is not purged", async () => {
+    await addZoomRegistration({ email: "tina@example.org", created_at: isoAt(-60_000) });
+    await q.scheduleTreffenPurge(new Date(Date.now() - 1000)); // already due
+    // Not "already registered" for the new date: goes through double opt-in.
+    const res = await signup();
+    expect(res.status).toBe("pending");
+    expect(await q.getCurrentZoomRegistrationByEmail("tina@example.org")).toBeNull();
+    await q.confirmZoomPending("zoom-tok"); // renews the registration
+    expect(await q.purgePreviousTreffenRegistrations()).toBe(0);
+    expect(await count("zoom_registrations")).toBe(1);
+    expect(await q.getCurrentZoomRegistrationByEmail("tina@example.org")).not.toBeNull();
+  });
+
+  test("a second date change keeps each event's own deadline", async () => {
+    // A's registration, then the date moves to B (A's purge in the future).
+    await addZoomRegistration({ email: "a@example.org", created_at: isoAt(-120_000) });
+    await q.scheduleTreffenPurge(new Date(Date.now() + 3600_000));
+    // Registered for B, then the date moves again (B's purge further out).
+    await addZoomRegistration({ email: "b@example.org", created_at: isoAt(1000) });
+    await new Promise((r) => setTimeout(r, 1100));
+    await q.scheduleTreffenPurge(new Date(Date.now() + 7200_000));
+    // A's deadline arrives: only A's registration goes.
+    await db.run(
+      `UPDATE app_settings SET value = json_set(value, '$[0].purgeAt', '2000-01-01T00:00:00.000Z')
+       WHERE key = 'treffen_previous_purges'`,
+    );
+    expect(await q.purgePreviousTreffenRegistrations()).toBe(1);
+    const left = await db.query("SELECT email FROM zoom_registrations").all();
+    expect(left.map((r) => r.email)).toEqual(["b@example.org"]);
+  });
+
+  test("re-submitting a pending Treffen sign-up renews its link", async () => {
+    await signup({ expiresAt: new Date(Date.now() + 60_000) });
+    await signup({ name: "Other", token: "other-tok", expiresAt: future() });
+    const row = await db
+      .query("SELECT name, token, expires_at FROM zoom_pending")
+      .get();
+    expect(row.name).toBe("Tina Treffen");
+    expect(row.token).toBe("zoom-tok");
+    expect(row.expires_at > isoAt(30 * 60_000)).toBe(true);
   });
 
   test("the confirmation mail is built from the pending row", async () => {

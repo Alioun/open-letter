@@ -27,7 +27,7 @@ import {
   getZoomRecipients,
   issueZoomUnsubscribeToken,
   deleteZoomRegistrationByUnsubscribeToken,
-  getZoomRegistrationByEmail,
+  getCurrentZoomRegistrationByEmail,
   claimZoomMailing,
   markZoomMailing,
   listZoomMailings,
@@ -1042,7 +1042,8 @@ async function treffenAnmelden(req, { commit }) {
     const signer = await getSignerForZoomInvite(token);
     if (!signer) return treffenLinkExpired();
 
-    const existing = await getZoomRegistrationByEmail(signer.email);
+    // A registration left over from a previous Treffen doesn't count here.
+    const existing = await getCurrentZoomRegistrationByEmail(signer.email);
     const vars = {
       firstName: firstNameHtml(signer.name),
       when: escapeHtml(zoomCfg.whenPhrase),

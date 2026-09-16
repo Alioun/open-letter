@@ -42,6 +42,12 @@ describe("privacy config", () => {
     expect(backupKeepHours(p, "nonsense")).toBe(72);
   });
 
+  test("retention years must be whole years", () => {
+    expect(() => resolvePrivacy({ privacy: { signerRetentionYears: 1.5 } })).toThrow(
+      /whole number/,
+    );
+  });
+
   test("the erasure log must outlive the backups", () => {
     expect(() =>
       resolvePrivacy({ privacy: { backupRetentionHours: 200, erasureLogDays: 7 } }),

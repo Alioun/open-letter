@@ -58,6 +58,13 @@ export function resolvePrivacy(cfg) {
       );
     }
   }
+  // setUTCFullYear truncates, so a fractional value would silently keep data
+  // longer than the period the policy quotes.
+  if (!Number.isInteger(merged.signerRetentionYears)) {
+    throw new Error(
+      `config privacy.signerRetentionYears must be a whole number of years, got ${merged.signerRetentionYears}`,
+    );
+  }
   if (merged.erasureLogDays * 24 < merged.backupRetentionHours) {
     throw new Error(
       `config privacy.erasureLogDays (${merged.erasureLogDays}) must cover privacy.backupRetentionHours (${merged.backupRetentionHours}h), or a restore could bring back erased data`,

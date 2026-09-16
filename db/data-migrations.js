@@ -16,6 +16,22 @@ const MIGRATIONS = [
        SET unsubscribe_token = NULL WHERE unsubscribe_token IS NOT NULL`,
     ],
   },
+  {
+    // Deletion links used to store their token on the signer row. Carry the
+    // ones still valid at deploy time over, so a link mailed shortly before
+    // the deploy still deletes.
+    key: "migration:carry-over-deletion-tokens-2026-09",
+    statements: [
+      `INSERT INTO deletion_requests /* public-neutral */ (email, token, expires_at)
+       SELECT email, deletion_token, deletion_token_expires_at FROM signers
+       WHERE deletion_token IS NOT NULL
+         AND deletion_token_expires_at > strftime('%Y-%m-%dT%H:%M:%fZ','now')
+       ON CONFLICT DO NOTHING`,
+      `UPDATE signers /* public-neutral */
+       SET deletion_token = NULL, deletion_token_expires_at = NULL
+       WHERE deletion_token IS NOT NULL`,
+    ],
+  },
 ];
 
 // Runs in db/setup.js before the server starts, so nothing else shares the
