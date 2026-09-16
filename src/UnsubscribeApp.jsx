@@ -232,7 +232,16 @@ export default function UnsubscribeApp() {
               <>
                 <p className="anrede">{d.emailMasked}</p>
 
-                {(d.hasSigner || d.hasZoom) && (
+                {d.editable === false && (
+                  <p className="sub2">
+                    Wir haben dir seit mehr als 90 Tagen keine E-Mail mit diesem
+                    Link geschickt. Abmelden kannst du dich weiterhin. Um deine Angaben zu ändern oder deine
+                    Unterschrift zu löschen, nutze den Link aus einer neueren
+                    E-Mail oder das Löschformular in der Datenschutzerklärung.
+                  </p>
+                )}
+
+                {d.editable !== false && (d.hasSigner || d.hasZoom) && (
                   <form onSubmit={save} noValidate>
                     <h2>Deine Angaben</h2>
                     <p className="sub2">

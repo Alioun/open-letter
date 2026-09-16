@@ -2,6 +2,7 @@ import { readFileSync } from "fs";
 import { join, dirname } from "path";
 import { fileURLToPath } from "url";
 import { db } from "./connection.js";
+import { applyDataMigrations } from "./data-migrations.js";
 import cfg from "../config/letter.config.js";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
@@ -30,6 +31,9 @@ try {
       template.subject,
       template.htmlBody,
     );
+  }
+  for (const key of await applyDataMigrations(db)) {
+    console.log(`Applied data migration ${key}.`);
   }
   console.log("Database schema applied successfully.");
 } catch (err) {

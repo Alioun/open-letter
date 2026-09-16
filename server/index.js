@@ -24,7 +24,7 @@ import {
   listZoomRegistrations,
   getZoomCounts,
   getZoomRecipients,
-  refreshZoomUnsubscribeToken,
+  issueZoomUnsubscribeToken,
   deleteZoomRegistrationByUnsubscribeToken,
   getZoomRegistrationByEmail,
   claimZoomMailing,
@@ -62,8 +62,8 @@ import {
   getNewsletterSignerFilters,
   getNewsletterRecipientByEmail,
   getZoomRecipientByEmail,
-  refreshUnsubscribeToken,
-  refreshUnsubscribeTokenByEmail,
+  issueUnsubscribeToken,
+  issueUnsubscribeTokenByEmail,
   getUnsubscribeState,
   getUnifiedUnsubscribeState,
   getShowDelegierter,
@@ -761,7 +761,7 @@ async function sendCampaign(campaign) {
         let variables;
         let optOutUrl;
         if (isZoom) {
-          const token = await refreshZoomUnsubscribeToken(recipient.id);
+          const token = await issueZoomUnsubscribeToken(recipient.id);
           const unsubscribeUrl = `${BASE_URL}/abmelden/${token}?from=zoom`;
           optOutUrl = `${BASE_URL}/api/zoom-abmelden/${token}/opt-out`;
           variables = {
@@ -774,7 +774,7 @@ async function sendCampaign(campaign) {
             unsubscribeUrl,
           };
         } else {
-          const token = await refreshUnsubscribeToken(recipient.id);
+          const token = await issueUnsubscribeToken(recipient.id);
           const unsubscribeUrl = `${BASE_URL}/abmelden/${token}`;
           optOutUrl = `${BASE_URL}/api/unsubscribe/${token}/opt-out`;
           variables = {
@@ -901,7 +901,7 @@ async function sendZoomSignupEmail({ regId, name, email, cfg }) {
 
   if (reminderSent || linkSent || windowOpen) {
     const kind = reminderSent ? "reminder" : "link";
-    const unsubToken = await refreshZoomUnsubscribeToken(regId);
+    const unsubToken = await issueZoomUnsubscribeToken(regId);
     const payload = await buildZoomMailPayload(
       kind,
       { name, email },
@@ -931,7 +931,7 @@ async function sendZoomLinkMails(cfg) {
   );
   for (const recipient of recipients) {
     try {
-      const token = await refreshZoomUnsubscribeToken(recipient.id);
+      const token = await issueZoomUnsubscribeToken(recipient.id);
       const payload = await buildZoomMailPayload("link", recipient, token, cfg);
       await sendRenderedEmail(payload);
       sent++;
@@ -957,7 +957,7 @@ async function sendZoomReminderMails(cfg) {
     const chunkIndex = Math.floor(i / 100);
     const payloads = [];
     for (const recipient of batch) {
-      const token = await refreshZoomUnsubscribeToken(recipient.id);
+      const token = await issueZoomUnsubscribeToken(recipient.id);
       payloads.push(
         await buildZoomMailPayload("reminder", recipient, token, cfg),
       );
@@ -1359,7 +1359,7 @@ const server = Bun.serve({
           if (!ok && alreadyVerified) {
             const verifiedName = await getVerifiedSignerName(email);
             if (verifiedName) {
-              const unsub = await refreshUnsubscribeTokenByEmail(email);
+              const unsub = await issueUnsubscribeTokenByEmail(email);
               const baseUrl = getBaseUrl(req);
               const headers = unsub
                 ? buildUnsubscribeHeaders(
@@ -1379,7 +1379,7 @@ const server = Bun.serve({
             return json({ ok: true });
           }
 
-          const unsub = await refreshUnsubscribeTokenByEmail(email);
+          const unsub = await issueUnsubscribeTokenByEmail(email);
           const baseUrl = getBaseUrl(req);
           const unsubHeaders = unsub
             ? buildUnsubscribeHeaders(
@@ -1533,7 +1533,7 @@ const server = Bun.serve({
           const name = await refreshVerificationToken(email, token, expiresAt);
 
           if (name) {
-            const unsub = await refreshUnsubscribeTokenByEmail(email);
+            const unsub = await issueUnsubscribeTokenByEmail(email);
             const baseUrl = getBaseUrl(req);
             const unsubHeaders = unsub
               ? buildUnsubscribeHeaders(
@@ -1616,7 +1616,7 @@ const server = Bun.serve({
 
           const found = await createDeletionToken(email, token, expiresAt);
           if (found) {
-            const unsub = await refreshUnsubscribeTokenByEmail(email);
+            const unsub = await issueUnsubscribeTokenByEmail(email);
             const baseUrl = getBaseUrl(req);
             const unsubHeaders = unsub
               ? buildUnsubscribeHeaders(
@@ -1710,7 +1710,9 @@ const server = Bun.serve({
         const blocked = denyRate(req, "unsub", 120, 15 * 60 * 1000);
         if (blocked) return blocked;
         try {
-          const email = await resolveEmailFromToken(req.params.token);
+          const email = await resolveEmailFromToken(req.params.token, null, {
+            optOut: true,
+          });
           if (!email) return json({ ok: false }, 404);
           await optOutNewsletterByEmail(email);
           return json({ ok: true });
@@ -1726,7 +1728,9 @@ const server = Bun.serve({
         const blocked = denyRate(req, "unsub", 120, 15 * 60 * 1000);
         if (blocked) return blocked;
         try {
-          const email = await resolveEmailFromToken(req.params.token);
+          const email = await resolveEmailFromToken(req.params.token, null, {
+            optOut: true,
+          });
           if (!email) return json({ ok: false }, 404);
           await deleteZoomByEmail(email);
           return json({ ok: true });
@@ -1742,7 +1746,9 @@ const server = Bun.serve({
         const blocked = denyRate(req, "unsub", 120, 15 * 60 * 1000);
         if (blocked) return blocked;
         try {
-          const email = await resolveEmailFromToken(req.params.token);
+          const email = await resolveEmailFromToken(req.params.token, null, {
+            optOut: true,
+          });
           if (!email) return json({ ok: false }, 404);
           await Promise.all([
             optOutNewsletterByEmail(email),
@@ -1873,7 +1879,7 @@ const server = Bun.serve({
     },
 
     // One-click Treffen registration from newsletter invite email.
-    // The token is the signer's unsubscribe_token (fresh per campaign send).
+    // The token is the signer's stable unsubscribe_token.
     // These signup links do not expire based on the token age.
     // ?delegiert=1 → registers as delegate, ?delegiert=0 (or omitted) → non-delegate.
     "/api/treffen-anmelden/:token": {
@@ -2454,7 +2460,7 @@ const server = Bun.serve({
           if (realRecipient) {
             const firstName = realRecipient.name.split(/\s/)[0];
             if (isZoom) {
-              const token = await refreshZoomUnsubscribeToken(realRecipient.id);
+              const token = await issueZoomUnsubscribeToken(realRecipient.id);
               const unsubscribeUrl = `${BASE_URL}/abmelden/${token}?from=zoom`;
               optOutUrl = `${BASE_URL}/api/zoom-abmelden/${token}/opt-out`;
               vars = {
@@ -2466,7 +2472,7 @@ const server = Bun.serve({
                 unsubscribeUrl,
               };
             } else {
-              const token = await refreshUnsubscribeToken(realRecipient.id);
+              const token = await issueUnsubscribeToken(realRecipient.id);
               const unsubscribeUrl = `${BASE_URL}/abmelden/${token}`;
               optOutUrl = `${BASE_URL}/api/unsubscribe/${token}/opt-out`;
               vars = {

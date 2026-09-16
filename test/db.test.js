@@ -272,7 +272,7 @@ describe("zoom", () => {
   });
 });
 
-describe("unsubscribe tokens + 90-day expiry", () => {
+describe("unsubscribe tokens: stable, opt-out never expires", () => {
   test("getUnsubscribeState honors the 90-day window", async () => {
     const s = await addVerifiedSigner({ newsletter: 1 });
     await setUnsubToken(s.id, "fresh-tok", 1);
@@ -283,19 +283,83 @@ describe("unsubscribe tokens + 90-day expiry", () => {
     expect(await q.getUnsubscribeState("old-tok")).toBeNull();
   });
 
-  test("optOutNewsletter clears the subscription", async () => {
-    const s = await addVerifiedSigner({ newsletter: 1 });
-    await setUnsubToken(s.id, "opt-tok", 0);
-    expect(await q.optOutNewsletter("opt-tok")).toBe(true);
-    expect((await db.query("SELECT newsletter FROM signers WHERE id=?").get(s.id)).newsletter).toBe(0);
-  });
-
   test("getUnsubscribeState returns booleans for newsletter/verified", async () => {
     const s = await addVerifiedSigner({ newsletter: 1 });
     await setUnsubToken(s.id, "bool-tok", 0);
     const st = await q.getUnsubscribeState("bool-tok");
     expect(st.newsletter).toBe(true);
     expect(st.verified).toBe(true);
+  });
+
+  test("issuing again keeps the token, so an earlier mail's link still works", async () => {
+    const s = await addVerifiedSigner({ newsletter: 1 });
+    const first = await q.issueUnsubscribeToken(s.id); // newsletter A
+    const second = await q.issueUnsubscribeToken(s.id); // newsletter B
+    expect(second).toBe(first);
+    expect(await q.issueUnsubscribeTokenByEmail(s.email)).toBe(first); // e.g. request-deletion
+    expect(await q.optOutNewsletter(first)).toBe(true);
+  });
+
+  test("issuing re-stamps the edit window without changing the token", async () => {
+    const s = await addVerifiedSigner({ newsletter: 1 });
+    await setUnsubToken(s.id, "stamp-tok", 120);
+    expect(await q.resolveEmailFromToken("stamp-tok")).toBeNull();
+    expect(await q.issueUnsubscribeToken(s.id)).toBe("stamp-tok");
+    expect(await q.resolveEmailFromToken("stamp-tok")).toBe(s.email);
+  });
+
+  test("one-click opt-out works after 120 days and keeps the token", async () => {
+    const s = await addVerifiedSigner({ newsletter: 1 });
+    await setUnsubToken(s.id, "opt-tok", 120);
+    expect(await q.optOutNewsletter("opt-tok")).toBe(true);
+    const row = await db
+      .query("SELECT newsletter, unsubscribe_token FROM signers WHERE id=?")
+      .get(s.id);
+    expect(row.newsletter).toBe(0);
+    expect(row.unsubscribe_token).toBe("opt-tok");
+  });
+
+  test("an old token opts out but no longer reads, edits or deletes", async () => {
+    const s = await addVerifiedSigner({ newsletter: 1, name: "Old Link" });
+    await setUnsubToken(s.id, "stale-tok", 120);
+    expect(await q.resolveEmailFromToken("stale-tok")).toBeNull();
+    expect(
+      await q.resolveEmailFromToken("stale-tok", null, { optOut: true }),
+    ).toBe(s.email);
+    const state = await q.getUnifiedUnsubscribeState("stale-tok", "newsletter");
+    expect(state.editable).toBe(false);
+    expect(state.newsletter).toBe(true);
+    expect(state.name).toBeUndefined();
+    expect(state.canDeleteSigner).toBe(false);
+    expect(await q.deleteSignerByUnsubscribeToken("stale-tok")).toBe(false);
+  });
+
+  test("Treffen tokens are stable too", async () => {
+    const z = await addZoomRegistration();
+    const first = await q.issueZoomUnsubscribeToken(z.id);
+    expect(first).toBeTruthy();
+    expect(await q.issueZoomUnsubscribeToken(z.id)).toBe(first);
+  });
+
+  test("one-time migration drops every previously issued token, once", async () => {
+    const { applyDataMigrations } = await import("../db/data-migrations.js");
+    const s = await addVerifiedSigner();
+    await setUnsubToken(s.id, "exposed-tok", 1);
+    const z = await addZoomRegistration();
+    await q.issueZoomUnsubscribeToken(z.id);
+
+    expect((await applyDataMigrations(db)).length).toBeGreaterThan(0);
+    expect(
+      (await db.query("SELECT unsubscribe_token t FROM signers WHERE id=?").get(s.id)).t,
+    ).toBeNull();
+    expect(
+      (await db.query("SELECT unsubscribe_token t FROM zoom_registrations WHERE id=?").get(z.id)).t,
+    ).toBeNull();
+
+    // Already applied: tokens issued afterwards survive a second run.
+    const fresh = await q.issueUnsubscribeToken(s.id);
+    expect(await applyDataMigrations(db)).toEqual([]);
+    expect(await q.resolveEmailFromToken(fresh)).toBe(s.email);
   });
 });
 

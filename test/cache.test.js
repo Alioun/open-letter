@@ -145,7 +145,7 @@ describe("cached read endpoints", () => {
       token: "tok-pending",
       expiresAt: new Date(Date.now() + 3600_000),
     });
-    await q.refreshUnsubscribeTokenByEmail("p@example.org");
+    await q.issueUnsubscribeTokenByEmail("p@example.org");
     expect(cacheSize()).toBe(before);
     expect((await q.getStats()).total).toBe(1);
 

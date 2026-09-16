@@ -564,15 +564,17 @@ export async function getZoomRecipients({ delegatesOnly = false } = {}) {
     .all();
 }
 
-export async function refreshZoomUnsubscribeToken(id) {
-  const token = crypto.randomUUID();
+// One stable token per registration: reused on every mail so the links in older
+// mails keep working. Only created when the row has none yet.
+export async function issueZoomUnsubscribeToken(id) {
   const row = await db
     .query(
-      `UPDATE zoom_registrations /* public-neutral */ SET unsubscribe_token = ?
+      `UPDATE zoom_registrations /* public-neutral */
+       SET unsubscribe_token = COALESCE(unsubscribe_token, ?)
        WHERE id = ? RETURNING unsubscribe_token`,
     )
-    .get(token, id);
-  return row?.unsubscribe_token || token;
+    .get(crypto.randomUUID(), id);
+  return row?.unsubscribe_token || null;
 }
 
 export async function deleteZoomRegistrationByUnsubscribeToken(token) {
@@ -992,25 +994,35 @@ export async function getNewsletterRecipientsByIds(ids) {
 
 // ---- unsubscribe tokens ----------------------------------------------------
 
-export async function refreshUnsubscribeToken(id) {
-  const token = crypto.randomUUID();
+// Each signer has one stable unsubscribe token, reused in every mail, so a
+// newsletter's one-click unsubscribe keeps working after the next newsletter
+// (RFC 8058, Art. 7(3) / 21(3) DS-GVO). It is created only when missing and
+// never rotated by a request. `unsubscribe_token_created_at` records when the
+// token was last put into a mail to the address: opting out works with any
+// token forever, but reading/editing/deleting data needs a token that was
+// mailed within TOKEN_EDIT_WINDOW. Every mail carrying the token goes only to
+// the address itself, so stamping it never hands access to anyone else.
+const TOKEN_EDIT_WINDOW = 90 * DAY;
+
+export async function issueUnsubscribeToken(id) {
   const row = await db
     .query(
-      `UPDATE signers /* public-neutral */ SET unsubscribe_token = ?, unsubscribe_token_created_at = ?
+      `UPDATE signers /* public-neutral */
+       SET unsubscribe_token = COALESCE(unsubscribe_token, ?), unsubscribe_token_created_at = ?
        WHERE id = ? RETURNING unsubscribe_token`,
     )
-    .get(token, nowIso(), id);
-  return row?.unsubscribe_token || token;
+    .get(crypto.randomUUID(), nowIso(), id);
+  return row?.unsubscribe_token || null;
 }
 
-export async function refreshUnsubscribeTokenByEmail(email) {
-  const token = crypto.randomUUID();
+export async function issueUnsubscribeTokenByEmail(email) {
   const row = await db
     .query(
-      `UPDATE signers /* public-neutral */ SET unsubscribe_token = ?, unsubscribe_token_created_at = ?
+      `UPDATE signers /* public-neutral */
+       SET unsubscribe_token = COALESCE(unsubscribe_token, ?), unsubscribe_token_created_at = ?
        WHERE email = ? RETURNING unsubscribe_token`,
     )
-    .get(token, nowIso(), email);
+    .get(crypto.randomUUID(), nowIso(), email);
   return row?.unsubscribe_token || null;
 }
 
@@ -1020,19 +1032,19 @@ export async function getUnsubscribeState(token) {
       `SELECT id, email, newsletter, verified FROM signers
        WHERE unsubscribe_token = ? AND unsubscribe_token_created_at > ?`,
     )
-    .get(token, isoAgo(90 * DAY));
+    .get(token, isoAgo(TOKEN_EDIT_WINDOW));
   return boolify(row || null, ["newsletter", "verified"]);
 }
 
+// One-click opt-out: no age limit, and the token stays valid so the settings
+// link in the same mail keeps working afterwards.
 export async function optOutNewsletter(token) {
   const row = await db
     .query(
-      `UPDATE signers
-       SET newsletter = 0, unsubscribe_token = NULL, unsubscribe_token_created_at = NULL
-       WHERE unsubscribe_token = ? AND unsubscribe_token_created_at > ?
-       RETURNING id`,
+      `UPDATE signers SET newsletter = 0
+       WHERE unsubscribe_token = ? RETURNING id`,
     )
-    .get(token, isoAgo(90 * DAY));
+    .get(token);
   return Boolean(row);
 }
 
@@ -1042,7 +1054,7 @@ export async function deleteSignerByUnsubscribeToken(token) {
       `DELETE FROM signers
        WHERE unsubscribe_token = ? AND unsubscribe_token_created_at > ? RETURNING id`,
     )
-    .get(token, isoAgo(90 * DAY));
+    .get(token, isoAgo(TOKEN_EDIT_WINDOW));
   return Boolean(row);
 }
 
@@ -1060,33 +1072,43 @@ export async function deleteExpiredUnverifiedSigners() {
   return res?.changes ?? 0;
 }
 
-// Resolve email from either a signer or zoom unsubscribe token.
-export async function resolveEmailFromToken(token, source) {
-  if (source === "zoom") {
+// Resolve email from either a signer or zoom unsubscribe token. Signer tokens
+// only count within TOKEN_EDIT_WINDOW unless `optOut` is set — opting out must
+// work with a link from any mail, however old. Treffen tokens have no window;
+// their rows are purged shortly after the event.
+export async function resolveEmailFromToken(token, source, { optOut = false } = {}) {
+  const access = await resolveTokenAccess(token, source);
+  if (!access) return null;
+  return access.editable || optOut ? access.email : null;
+}
+
+async function resolveTokenAccess(token, source) {
+  if (!token) return null;
+  const zoomLookup = async () => {
     const zoom = await db
       .query(`SELECT email FROM zoom_registrations WHERE unsubscribe_token = ?`)
       .get(token);
-    if (zoom) return zoom.email;
+    return zoom ? { email: zoom.email, editable: true } : null;
+  };
+  if (source === "zoom") {
+    const zoom = await zoomLookup();
+    if (zoom) return zoom;
   }
   const signer = await db
     .query(
-      `SELECT email FROM signers
-       WHERE unsubscribe_token = ? AND unsubscribe_token_created_at > ?`,
+      `SELECT email, unsubscribe_token_created_at > ? AS fresh FROM signers
+       WHERE unsubscribe_token = ?`,
     )
-    .get(token, isoAgo(90 * DAY));
-  if (signer) return signer.email;
-  if (source !== "zoom") {
-    const zoom = await db
-      .query(`SELECT email FROM zoom_registrations WHERE unsubscribe_token = ?`)
-      .get(token);
-    if (zoom) return zoom.email;
-  }
+    .get(isoAgo(TOKEN_EDIT_WINDOW), token);
+  if (signer) return { email: signer.email, editable: Boolean(signer.fresh) };
+  if (source !== "zoom") return await zoomLookup();
   return null;
 }
 
 export async function getUnifiedUnsubscribeState(token, source) {
-  const email = await resolveEmailFromToken(token, source);
-  if (!email) return null;
+  const access = await resolveTokenAccess(token, source);
+  if (!access) return null;
+  const { email, editable } = access;
 
   const signer = await db
     .query(
@@ -1105,11 +1127,20 @@ export async function getUnifiedUnsubscribeState(token, source) {
     (_, a, b, c) => a + b.replace(/./g, "*") + c,
   );
 
-  return {
+  const base = {
     emailMasked: masked,
     source: source === "zoom" ? "zoom" : "newsletter",
     newsletter: Boolean(signer?.newsletter),
     hasZoom: Boolean(zoom),
+    editable,
+  };
+  // An old link still lets you opt out, but no longer shows or changes data.
+  if (!editable) {
+    return { ...base, canDeleteSigner: false, hasSigner: false };
+  }
+
+  return {
+    ...base,
     canDeleteSigner: Boolean(signer?.verified),
     hasSigner: Boolean(signer),
     // Current editable values for the self-service settings form.
