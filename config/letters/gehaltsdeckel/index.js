@@ -190,6 +190,10 @@ export default {
     // Transport: "resend" (Resend HTTP API) or "smtp" (any SMTP server).
     // Overridable per-deployment via EMAIL_PROVIDER.
     provider: "resend",
+    // How long the provider keeps sent mail (content, metadata, delivery
+    // events, logs). Quoted in the privacy policy. Resend: 30 days on all
+    // non-Enterprise plans (resend.com/docs/knowledge-base/account-quotas-and-limits).
+    providerRetentionDays: 30,
     // Read only when provider === "smtp". Non-secret connection details only —
     // credentials come from env (SMTP_USER / SMTP_PASS). Host/port/secure are
     // env-overridable via SMTP_HOST / SMTP_PORT / SMTP_SECURE.

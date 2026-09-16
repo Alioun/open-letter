@@ -142,6 +142,10 @@ export default {
     // Overridable per-deployment via EMAIL_PROVIDER. Secrets (Resend API key,
     // SMTP password) always come from env — never put them here.
     provider: "resend",
+    // How long the provider keeps sent mail (content, metadata, delivery
+    // events, logs). Quoted in the privacy policy. Resend: 30 days on all
+    // non-Enterprise plans (resend.com/docs/knowledge-base/account-quotas-and-limits).
+    providerRetentionDays: 30,
     // Read only when provider === "smtp". Uncomment and set the non-secret
     // connection details; SMTP_USER / SMTP_PASS come from env.
     // smtp: {

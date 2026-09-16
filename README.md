@@ -30,7 +30,7 @@ No application code changes are needed — content, branding, theme and feature 
 | `nav` / `navCta` / `list` | nav items, top-bar CTA, signer-list heading |
 | `sign` | section heading, `criteria`, `privacyNote`, form copy, and `fields` (labels/placeholders for the two optional `kreisverband`/`occupation` columns) |
 | `footer` / `legal` | footer blurb + contact; Impressum/Datenschutz responsible entity, address, contact, disclaimer |
-| `email` | `from`, `signoff`, `provider` (`resend`/`smtp`) + `smtp` connection details, `pacing` (rate-limit delays), and the `templates` map (seeded into the DB, admin-editable) |
+| `email` | `from`, `signoff`, `provider` (`resend`/`smtp`) + `smtp` connection details, `providerRetentionDays` (how long the provider keeps sent mail; quoted in the privacy policy), `pacing` (rate-limit delays), and the `templates` map (seeded into the DB, admin-editable) |
 | `features` | `kreisverbandField`, `occupationField`, `germanyMap`, `stateResolution`, `zoomEvent` — toggle the optional modules |
 | `zoom` | event label/date/duration (only read when `features.zoomEvent`) |
 
@@ -355,8 +355,9 @@ does that automatically — when the campaign is over:
 4. Delete any signer or Treffen lists copied out of the admin (the app has no
    export, but tables get copied into spreadsheets, mails and shared drives) and
    ask everyone who received one to do the same.
-5. Delete the sent-mail logs held by the mail provider (Resend) and the
-   analytics data for the site.
+5. Delete the analytics data for the site. The mail provider deletes sent mail
+   after `email.providerRetentionDays` (Resend: 30) on its own; delete it
+   earlier in its dashboard if needed.
 6. Note the date and what was deleted, in case someone asks.
 
 ## Durable jobs (Honker)

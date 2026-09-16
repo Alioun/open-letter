@@ -2519,7 +2519,10 @@ function DatenschutzModal({ onClose }) {
               >
                 Auftragsverarbeitungsvertrag
               </a>
-              ). Die Verarbeitung erfolgt auf Servern innerhalb der EU. Soweit
+              ).
+              {cfg.email.providerRetentionDays &&
+                ` Resend speichert die versendeten E-Mails einschließlich Inhalt, Zustellstatus und Protokollen ${cfg.email.providerRetentionDays} Tage und löscht sie danach.`}{" "}
+              Die Verarbeitung erfolgt auf Servern innerhalb der EU. Soweit
               es im Einzelfall dennoch zu einem Zugriff aus einem Drittland
               (z. B. durch die US-Muttergesellschaft) kommen kann, ist dieser
               durch geeignete Garantien abgesichert (Art. 44 ff. DS-GVO).
