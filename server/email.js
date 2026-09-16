@@ -411,6 +411,8 @@ export async function sendZoomConfirmationEmail({
   eventLabel,
   eventWhen = "",
   linkInfo = "",
+  unsubscribeUrl,
+  headers,
 }) {
   console.log(`[email] zoom confirmation toDomain=${getEmailDomain(to)}`);
   const firstName = name.split(/\s/)[0];
@@ -420,12 +422,14 @@ export async function sendZoomConfirmationEmail({
     eventLabel,
     eventWhen,
     linkInfo,
+    unsubscribeUrl,
   });
 
   await sendRenderedEmail({
     to,
     subject: rendered.subject,
     html: rendered.html,
+    headers,
   });
 }
 

@@ -472,25 +472,76 @@ export async function confirmSigner(token) {
   return { id: row.id, kreisverband: row.kreisverband };
 }
 
-export async function createDeletionToken(email, token, expiresAt) {
+// Start a deletion for an address we hold data for — a signature, a Treffen
+// registration, or both. Returns the request id, or null when the address is
+// unknown (the caller answers the same either way).
+export async function createDeletionRequest(email, token, expiresAt) {
+  const known = await db
+    .query(
+      `SELECT 1 FROM signers WHERE email = ?
+       UNION ALL SELECT 1 FROM zoom_registrations WHERE email = ? LIMIT 1`,
+    )
+    .get(email, email);
+  if (!known) return null;
   const row = await db
     .query(
-      `UPDATE signers /* public-neutral */ SET deletion_token = ?, deletion_token_expires_at = ?
-       WHERE email = ? RETURNING id`,
+      `INSERT INTO deletion_requests /* public-neutral */ (email, token, expires_at)
+       VALUES (?, ?, ?)
+       ON CONFLICT (email) DO UPDATE
+         SET token = excluded.token, expires_at = excluded.expires_at
+       RETURNING id`,
     )
-    .get(token, iso(expiresAt), email);
-  return Boolean(row);
+    .get(email, token, iso(expiresAt));
+  return row.id;
 }
 
-export async function deleteSigner(token) {
-  const row = await db
+export async function getDeletionRequestForMail(id) {
+  return (
+    (await db
+      .query(
+        `SELECT id, email, token, expires_at FROM deletion_requests WHERE id = ?`,
+      )
+      .get(id)) || null
+  );
+}
+
+// Erase everything stored for an address: signature, Treffen registration,
+// pending deletion request and any queued mail about them.
+export async function eraseEmail(email) {
+  const signer = await db
+    .query(`DELETE FROM signers WHERE email = ? RETURNING id`)
+    .get(email);
+  const zoom = await db
+    .query(`DELETE FROM zoom_registrations WHERE email = ? RETURNING id`)
+    .get(email);
+  const request = await db
     .query(
-      `DELETE FROM signers
-       WHERE deletion_token = ? AND deletion_token_expires_at > ? RETURNING id`,
+      `DELETE FROM deletion_requests /* public-neutral */ WHERE email = ? RETURNING id`,
+    )
+    .get(email);
+  if (signer) await deleteEmailJobsForSigner(signer.id);
+  if (request) await deleteJobsByPayload("emails", "requestId", request.id);
+  return Boolean(signer || zoom);
+}
+
+export async function deleteByDeletionToken(token) {
+  const req = await db
+    .query(
+      `SELECT email FROM deletion_requests WHERE token = ? AND expires_at > ?`,
     )
     .get(token, nowIso());
-  if (row) await deleteEmailJobsForSigner(row.id);
-  return Boolean(row);
+  if (!req) return false;
+  await eraseEmail(req.email);
+  return true;
+}
+
+export async function deleteExpiredDeletionRequests() {
+  const res = await db
+    .query(
+      `DELETE FROM deletion_requests /* public-neutral */ WHERE expires_at < ?`,
+    )
+    .run(nowIso());
+  return res?.changes ?? 0;
 }
 
 export async function getSignerIdByEmail(email) {
@@ -505,8 +556,7 @@ export async function getSignerForMail(id) {
   return (
     (await db
       .query(
-        `SELECT id, name, email, verified, verification_token, token_expires_at,
-                deletion_token, deletion_token_expires_at
+        `SELECT id, name, email, verified, verification_token, token_expires_at
          FROM signers WHERE id = ?`,
       )
       .get(id)) || null
@@ -610,6 +660,17 @@ export async function deleteZoomRegistrationByUnsubscribeToken(token) {
     )
     .get(token);
   return Boolean(row);
+}
+
+// Treffen registrations are only kept for the event itself: once
+// `purgeAt` has passed, all of them are deleted. Checks first so the every-minute
+// worker doesn't drop the public read cache when there is nothing to delete.
+export async function purgeZoomRegistrationsAfter(purgeAt) {
+  if (Date.now() < purgeAt.getTime()) return 0;
+  const any = await db.query(`SELECT 1 FROM zoom_registrations LIMIT 1`).get();
+  if (!any) return 0;
+  const res = await db.query(`DELETE FROM zoom_registrations`).run();
+  return res?.changes ?? 0;
 }
 
 export async function getZoomRegistrationByEmail(email) {
@@ -1074,15 +1135,18 @@ export async function optOutNewsletter(token) {
   return Boolean(row);
 }
 
+// "Unterschrift vollständig löschen" on the settings page: erases the signature
+// and everything else stored for that address, incl. a Treffen registration.
 export async function deleteSignerByUnsubscribeToken(token) {
   const row = await db
     .query(
-      `DELETE FROM signers
-       WHERE unsubscribe_token = ? AND unsubscribe_token_created_at > ? RETURNING id`,
+      `SELECT email FROM signers
+       WHERE unsubscribe_token = ? AND unsubscribe_token_created_at > ?`,
     )
     .get(token, isoAgo(TOKEN_EDIT_WINDOW));
-  if (row) await deleteEmailJobsForSigner(row.id);
-  return Boolean(row);
+  if (!row) return false;
+  await eraseEmail(row.email);
+  return true;
 }
 
 // DSGVO data minimisation: drop sign-ups that were never email-confirmed once

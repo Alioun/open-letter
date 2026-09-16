@@ -29,6 +29,7 @@ const TABLES = [
   "email_templates",
   "campaigns",
   "zoom_registrations",
+  "deletion_requests",
   "zoom_event_mailings",
   "app_settings",
   "kv_state_cache",

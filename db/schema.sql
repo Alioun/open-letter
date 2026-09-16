@@ -137,6 +137,17 @@ CREATE INDEX IF NOT EXISTS idx_zoom_reg_unsub
   ON zoom_registrations (unsubscribe_token)
   WHERE unsubscribe_token IS NOT NULL;
 
+-- Pending "delete my data" requests from the privacy-policy form. Keyed by
+-- email, not by signer, so an address that only registered for the Treffen can
+-- be erased too. Rows live for the 24h link validity and are removed on use.
+CREATE TABLE IF NOT EXISTS deletion_requests (
+  id          INTEGER PRIMARY KEY AUTOINCREMENT,
+  email       TEXT NOT NULL UNIQUE,
+  token       TEXT NOT NULL UNIQUE,
+  expires_at  TEXT NOT NULL,
+  created_at  TEXT DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ','now'))
+);
+
 CREATE TABLE IF NOT EXISTS zoom_event_mailings (
   kind            TEXT PRIMARY KEY,
   status          TEXT NOT NULL DEFAULT 'sending',

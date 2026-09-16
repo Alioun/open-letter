@@ -1,5 +1,10 @@
 import { describe, test, expect, beforeEach } from "bun:test";
-import { resetDb, addVerifiedSigner, db } from "./helpers.js";
+import {
+  resetDb,
+  addVerifiedSigner,
+  addZoomRegistration,
+  db,
+} from "./helpers.js";
 import * as q from "../server/db.js";
 import { prepareQueuedEmail } from "../server/queued-email.js";
 
@@ -54,17 +59,23 @@ describe("queued transactional mail", () => {
       }),
     ).toBeNull();
 
-    const s = await addVerifiedSigner();
     expect(
-      await prepareQueuedEmail({ kind: "deletion", signerId: s.id, baseUrl: base }),
-    ).toBeNull(); // no deletion requested
-    await q.createDeletionToken(s.email, "del-tok", future());
-    const del = await prepareQueuedEmail({
+      await prepareQueuedEmail({ kind: "deletion", requestId: 999, baseUrl: base }),
+    ).toBeNull(); // no such request
+  });
+
+  test("a deletion mail works for a Treffen-only address", async () => {
+    const z = await addZoomRegistration({ email: "treffen@example.org" });
+    const requestId = await q.createDeletionRequest(z.email, "del-tok", future());
+    const args = await prepareQueuedEmail({
       kind: "deletion",
-      signerId: s.id,
+      requestId,
       baseUrl: base,
     });
-    expect(del.token).toBe("del-tok");
+    expect(args.to).toBe("treffen@example.org");
+    expect(args.token).toBe("del-tok");
+    expect(args.unsubscribeUrl).toEndWith("?from=zoom");
+    expect(args.headers["List-Unsubscribe"]).toContain("/api/zoom-abmelden/");
   });
 
   test("the unsubscribe token in a queued mail is the signer's stable one", async () => {

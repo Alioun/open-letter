@@ -37,8 +37,10 @@ import {
   confirmSigner,
   refreshVerificationToken,
   getSignerIdByEmail,
-  createDeletionToken,
-  deleteSigner,
+  createDeletionRequest,
+  deleteByDeletionToken,
+  deleteExpiredDeletionRequests,
+  purgeZoomRegistrationsAfter,
   healthCheck,
   close,
   listEmailTemplates,
@@ -911,9 +913,14 @@ async function sendZoomSignupEmail({ regId, name, email, cfg }) {
     );
     await sendRenderedEmail(payload);
   } else {
+    const unsubToken = await issueZoomUnsubscribeToken(regId);
     await sendZoomConfirmationEmail({
       to: email,
       name,
+      unsubscribeUrl: `${BASE_URL}/abmelden/${unsubToken}?from=zoom`,
+      headers: buildUnsubscribeHeaders(
+        `${BASE_URL}/api/zoom-abmelden/${unsubToken}/opt-out`,
+      ),
       eventLabel: cfg.label,
       eventWhen: cfg.whenPhrase,
       linkInfo: buildMeetingInfo(cfg, {
@@ -971,6 +978,10 @@ async function sendZoomReminderMails(cfg) {
   return sent;
 }
 
+// The privacy policy promises Treffen registrations are deleted 14 days after
+// the event.
+const TREFFEN_RETENTION_MS = 14 * 24 * 60 * 60 * 1000;
+
 let zoomMailingRunning = false;
 
 async function runZoomMailingWorker() {
@@ -979,6 +990,17 @@ async function runZoomMailingWorker() {
   if (!cfg.dateSet) return; // no date yet → nothing to schedule
   const eventMs = cfg.eventAt.getTime();
   if (Number.isNaN(eventMs)) return;
+  // Registrations are only kept until TREFFEN_RETENTION_MS after the event.
+  try {
+    const purged = await purgeZoomRegistrationsAfter(
+      new Date(eventMs + TREFFEN_RETENTION_MS),
+    );
+    if (purged > 0) {
+      console.log(`[purge] deleted ${purged} Treffen registration(s) after the event`);
+    }
+  } catch (err) {
+    console.error("[purge] Treffen registrations:", err);
+  }
   const linkMs = cfg.linkOffsetHours * 60 * 60 * 1000;
   const reminderMs = cfg.reminderOffsetHours * 60 * 60 * 1000;
   const now = Date.now();
@@ -1575,10 +1597,14 @@ const server = Bun.serve({
           const token = crypto.randomUUID();
           const expiresAt = new Date(Date.now() + 24 * 60 * 60 * 1000);
 
-          const found = await createDeletionToken(email, token, expiresAt);
-          if (found) {
+          const requestId = await createDeletionRequest(
+            email,
+            token,
+            expiresAt,
+          );
+          if (requestId) {
             await queueEmail("deletion", {
-              signerId: await getSignerIdByEmail(email),
+              requestId,
               baseUrl: getBaseUrl(req),
             });
           }
@@ -1597,7 +1623,7 @@ const server = Bun.serve({
         if (blocked) return blocked;
         try {
           const { token } = req.params;
-          const deleted = await deleteSigner(token);
+          const deleted = await deleteByDeletionToken(token);
 
           if (deleted) {
             return Response.redirect(`${getBaseUrl(req)}/?deleted=1`, 302);
@@ -2713,6 +2739,7 @@ async function handleMaintenanceJob({ task }) {
     if (removed > 0) {
       console.log(`[purge] deleted ${removed} expired unverified sign-up(s)`);
     }
+    await deleteExpiredDeletionRequests();
   } else if (task === "purge-dead-emails") {
     const removed = await purgeDeadJobs("emails", EMAIL_JOB_TTL_S);
     if (removed > 0) {

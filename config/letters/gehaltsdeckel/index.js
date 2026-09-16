@@ -219,7 +219,7 @@ export default {
         subject: "Deine Unterschrift löschen — Gehaltsdeckel jetzt",
         htmlBody: `
       <p>Hallo,</p>
-      <p>du hast die Löschung deiner Unterschrift und aller gespeicherten Daten angefordert.</p>
+      <p>du hast die Löschung aller Daten angefordert, die wir zu dieser E-Mail-Adresse gespeichert haben – deine Unterschrift und deine Anmeldung zum Treffen, falls vorhanden.</p>
       <p><a href="{{deleteUrl}}">Klicke hier, um deine Daten unwiderruflich zu löschen</a></p>
       <p>Der Link ist 24 Stunden gültig. Wenn du diese Anfrage nicht gestellt hast, kannst du diese E-Mail ignorieren.</p>
       <p>Mit solidarischen Grüßen<br>Initiative Gehaltsdeckel</p>

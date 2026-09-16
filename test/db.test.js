@@ -75,11 +75,57 @@ describe("signers: insert / confirm / delete", () => {
     expect(await q.confirmSigner("tok-exp")).toBeNull();
   });
 
-  test("deletion token flow deletes the signer", async () => {
+});
+
+describe("erasure covers signatures and Treffen registrations", () => {
+  const count = async (table) =>
+    (await db.query(`SELECT COUNT(*) c FROM ${table}`).get()).c;
+
+  test("the deletion link removes signature and Treffen registration", async () => {
     const s = await addVerifiedSigner();
-    expect(await q.createDeletionToken(s.email, "del-tok", future())).toBe(true);
-    expect(await q.deleteSigner("del-tok")).toBe(true);
-    expect((await db.query("SELECT COUNT(*) c FROM signers").get()).c).toBe(0);
+    await addZoomRegistration({ email: s.email });
+    expect(await q.createDeletionRequest(s.email, "del-tok", future())).toBeTruthy();
+    expect(await q.deleteByDeletionToken("del-tok")).toBe(true);
+    expect(await count("signers")).toBe(0);
+    expect(await count("zoom_registrations")).toBe(0);
+    expect(await count("deletion_requests")).toBe(0);
+    expect(await q.deleteByDeletionToken("del-tok")).toBe(false); // single use
+  });
+
+  test("an address that only registered for the Treffen can be erased", async () => {
+    const z = await addZoomRegistration();
+    const other = await addVerifiedSigner();
+    expect(await q.createDeletionRequest(z.email, "zoom-del", future())).toBeTruthy();
+    expect(await q.deleteByDeletionToken("zoom-del")).toBe(true);
+    expect(await count("zoom_registrations")).toBe(0);
+    expect(await count("signers")).toBe(1);
+    expect(other.id).toBeTruthy();
+  });
+
+  test("unknown addresses get no request, expired links do nothing", async () => {
+    expect(await q.createDeletionRequest("nobody@example.org", "x", future())).toBeNull();
+    const s = await addVerifiedSigner();
+    await q.createDeletionRequest(s.email, "old-del", past());
+    expect(await q.deleteByDeletionToken("old-del")).toBe(false);
+    expect(await count("signers")).toBe(1);
+    expect(await q.deleteExpiredDeletionRequests()).toBe(1);
+  });
+
+  test("deleting from the settings page also removes the Treffen registration", async () => {
+    const s = await addVerifiedSigner();
+    await setUnsubToken(s.id, "page-del", 1);
+    await addZoomRegistration({ email: s.email });
+    expect(await q.deleteSignerByUnsubscribeToken("page-del")).toBe(true);
+    expect(await count("signers")).toBe(0);
+    expect(await count("zoom_registrations")).toBe(0);
+  });
+
+  test("Treffen registrations are purged once the retention after the event passed", async () => {
+    await addZoomRegistration();
+    expect(await q.purgeZoomRegistrationsAfter(future())).toBe(0);
+    expect(await count("zoom_registrations")).toBe(1);
+    expect(await q.purgeZoomRegistrationsAfter(past())).toBe(1);
+    expect(await count("zoom_registrations")).toBe(0);
   });
 });
 
