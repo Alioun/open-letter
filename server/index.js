@@ -1070,6 +1070,31 @@ function treffenSignupUrls(idOrToken, showDelegierter) {
   };
 }
 
+// Public read payloads, shared by the routes that serve them.
+async function statsPayload() {
+  const [stats, milestones] = await Promise.all([getStats(), getMilestones()]);
+  const goal =
+    milestones.find((m) => m > stats.total) ??
+    milestones[milestones.length - 1];
+  return { ...stats, milestones, goal };
+}
+
+async function zoomPayload() {
+  const [countRow, zc] = await Promise.all([
+    getZoomRegistrationCount(),
+    getZoomConfig(),
+  ]);
+  return {
+    ...countRow,
+    eventAt: zc.eventAtIso,
+    showDelegierter: zc.showDelegierter,
+    mode: zc.mode,
+    location: zc.location,
+    navLabel: zc.navLabel,
+    label: zc.label,
+  };
+}
+
 const server = Bun.serve({
   port: PORT,
   development: isDev,
@@ -1189,14 +1214,7 @@ const server = Bun.serve({
         const blocked = await denyPublic(req, "public-read", 120, 60 * 1000);
         if (blocked) return blocked;
         try {
-          const [stats, milestones] = await Promise.all([
-            getStats(),
-            getMilestones(),
-          ]);
-          const goal =
-            milestones.find((m) => m > stats.total) ??
-            milestones[milestones.length - 1];
-          return json({ ...stats, milestones, goal });
+          return json(await statsPayload());
         } catch (err) {
           console.error("GET /api/stats error:", err);
           return json({ error: "Internal server error" }, 500);
@@ -1446,19 +1464,7 @@ const server = Bun.serve({
         const blocked = await denyPublic(req, "public-read", 120, 60 * 1000);
         if (blocked) return blocked;
         try {
-          const [countRow, cfg] = await Promise.all([
-            getZoomRegistrationCount(),
-            getZoomConfig(),
-          ]);
-          return json({
-            ...countRow,
-            eventAt: cfg.eventAtIso,
-            showDelegierter: cfg.showDelegierter,
-            mode: cfg.mode,
-            location: cfg.location,
-            navLabel: cfg.navLabel,
-            label: cfg.label,
-          });
+          return json(await zoomPayload());
         } catch (err) {
           console.error("GET /api/zoom-count error:", err);
           return json({ error: "Internal server error" }, 500);
