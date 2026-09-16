@@ -587,7 +587,7 @@ export default function App({ boot = null }) {
       const result = await res.json();
       if (!res.ok) {
         setSubmitError(result.error || "Ein Fehler ist aufgetreten.");
-        return;
+        return false;
       }
       setEmailModal({
         name: data.name,
@@ -597,8 +597,10 @@ export default function App({ boot = null }) {
         newsletter: !!data.newsletter,
         agree: !!data.agree,
       });
+      return true;
     } catch {
       setSubmitError("Verbindung fehlgeschlagen. Bitte versuche es erneut.");
+      return false;
     }
   }, []);
 
@@ -1691,7 +1693,7 @@ const SignForm = memo(function SignForm({
     e.preventDefault();
     if (!validate()) return;
     setSubmitting(true);
-    await onSubmit({
+    const ok = await onSubmit({
       name: name.trim(),
       email: email.trim(),
       kv: kv.trim().replace(/^KV\s*/i, ""),
@@ -1700,6 +1702,7 @@ const SignForm = memo(function SignForm({
       agree,
     });
     setSubmitting(false);
+    if (!ok) return;
     setName("");
     setEmail("");
     setKv("");

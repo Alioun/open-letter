@@ -1545,6 +1545,14 @@ export async function updateSignerByEmail(
   return Boolean(row);
 }
 
+// Used after a self-service edit to re-queue state resolution when the
+// Kreisverband change reset `state`.
+export async function getSignerStateByEmail(email) {
+  return db
+    .query(`SELECT id, kreisverband, state FROM signers WHERE email = ?`)
+    .get(email);
+}
+
 export async function updateZoomByEmail(
   email,
   { name, kreisverband, delegierter },

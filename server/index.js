@@ -84,7 +84,7 @@ import {
   deleteZoomByEmail,
   updateSignerByEmail,
   updateZoomByEmail,
-  deleteSignerByUnsubscribeToken,
+  getSignerStateByEmail,
   deleteExpiredUnverifiedSigners,
   getStateStats,
   ensureKvStateCacheTable,
@@ -493,6 +493,16 @@ const MAX_BODY_BYTES = 128 * 1024;
 function bodyTooLarge(req) {
   const len = parseInt(req.headers.get("content-length") || "0", 10);
   return len > MAX_BODY_BYTES;
+}
+
+// Feature flags enforced server-side, not only in the client: with a module
+// off, its endpoints 404 and its optional fields are neither stored nor served.
+const ZOOM_ENABLED = Boolean(cfg.features.zoomEvent);
+const KV_ENABLED = Boolean(cfg.features.kreisverbandField);
+const OCCUPATION_ENABLED = Boolean(cfg.features.occupationField);
+
+function featureOff() {
+  return new Response("Not found", { status: 404 });
 }
 
 function concatUint8Arrays(chunks) {
@@ -1030,6 +1040,7 @@ function treffenLinkError() {
 // ?delegiert=1 → delegate, ?delegiert=0 (or omitted) → non-delegate;
 // &force=1 → change an existing registration's delegate status.
 async function treffenAnmelden(req, { commit }) {
+  if (!ZOOM_ENABLED) return featureOff();
   const blocked = denyRate(req, "token-link", 120, 15 * 60 * 1000);
   if (blocked) return blocked;
   const { token } = req.params;
@@ -1413,6 +1424,7 @@ const server = Bun.serve({
 
     "/api/occupations": {
       async GET(req) {
+        if (!OCCUPATION_ENABLED) return featureOff();
         const blocked = await denyPublic(req, "public-read", 120, 60 * 1000);
         if (blocked) return blocked;
         try {
@@ -1427,6 +1439,7 @@ const server = Bun.serve({
 
     "/api/kreisverband-stats": {
       async GET(req) {
+        if (!KV_ENABLED) return featureOff();
         const blocked = await denyPublic(req, "public-read", 120, 60 * 1000);
         if (blocked) return blocked;
         try {
@@ -1502,8 +1515,12 @@ const server = Bun.serve({
           const body = await parseJsonBody(req);
           const name = sanitize(body.name);
           const email = sanitizeEmail(body.email);
-          const kv = sanitize(body.kv || "").replace(/^KV\s*/i, "");
-          const occupation = sanitize(body.occupation || "");
+          const kv = KV_ENABLED
+            ? sanitize(body.kv || "").replace(/^KV\s*/i, "")
+            : "";
+          const occupation = OCCUPATION_ENABLED
+            ? sanitize(body.occupation || "")
+            : "";
           const newsletter = Boolean(body.newsletter);
           const showPublicly = body.agree === true;
 
@@ -1560,6 +1577,7 @@ const server = Bun.serve({
 
     "/api/zoom-register": {
       async POST(req) {
+        if (!ZOOM_ENABLED) return featureOff();
         try {
           const ip = getClientIp(req);
           const { allowed, retryAfter } = checkRateLimit(
@@ -1636,6 +1654,7 @@ const server = Bun.serve({
 
     "/api/zoom-count": {
       async GET(req) {
+        if (!ZOOM_ENABLED) return featureOff();
         const blocked = await denyPublic(req, "public-read", 120, 60 * 1000);
         if (blocked) return blocked;
         try {
@@ -1649,6 +1668,7 @@ const server = Bun.serve({
 
     "/api/termin.ics": {
       async GET(req) {
+        if (!ZOOM_ENABLED) return featureOff();
         const blocked = denyRate(req, "ics", 60, 15 * 60 * 1000);
         if (blocked) return blocked;
         const cfg = await getZoomConfig();
@@ -1976,8 +1996,12 @@ const server = Bun.serve({
 
           const body = await parseJsonBody(req);
           const name = sanitize(body.name || "");
-          const kv = sanitize(body.kv || "").replace(/^KV\s*/i, "");
-          const occupation = sanitize(body.occupation || "");
+          const kv = KV_ENABLED
+            ? sanitize(body.kv || "").replace(/^KV\s*/i, "")
+            : "";
+          const occupation = OCCUPATION_ENABLED
+            ? sanitize(body.occupation || "")
+            : "";
           const newsletter = Boolean(body.newsletter);
           const showPublicly = Boolean(body.showPublicly);
           // Only honor the delegate flag while the field is enabled.
@@ -2000,9 +2024,17 @@ const server = Bun.serve({
           });
           await updateZoomByEmail(email, {
             name,
-            kreisverband: kv,
+            // The Treffen form collects a KV regardless of kreisverbandField.
+            kreisverband: sanitize(body.kv || "").replace(/^KV\s*/i, ""),
             delegierter,
           });
+
+          if (cfg.features.stateResolution && kv) {
+            const signer = await getSignerStateByEmail(email);
+            if (signer && !signer.state) {
+              enqueueStateResolution(signer.id, signer.kreisverband);
+            }
+          }
 
           const url = new URL(req.url);
           const source =
@@ -2046,6 +2078,7 @@ const server = Bun.serve({
     // scanner following the link can't sign anyone up.
     "/api/treffen-bestaetigen/:token": {
       async GET(req) {
+        if (!ZOOM_ENABLED) return featureOff();
         const blocked = denyRate(req, "token-link", 120, 15 * 60 * 1000);
         if (blocked) return blocked;
         try {
@@ -2078,6 +2111,7 @@ const server = Bun.serve({
         }
       },
       async POST(req) {
+        if (!ZOOM_ENABLED) return featureOff();
         const blocked = denyRate(req, "token-link", 120, 15 * 60 * 1000);
         if (blocked) return blocked;
         try {
@@ -2127,6 +2161,7 @@ const server = Bun.serve({
     // Redirect (preserving any ?delegiert query) to the current path.
     "/api/zoom-anmelden/:token": {
       GET(req) {
+        if (!ZOOM_ENABLED) return featureOff();
         const u = new URL(req.url);
         const dest =
           u.origin +
@@ -2923,7 +2958,7 @@ async function handleMaintenanceJob({ task }) {
     const ids = await getDueCampaignIds();
     for (const id of ids)
       await enqueueJob("campaigns", { campaignId: id }, { maxAttempts: 5 });
-  } else if (task === "zoom") {
+  } else if (task === "zoom" && ZOOM_ENABLED) {
     await runZoomMailingWorker();
   } else if (task === "backup") {
     await runBackup();

@@ -66,7 +66,9 @@ export function buildZoomIcs({
     `DTEND:${toIcsUtc(endDate)}`,
     `SUMMARY:${escapeIcs(summary)}`,
     `DESCRIPTION:${escapeIcs(description)}`,
-    url ? `URL:${escapeIcs(url)}` : null,
+    // URL is a URI value, not TEXT: RFC 5545 escaping would put backslashes
+    // into the link. Only strip line breaks so it cannot inject properties.
+    url ? `URL:${String(url).replace(/[\r\n]/g, "")}` : null,
     `LOCATION:${escapeIcs(location)}`,
     "END:VEVENT",
     "END:VCALENDAR",

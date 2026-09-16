@@ -1057,7 +1057,7 @@ export default function AdminApp() {
 
   function logout() {
     if (!confirm("Wirklich abmelden?")) return;
-    sessionStorage.removeItem(TOKEN_KEY);
+    localStorage.removeItem(TOKEN_KEY);
     setToken("");
   }
 

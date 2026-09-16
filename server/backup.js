@@ -111,6 +111,7 @@ export async function runBackup() {
     try {
       await pruneExpired();
       await prunePreRestore();
+      await pruneStaleTmp();
     } catch (err) {
       console.error(`[backup] prune failed: ${err.message}`);
     }
@@ -174,6 +175,27 @@ async function pruneExpired() {
     console.error(
       `[backup] newest backup ${newest} is older than ${BACKUP_KEEP}h — backups are failing; kept as the only restore point, past the stated retention`,
     );
+  }
+}
+
+// A `.sqlite.tmp` is only ever the in-flight export of one run. If the process
+// dies mid-export (deploy, OOM) the run's own catch never cleans it up, and
+// BACKUP_FILE_RE keeps it out of the pruning above — so drop any tmp whose
+// timestamp is over an hour old, well past any run that could still own it.
+async function pruneStaleTmp() {
+  let names;
+  try {
+    names = await readdir(BACKUP_DIR);
+  } catch {
+    return;
+  }
+  const cutoff = Date.now() - ONE_HOUR;
+  for (const f of names) {
+    if (!/^backup-.+\.sqlite\.tmp$/.test(f)) continue;
+    const at = nameTime(f.slice("backup-".length));
+    if (Number.isNaN(at) || at >= cutoff) continue;
+    await unlink(join(BACKUP_DIR, f));
+    console.log(`[backup] pruned stale ${f}`);
   }
 }
 

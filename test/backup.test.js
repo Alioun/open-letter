@@ -163,6 +163,22 @@ describe("backup retention", () => {
     expect(res.stderr.toString()).toContain("older than 48h");
   });
 
+  test("removes a .tmp export orphaned by a crashed run, but not a fresh one", async () => {
+    await resetDb();
+    await addVerifiedSigner();
+    const backupDir = tmp();
+    const orphan = `backup-${stamp(3 * 3600_000)}.sqlite.tmp`;
+    const fresh = `backup-${stamp(10 * 60_000)}.sqlite.tmp`;
+    for (const f of [orphan, fresh]) writeFileSync(join(backupDir, f), "x");
+
+    const res = runBackupIn({ BACKUP_DIR: backupDir, BACKUP_KEEP: "48" });
+    expect(res.exitCode).toBe(0);
+
+    const left = readdirSync(backupDir);
+    expect(left).not.toContain(orphan);
+    expect(left).toContain(fresh);
+  });
+
   test("makes room before writing, so a full backup set stays at the limit", async () => {
     await resetDb();
     await addVerifiedSigner();
