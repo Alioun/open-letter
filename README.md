@@ -162,7 +162,7 @@ This creates the encrypted SQLite database, seeds 200 verified signers, trickles
 | `EMAIL_BATCH_DELAY_MS` | No     | `email.pacing.batchDelayMs` or `1000` | Delay (ms) between 100-email batch chunks (campaigns, reminders)                                    |
 | `BACKUP_ENCRYPTION_KEY` | No    | `DATABASE_ENCRYPTION_KEY` | Separate SQLCipher key for backup files. Defaults to the live DB key.                                              |
 | `BACKUP_DIR`       | No         | `/app/backups`          | Directory for database backup files                                                                                   |
-| `BACKUP_KEEP`      | No         | `48`                    | Number of hourly backup files to retain                                                                               |
+| `BACKUP_KEEP`      | No         | `48`                    | Number of hourly backup files to retain. The privacy policy (`DatenschutzModal` in `src/App.jsx`) states 48 hours — update it if you change this |
 | `BACKUP_GZIP`      | No         | `true`                  | Gzip the encrypted backup snapshot                                                                                    |
 
 See `.env.example` for a template.

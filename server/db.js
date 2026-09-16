@@ -1052,7 +1052,9 @@ export async function deleteSignerByUnsubscribeToken(token) {
 export async function deleteExpiredUnverifiedSigners() {
   const res = await db
     .query(
-      `DELETE FROM signers WHERE verified = 0 AND token_expires_at < ?`,
+      // Only ever removes unverified rows, which no public read counts — so it
+      // must not drop the read cache every five minutes.
+      `DELETE FROM signers /* public-neutral */ WHERE verified = 0 AND token_expires_at < ?`,
     )
     .run(nowIso());
   return res?.changes ?? 0;

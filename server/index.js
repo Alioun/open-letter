@@ -2746,8 +2746,11 @@ try {
   await registerSchedule("hourly-backup", "maintenance", "0 * * * *", {
     task: "backup",
   });
-  // DSGVO: sweep expired, never-confirmed sign-ups daily at 03:30.
-  await registerSchedule("purge-unverified", "maintenance", "30 3 * * *", {
+  // DSGVO: sweep expired, never-confirmed sign-ups. The privacy policy promises
+  // deletion once the 24h confirmation link has expired, so this has to run
+  // often — a daily sweep left entries in place for up to ~48h. Re-registering
+  // under the same name updates an existing deployment's schedule.
+  await registerSchedule("purge-unverified", "maintenance", "@every 300s", {
     task: "purge-unverified",
   });
   startWorker(

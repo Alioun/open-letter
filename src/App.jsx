@@ -2411,7 +2411,8 @@ function DatenschutzModal({ onClose }) {
             spätestens jedoch 3 Jahre nach Unterzeichnung (§ 195 BGB) oder auf
             frühere Anfrage. Nicht bestätigte Eintragungen – bei denen der
             Bestätigungslink nicht angeklickt wurde – werden automatisch
-            spätestens 24 Stunden nach der Eintragung gelöscht.
+            gelöscht, sobald der 24 Stunden gültige Bestätigungslink abgelaufen
+            ist.
           </p>
           <p>
             <strong>c) Newsletter / Kampagnen-Updates</strong>
@@ -2473,6 +2474,18 @@ function DatenschutzModal({ onClose }) {
             übermittelt. Dein Name und deine E-Mail-Adresse werden dabei nicht
             übertragen. Rechtsgrundlage ist Art. 6 Abs. 1 lit. f DS-GVO
             (berechtigtes Interesse an einer regionalen Auswertung).
+          </p>
+          <p>
+            <strong>Speicherung und Sicherungskopien</strong>
+            <br />
+            Die Datenbank und ihre Sicherungskopien sind verschlüsselt
+            gespeichert. Das schützt die Daten bei Verlust oder Diebstahl der
+            Datenträger oder Sicherungskopien. Sicherungskopien werden stündlich
+            erstellt und nach 48 Stunden überschrieben. Gelöschte Daten – etwa
+            nach einer Löschanfrage oder einer abgelaufenen Bestätigung – können
+            bis dahin noch in Sicherungskopien enthalten sein. Sicherungskopien
+            werden ausschließlich zur Wiederherstellung nach einem technischen
+            Ausfall verwendet.
           </p>
 
           <h5>3. Deine Rechte</h5>
