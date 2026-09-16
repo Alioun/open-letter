@@ -10,9 +10,24 @@ import { join, dirname, basename } from "node:path";
 import { createGzip } from "node:zlib";
 import { pipeline } from "node:stream/promises";
 import { openEncrypted, DB_PATH } from "../db/connection.js";
+import cfg from "../config/letter.config.js";
+import { resolvePrivacy, backupKeepHours } from "../config/privacy.js";
 
 const BACKUP_DIR = process.env.BACKUP_DIR || "/app/backups";
-const BACKUP_KEEP = Math.max(1, parseInt(process.env.BACKUP_KEEP || "48", 10));
+// Hours of hourly backups to keep: the letter's privacy.backupRetentionHours,
+// which the privacy policy quotes, unless BACKUP_KEEP overrides it.
+const privacy = resolvePrivacy(cfg);
+const BACKUP_KEEP = backupKeepHours(privacy, process.env.BACKUP_KEEP);
+if (BACKUP_KEEP !== privacy.backupRetentionHours) {
+  console.warn(
+    `[backup] BACKUP_KEEP=${BACKUP_KEEP} differs from privacy.backupRetentionHours=${privacy.backupRetentionHours}, which the privacy policy states`,
+  );
+}
+if (BACKUP_KEEP > privacy.erasureLogDays * 24) {
+  console.warn(
+    `[backup] backups are kept longer (${BACKUP_KEEP}h) than the erasure log (${privacy.erasureLogDays}d): restoring the oldest backups could bring back erased data`,
+  );
+}
 const BACKUP_GZIP = process.env.BACKUP_GZIP !== "false"; // gzip by default
 // Resolve the backup key the same way restore does: prefer a dedicated
 // BACKUP_ENCRYPTION_KEY, else fall back to DATABASE_ENCRYPTION_KEY. This keeps

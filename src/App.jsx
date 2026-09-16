@@ -2586,7 +2586,8 @@ function DatenschutzModal({ onClose }) {
             Die Datenbank und ihre Sicherungskopien sind verschlüsselt
             gespeichert. Das schützt die Daten bei Verlust oder Diebstahl der
             Datenträger oder Sicherungskopien. Sicherungskopien werden stündlich
-            erstellt und nach 48 Stunden überschrieben. Gelöschte Daten – etwa
+            erstellt und nach {privacy.backupRetentionHours} Stunden
+            gelöscht. Gelöschte Daten – etwa
             nach einer Löschanfrage oder einer abgelaufenen Bestätigung – können
             bis dahin noch in Sicherungskopien enthalten sein. Sicherungskopien
             werden ausschließlich zur Wiederherstellung nach einem technischen

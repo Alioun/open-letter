@@ -131,6 +131,7 @@ export default {
     emailJobRetentionHours: 24,
     treffenRetentionDays: 14,
     signerRetentionYears: 3,
+    backupRetentionHours: 48,
     erasureLogDays: 7,
   },
 

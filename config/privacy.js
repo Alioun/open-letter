@@ -20,11 +20,23 @@ export const PRIVACY_DEFAULTS = {
   // Longest any signature or Treffen registration is kept, counted from when
   // it was made — even if the campaign is still running.
   signerRetentionYears: 3,
+  // Hourly backups are kept this many hours (BACKUP_KEEP overrides it per
+  // deployment, with a startup warning, since the policy quotes this value).
+  backupRetentionHours: 48,
   // Erasures and opt-outs are logged (as an HMAC of the address) for this long,
-  // so restoring a backup can re-apply them. Must cover the backup retention
-  // (BACKUP_KEEP hours, default 48).
+  // so restoring a backup can re-apply them. Must cover backupRetentionHours.
   erasureLogDays: 7,
 };
+
+// Backup retention in effect: BACKUP_KEEP from the environment when set,
+// otherwise the letter's privacy.backupRetentionHours. `envValue` is passed in
+// because this module is also bundled for the browser.
+export function backupKeepHours(privacy, envValue) {
+  const fromEnv = parseInt(envValue ?? "", 10);
+  return Number.isFinite(fromEnv) && fromEnv >= 1
+    ? fromEnv
+    : privacy.backupRetentionHours;
+}
 
 // The cutoff for signerRetentionYears as of `now`: everything created before
 // it is due for deletion. Calendar years, so leap days don't shift it.
@@ -45,6 +57,11 @@ export function resolvePrivacy(cfg) {
         `config privacy.${key} must be a positive number, got ${JSON.stringify(value)}`,
       );
     }
+  }
+  if (merged.erasureLogDays * 24 < merged.backupRetentionHours) {
+    throw new Error(
+      `config privacy.erasureLogDays (${merged.erasureLogDays}) must cover privacy.backupRetentionHours (${merged.backupRetentionHours}h), or a restore could bring back erased data`,
+    );
   }
   // The privacy policy has to state how long analytics data is kept.
   const analytics = cfg?.meta?.analytics;

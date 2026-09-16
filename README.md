@@ -24,7 +24,8 @@ No application code changes are needed — content, branding, theme and feature 
 | --- | --- |
 | `brand` | `name`, `wordmark`, `lang`, `locale` |
 | `theme` | `colors` (palette → CSS variables), `fonts` (`display`/`body`), `style` (`shadowOffset`, `radius`, `borderWidth`) — drives the page, emails, and generated images |
-| `meta` | `<head>`: title, description, canonical, OG/Twitter, favicon, JSON-LD `schemaAbout`, optional `analytics` `{src, websiteId}` |
+| `meta` | `<head>`: title, description, canonical, OG/Twitter, favicon, JSON-LD `schemaAbout`, optional `analytics` `{src, websiteId, retentionMonths}` |
+| `privacy` | retention periods and link lifetimes, enforced by the server and quoted in the privacy policy — see [Data retention](#data-retention) |
 | `hero` | headline lines, CTA labels, counter/goal labels, seed `milestones` |
 | `nav` / `navCta` / `list` | nav items, top-bar CTA, signer-list heading |
 | `sign` | section heading, `criteria`, `privacyNote`, form copy, and `fields` (labels/placeholders for the two optional `kreisverband`/`occupation` columns) |
@@ -162,7 +163,7 @@ This creates the encrypted SQLite database, seeds 200 verified signers, trickles
 | `EMAIL_BATCH_DELAY_MS` | No     | `email.pacing.batchDelayMs` or `1000` | Delay (ms) between 100-email batch chunks (campaigns, reminders)                                    |
 | `BACKUP_ENCRYPTION_KEY` | No    | `DATABASE_ENCRYPTION_KEY` | Separate SQLCipher key for backup files. Defaults to the live DB key.                                              |
 | `BACKUP_DIR`       | No         | `/app/backups`          | Directory for database backup files                                                                                   |
-| `BACKUP_KEEP`      | No         | `48`                    | Number of hourly backup files to retain. The privacy policy (`DatenschutzModal` in `src/App.jsx`) states 48 hours — update it if you change this |
+| `BACKUP_KEEP`      | No         | `privacy.backupRetentionHours` (48) | Hours of hourly backups to retain. Overrides the letter config, which the privacy policy quotes — the server warns when they differ |
 | `BACKUP_GZIP`      | No         | `true`                  | Gzip the encrypted backup snapshot                                                                                    |
 
 See `.env.example` for a template.
@@ -339,6 +340,8 @@ policy quotes the same values, so change them there, not in code.
 | `emailJobRetentionHours` | 24 | queued mail jobs expire; dead-lettered mail jobs are deleted hourly after this |
 | `treffenRetentionDays` | 14 | all Treffen registrations are deleted this long after the event date |
 | `signerRetentionYears` | 3 | daily job deletes signatures and Treffen registrations older than this |
+| `backupRetentionHours` | 48 | hourly backups (and pre-restore copies) are deleted after this; `BACKUP_KEEP` overrides it |
+| `erasureLogDays` | 7 | erasures/opt-outs are kept (hashed) this long so a restore can re-apply them; must cover `backupRetentionHours` |
 
 ### Ending a campaign
 

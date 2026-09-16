@@ -1,5 +1,9 @@
 import { describe, test, expect } from "bun:test";
-import { resolvePrivacy, PRIVACY_DEFAULTS } from "../config/privacy.js";
+import {
+  resolvePrivacy,
+  backupKeepHours,
+  PRIVACY_DEFAULTS,
+} from "../config/privacy.js";
 import gehaltsdeckel from "../config/letters/gehaltsdeckel/index.js";
 import example from "../config/letters/example/index.js";
 import { interpolateTemplate } from "../server/email.js";
@@ -28,6 +32,20 @@ describe("privacy config", () => {
     expect(() =>
       resolvePrivacy({ privacy: { treffenRetentionDays: "14" } }),
     ).toThrow(/treffenRetentionDays/);
+  });
+
+  test("backup retention comes from config unless BACKUP_KEEP overrides it", () => {
+    const p = resolvePrivacy({ privacy: { backupRetentionHours: 72 } });
+    expect(backupKeepHours(p, undefined)).toBe(72);
+    expect(backupKeepHours(p, "")).toBe(72); // docker-compose passes an empty value
+    expect(backupKeepHours(p, "24")).toBe(24);
+    expect(backupKeepHours(p, "nonsense")).toBe(72);
+  });
+
+  test("the erasure log must outlive the backups", () => {
+    expect(() =>
+      resolvePrivacy({ privacy: { backupRetentionHours: 200, erasureLogDays: 7 } }),
+    ).toThrow(/erasureLogDays/);
   });
 
   test("analytics needs a stated retention period", () => {
