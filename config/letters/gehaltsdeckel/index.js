@@ -386,6 +386,26 @@ export default {
     countLabel: "Genoss*innen haben unterzeichnet",
   },
 
+  // ---- Link pages ------------------------------------------------------------
+  // Small server-rendered pages behind mail links (confirm, delete, Treffen).
+  // Trusted HTML; {placeholders} are filled with escaped values. Omitted keys
+  // fall back to the German defaults in server/pages.js.
+  pages: {
+    title: "{siteName}",
+    deleteData: {
+      heading: "Daten löschen",
+      text: "Mit dem Klick auf den Button löschen wir alle Daten, die wir zu deiner E-Mail-Adresse gespeichert haben – deine Unterschrift und deine Anmeldung zum Treffen, falls vorhanden. Das kann nicht rückgängig gemacht werden.",
+      button: "Endgültig löschen",
+      note: "Wenn du die Löschung nicht angefordert hast, schließe diese Seite einfach.",
+    },
+    confirmSignature: {
+      heading: "Unterschrift bestätigen",
+      intro: "Bitte prüfe deine Angaben und bestätige deine Unterschrift.",
+      button: "Unterschrift bestätigen",
+      note: "Stimmt etwas nicht? Dann bestätige nicht – nicht bestätigte Eintragungen löschen wir automatisch.",
+    },
+  },
+
   // ---- Treffen / event (only read when features.zoomEvent) -------------------
   // A "Treffen" (meeting) that can be online (video/Zoom link) or in person
   // (physical location) — see `mode` below. eventAt/link/label are admin-editable

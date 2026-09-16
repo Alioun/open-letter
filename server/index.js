@@ -118,7 +118,13 @@ import {
   batchDelayMs,
 } from "./email.js";
 import { buildZoomIcs } from "./ics.js";
-import { simplePage, firstNameHtml, escapeHtml } from "./pages.js";
+import {
+  simplePage,
+  firstNameHtml,
+  escapeHtml,
+  pageCopy,
+  fill,
+} from "./pages.js";
 import { checkRateLimit } from "./ratelimit.js";
 import { stopCache } from "./cache.js";
 import { runBackup } from "./backup.js";
@@ -987,25 +993,31 @@ async function sendZoomReminderMails(cfg) {
   return sent;
 }
 
+// Copy for the server-rendered link pages (letter config `pages`).
+const pages = pageCopy(cfg);
+
 function htmlPage(inner, status = 200) {
-  return new Response(simplePage(inner), {
+  return new Response(simplePage(inner, cfg), {
     status,
     headers: { "Content-Type": "text/html; charset=utf-8", ...securityHeaders },
   });
 }
 
+const para = (html) => `<p>${html}</p>`;
+const heading = (html) => `<h1>${html}</h1>`;
+const postButton = (label) =>
+  `<form method="post"><button type="submit">${label}</button></form>`;
+
 function treffenLinkExpired() {
+  const home = `<a href="${BASE_URL}/#zoom">${escapeHtml(new URL(BASE_URL).host)}</a>`;
   return htmlPage(
-    `<h1>Link abgelaufen</h1><p>Dieser Link ist leider nicht mehr gültig. Du kannst dich auf <a href="${BASE_URL}/#zoom">${escapeHtml(new URL(BASE_URL).host)}</a> erneut anmelden.</p>`,
+    heading(pages.expired.heading) + para(fill(pages.expired.text, { home })),
     410,
   );
 }
 
 function treffenLinkError() {
-  return htmlPage(
-    `<h1>Fehler</h1><p>Etwas ist schiefgelaufen. Bitte versuche es später erneut.</p>`,
-    500,
-  );
+  return htmlPage(heading(pages.error.heading) + para(pages.error.text), 500);
 }
 
 // One-click Treffen registration from a newsletter invite (token = the signer's
@@ -1025,48 +1037,56 @@ async function treffenAnmelden(req, { commit }) {
     // stale email button can't register someone as a delegate.
     const delegiert = zoomCfg.showDelegierter && req.url.includes("delegiert=1");
     const signer = await getSignerForZoomInvite(token);
-    if (!signer) {
-      return htmlPage(
-        `<h1>Link abgelaufen</h1><p>Dieser Link ist leider nicht mehr gültig. Du kannst dich auf <a href="${BASE_URL}/#zoom">${escapeHtml(new URL(BASE_URL).host)}</a> direkt anmelden.</p>`,
-        410,
-      );
-    }
+    if (!signer) return treffenLinkExpired();
 
     const existing = await getZoomRegistrationByEmail(signer.email);
-    const firstName = firstNameHtml(signer.name);
+    const vars = {
+      firstName: firstNameHtml(signer.name),
+      when: escapeHtml(zoomCfg.whenPhrase),
+    };
 
     if (existing && !force) {
       // The delegate status + toggle only make sense while the field is on;
       // when off, show a neutral "registriert" line with no toggle.
-      const currentStatus = !zoomCfg.showDelegierter
+      const copy = pages.treffenAlready;
+      const status = !zoomCfg.showDelegierter
         ? ""
         : existing.delegierter
-          ? " als <strong>Delegierte*r</strong>"
-          : " als einfache*r Teilnehmer*in";
+          ? copy.statusDelegate
+          : copy.statusRegular;
       let toggleBlock = "";
       if (zoomCfg.showDelegierter) {
-        const toggleLabel = existing.delegierter
-          ? "Nicht als Delegierte*r anmelden"
-          : "Als Delegierte*r anmelden";
         const toggleUrl = `${BASE_URL}/api/treffen-anmelden/${encodeURIComponent(token)}?delegiert=${existing.delegierter ? 0 : 1}&force=1`;
-        toggleBlock = `<p><a href="${toggleUrl}" style="color:#e8001c;">${toggleLabel}</a></p>`;
+        toggleBlock = para(
+          `<a href="${toggleUrl}">${existing.delegierter ? copy.toRegular : copy.toDelegate}</a>`,
+        );
       }
       const unsubLink = existing.unsubscribe_token
-        ? `<p><a href="${BASE_URL}/abmelden/${encodeURIComponent(existing.unsubscribe_token)}?from=zoom">Abmelden</a></p>`
+        ? para(
+            `<a href="${BASE_URL}/abmelden/${encodeURIComponent(existing.unsubscribe_token)}?from=zoom">${copy.unsubscribe}</a>`,
+          )
         : "";
       return htmlPage(
-        `<h1>Du bist bereits angemeldet</h1><p>Hallo <strong>${firstName}</strong>, du bist bereits${currentStatus} für das Treffen registriert.</p>${toggleBlock}${unsubLink}`,
+        heading(copy.heading) +
+          para(fill(copy.text, { ...vars, status })) +
+          toggleBlock +
+          unsubLink,
       );
     }
 
     if (!commit) {
-      const what = existing
+      const copy = pages.treffenInvite;
+      const ask = existing
         ? delegiert
-          ? "deine Anmeldung auf <strong>Delegierte*r</strong> ändern"
-          : "deine Anmeldung auf <strong>einfache*r Teilnehmer*in</strong> ändern"
-        : `dich zum Treffen${escapeHtml(zoomCfg.whenPhrase)} anmelden${delegiert ? " (als <strong>Delegierte*r</strong>)" : ""}`;
+          ? copy.askToDelegate
+          : copy.askToRegular
+        : delegiert
+          ? copy.askNewDelegate
+          : copy.askNew;
       return htmlPage(
-        `<h1>Zum Treffen anmelden</h1><p>Hallo <strong>${firstName}</strong>, möchtest du ${what}?</p><form method="post"><button type="submit">${existing ? "Anmeldung ändern" : "Jetzt anmelden"}</button></form>`,
+        heading(copy.heading) +
+          para(fill(ask, vars)) +
+          postButton(existing ? copy.buttonChange : copy.buttonNew),
       );
     }
 
@@ -1091,12 +1111,13 @@ async function treffenAnmelden(req, { commit }) {
       }
     }
 
-    const delegateNote = delegiert
-      ? `<p>Du hast dich als <strong>Delegierte*r</strong> angemeldet.</p>`
-      : "";
-    const updatedNote = !isNew ? `<p>Deine Anmeldung wurde aktualisiert.</p>` : "";
+    const done = pages.treffenDone;
     return htmlPage(
-      `<h1>Du bist dabei!</h1><p>Wir haben deine Anmeldung für das Treffen gespeichert, <strong>${firstName}</strong>.</p>${delegateNote}${updatedNote}${buildMeetingInfo(zoomCfg, { pending: true, timingText: "kurz" })}`,
+      heading(done.heading) +
+        para(fill(done.text, vars)) +
+        (delegiert ? para(done.delegate) : "") +
+        (isNew ? "" : para(done.updated)) +
+        buildMeetingInfo(zoomCfg, { pending: true, timingText: "kurz" }),
     );
   } catch (err) {
     console.error(`${req.method} /api/treffen-anmelden error:`, err);
@@ -1693,17 +1714,23 @@ const server = Bun.serve({
               302,
             );
           }
+          const copy = pages.confirmSignature;
+          const yesNo = (v) => (v ? copy.yes : copy.no);
           const rows = [
-            `Name: ${escapeHtml(pending.name)}`,
+            `${copy.nameLabel}: ${escapeHtml(pending.name)}`,
             pending.kreisverband &&
               `${escapeHtml(cfg.sign?.fields?.kreisverband?.label || "Kreisverband")}: ${escapeHtml(pending.kreisverband)}`,
             pending.occupation &&
               `${escapeHtml(cfg.sign?.fields?.occupation?.label || "Beruf")}: ${escapeHtml(pending.occupation)}`,
-            `Name öffentlich anzeigen: ${pending.show_publicly ? "ja" : "nein"}`,
-            `Newsletter: ${pending.newsletter ? "ja" : "nein"}`,
+            `${copy.publicLabel}: ${yesNo(pending.show_publicly)}`,
+            `${copy.newsletterLabel}: ${yesNo(pending.newsletter)}`,
           ].filter(Boolean);
           return htmlPage(
-            `<h1>Unterschrift bestätigen</h1><p>Bitte prüfe deine Angaben und bestätige deine Unterschrift.</p><p>${rows.join("<br>")}</p><form method="post"><button type="submit">Unterschrift bestätigen</button></form><p>Stimmt etwas nicht? Dann bestätige nicht – nicht bestätigte Eintragungen löschen wir automatisch.</p>`,
+            heading(copy.heading) +
+              para(copy.intro) +
+              para(rows.join("<br>")) +
+              postButton(copy.button) +
+              para(copy.note),
           );
         } catch (err) {
           console.error("GET /api/confirm error:", err);
@@ -1787,8 +1814,12 @@ const server = Bun.serve({
       async GET(req) {
         const blocked = denyRate(req, "token-link", 120, 15 * 60 * 1000);
         if (blocked) return blocked;
+        const copy = pages.deleteData;
         return htmlPage(
-          `<h1>Daten löschen</h1><p>Mit dem Klick auf den Button löschen wir alle Daten, die wir zu deiner E-Mail-Adresse gespeichert haben – deine Unterschrift und deine Anmeldung zum Treffen, falls vorhanden. Das kann nicht rückgängig gemacht werden.</p><form method="post"><button type="submit">Endgültig löschen</button></form><p>Wenn du die Löschung nicht angefordert hast, schließe diese Seite einfach.</p>`,
+          heading(copy.heading) +
+            para(copy.text) +
+            postButton(copy.button) +
+            para(copy.note),
         );
       },
       async POST(req) {
@@ -2002,12 +2033,25 @@ const server = Bun.serve({
           const pending = await getZoomPendingByToken(req.params.token);
           if (!pending) return treffenLinkExpired();
           const zoomCfg = await getZoomConfig();
-          const delegate =
-            zoomCfg.showDelegierter && pending.delegierter
-              ? "<p>Du meldest dich als <strong>Delegierte*r</strong> an.</p>"
-              : "";
+          const copy = pages.treffenConfirm;
+          const details = [
+            `${copy.nameLabel}: ${escapeHtml(pending.name)}`,
+            pending.kreisverband &&
+              `${escapeHtml(cfg.sign?.fields?.kreisverband?.label || "Kreisverband")}: ${escapeHtml(pending.kreisverband)}`,
+          ].filter(Boolean);
           return htmlPage(
-            `<h1>Anmeldung bestätigen</h1><p>Hallo <strong>${firstNameHtml(pending.name)}</strong>, bitte bestätige deine Anmeldung zum Treffen${escapeHtml(zoomCfg.whenPhrase)}.</p><p>Name: ${escapeHtml(pending.name)}${pending.kreisverband ? `<br>Kreisverband: ${escapeHtml(pending.kreisverband)}` : ""}</p>${delegate}<form method="post"><button type="submit">Anmeldung bestätigen</button></form>`,
+            heading(copy.heading) +
+              para(
+                fill(copy.intro, {
+                  firstName: firstNameHtml(pending.name),
+                  when: escapeHtml(zoomCfg.whenPhrase),
+                }),
+              ) +
+              para(details.join("<br>")) +
+              (zoomCfg.showDelegierter && pending.delegierter
+                ? para(copy.delegate)
+                : "") +
+              postButton(copy.button),
           );
         } catch (err) {
           console.error("GET /api/treffen-bestaetigen error:", err);
@@ -2032,7 +2076,13 @@ const server = Bun.serve({
             console.error("[treffen-bestaetigen] confirmation email failed:", mailErr);
           }
           return htmlPage(
-            `<h1>Du bist dabei!</h1><p>Wir haben deine Anmeldung für das Treffen gespeichert, <strong>${firstNameHtml(reg.name)}</strong>.</p>${buildMeetingInfo(zoomCfg, { pending: true, timingText: "kurz" })}`,
+            heading(pages.treffenDone.heading) +
+              para(
+                fill(pages.treffenDone.text, {
+                  firstName: firstNameHtml(reg.name),
+                }),
+              ) +
+              buildMeetingInfo(zoomCfg, { pending: true, timingText: "kurz" }),
           );
         } catch (err) {
           console.error("POST /api/treffen-bestaetigen error:", err);

@@ -31,6 +31,7 @@ No application code changes are needed — content, branding, theme and feature 
 | `sign` | section heading, `criteria`, `privacyNote`, form copy, and `fields` (labels/placeholders for the two optional `kreisverband`/`occupation` columns) |
 | `footer` / `legal` | footer blurb + contact; Impressum/Datenschutz responsible entity, address, contact, disclaimer |
 | `email` | `from`, `signoff`, `provider` (`resend`/`smtp`) + `smtp` connection details, `providerRetentionDays` (how long the provider keeps sent mail; quoted in the privacy policy), `pacing` (rate-limit delays), and the `templates` map (seeded into the DB, admin-editable) |
+| `pages` | copy for the server-rendered pages behind mail links (confirm, delete, Treffen); defaults in `server/pages.js` |
 | `features` | `kreisverbandField`, `occupationField`, `germanyMap`, `stateResolution`, `zoomEvent` — toggle the optional modules |
 | `zoom` | event label/date/duration (only read when `features.zoomEvent`) |
 

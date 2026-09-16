@@ -209,6 +209,36 @@ export default {
     },
   },
 
+  // Server-rendered pages behind mail links (defaults: server/pages.js).
+  pages: {
+    title: "{siteName}",
+    error: {
+      heading: "Error",
+      text: "Something went wrong. Please try again later.",
+    },
+    expired: {
+      heading: "Link expired",
+      text: "This link is no longer valid. You can start again on {home}.",
+    },
+    confirmSignature: {
+      heading: "Confirm your signature",
+      intro: "Please check your details and confirm your signature.",
+      nameLabel: "Name",
+      publicLabel: "Show my name publicly",
+      newsletterLabel: "Updates by email",
+      yes: "yes",
+      no: "no",
+      button: "Confirm signature",
+      note: "Something wrong? Then don't confirm — unconfirmed entries are deleted automatically.",
+    },
+    deleteData: {
+      heading: "Delete your data",
+      text: "Pressing the button deletes everything we store for your email address, including your signature. This cannot be undone.",
+      button: "Delete permanently",
+      note: "If you didn't request this, just close this page.",
+    },
+  },
+
   features: {
     kreisverbandField: false,
     occupationField: false,
