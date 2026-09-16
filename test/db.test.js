@@ -132,6 +132,30 @@ describe("getSigners + fuzzy search", () => {
     expect(res.signers).toHaveLength(2);
   });
 
+  test("capital umlauts match on the substring path (SQLite lower() is ASCII-only)", async () => {
+    await addVerifiedSigner({ name: "Kerem Özdemir", kreisverband: "Berlin" });
+    await addVerifiedSigner({ name: "Ömer Öztürk", kreisverband: "Köln" });
+    await addVerifiedSigner({ name: "Anna Schmidt", kreisverband: "Hamburg" });
+    const res = await q.getSigners({ search: "özdemir" });
+    expect(res.total).toBe(1);
+    expect(res.signers[0].name).toBe("Kerem Özdemir");
+    // "öz" matches both Ö-names but not the wildcard-only superset hit.
+    const both = await q.getSigners({ search: "Öz" });
+    expect(both.signers.map((s) => s.name).sort()).toEqual(["Kerem Özdemir", "Ömer Öztürk"]);
+    // A single umlaut is exact (not a match-anything wildcard) and paged in SQL.
+    const one = await q.getSigners({ search: "ö", limit: 1 });
+    expect(one.total).toBe(2);
+    expect(one.signers).toHaveLength(1);
+  });
+
+  test("GLOB metacharacters in a non-ASCII query match literally", async () => {
+    await addVerifiedSigner({ name: "Jörg [Test]*?" });
+    await addVerifiedSigner({ name: "Jörg Tester" });
+    const res = await q.getSigners({ search: "jörg [test]*?" });
+    expect(res.total).toBe(1);
+    expect(res.signers[0].name).toBe("Jörg [Test]*?");
+  });
+
   test("LIKE wildcards in the query are treated as literal characters", async () => {
     await addVerifiedSigner({ name: "Anna Berger" });
     await addVerifiedSigner({ name: "100% Cotton" });

@@ -120,6 +120,24 @@ function parseIds(json) {
   }
 }
 
+// GLOB pattern matching `term` anywhere, case-insensitively for any letter
+// with a one-character upper/lower pair (ASCII and umlauts alike). GLOB's own
+// metacharacters are wrapped in a class so they match literally.
+function caselessGlob(term) {
+  let out = "*";
+  for (const ch of term) {
+    if (ch === "]") {
+      out += "[]]";
+      continue;
+    }
+    const variants = [...new Set([ch, ch.toLowerCase(), ch.toUpperCase()])].filter(
+      (c) => [...c].length === 1,
+    );
+    out += variants.length > 1 || "*?[".includes(ch) ? `[${variants.join("")}]` : ch;
+  }
+  return `${out}*`;
+}
+
 // ---- public signers list ---------------------------------------------------
 
 export async function getSigners(opts) {
@@ -166,11 +184,24 @@ async function querySigners({ filter, search, limit, offset, sort }) {
   // verified signer into JS and scored each one: at 100k signers that was ~100k
   // objects and a Levenshtein pass per search, which measured at seconds per
   // request and several hundred MB of RSS.
-  const like = `%${searchClean.replace(/[\\%_]/g, "\\$&")}%`;
-  const substrWhere = `${whereSql} AND (lower(s.name) LIKE ? ESCAPE '\\' OR lower(s.kreisverband) LIKE ? ESCAPE '\\')`;
+  //
+  // SQLite's lower()/LIKE only fold ASCII, so lower('Özdemir') stays 'Özdemir'
+  // and would never match the JS-lowercased 'özdemir'. A term with any
+  // non-ASCII character is matched with GLOB instead, spelling every letter as
+  // a [lower/upper] class (`*[öÖ][zZ]…*`): still exact and case-insensitive,
+  // and still counted and paged in SQL, so a one-letter "ö" typed into the
+  // search box can't pull the whole table into JS.
+  const nonAscii = /[^\x00-\x7f]/.test(searchClean);
+  const pattern = nonAscii
+    ? caselessGlob(searchClean)
+    : `%${searchClean.replace(/[\\%_]/g, "\\$&")}%`;
+  const substrWhere = nonAscii
+    ? `${whereSql} AND (s.name GLOB ? OR s.kreisverband GLOB ?)`
+    : `${whereSql} AND (lower(s.name) LIKE ? ESCAPE '\\' OR lower(s.kreisverband) LIKE ? ESCAPE '\\')`;
+
   const { total: substrTotal } = await db
     .query(`SELECT COUNT(*) AS total FROM signers s WHERE ${substrWhere}`)
-    .get(...params, like, like);
+    .get(...params, pattern, pattern);
 
   if (substrTotal > 0) {
     const signers = await db
@@ -179,7 +210,7 @@ async function querySigners({ filter, search, limit, offset, sort }) {
          FROM signers s WHERE ${substrWhere}
          ORDER BY s.created_at ${sortDir} LIMIT ? OFFSET ?`,
       )
-      .all(...params, like, like, limit, offset);
+      .all(...params, pattern, pattern, limit, offset);
     return { signers, total: substrTotal };
   }
 
