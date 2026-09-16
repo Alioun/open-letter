@@ -116,4 +116,4 @@ for n in $DATASETS; do
 done
 
 dc stop app mailpit >/dev/null
-echo "results in loadtest/$RAW — summarize with: bun loadtest/summarize.js loadtest/$OUT"
+echo "results in loadtest/$RAW — summarize with: ${HOLD:+HOLD=$HOLD }bun loadtest/summarize.js loadtest/$OUT"

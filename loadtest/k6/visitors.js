@@ -8,6 +8,7 @@
 //
 // Env: TABS="50,200,500,1000,2000,4000" HOLD=60 RAMP=10
 import { pageLoad, poll, search, signup } from "./actions.js";
+import exec from "k6/execution";
 import { ipFor, staircase, stepLabel, stepThresholds } from "./lib.js";
 
 const TABS = (__ENV.TABS || "50,200,500,1000,2000,4000").split(",").map(Number);
@@ -65,11 +66,21 @@ export const options = {
   },
 };
 
+// Tab count the load is at or heading to. During a ramp the step label is
+// "ramp", so use the hold it ramps into — otherwise a ramp to 8,000 tabs would
+// squeeze its traffic onto the first step's handful of IPs and trip the per-IP
+// rate limits, measuring 429s instead of the server.
+function targetTabs() {
+  const t = exec.instance.currentTestRunDuration / 1000;
+  for (const s of steps) if (s.label !== "ramp" && t < s.until) return Number(s.label);
+  return TABS[TABS.length - 1];
+}
+
 export function tabs() {
   const step = stepLabel(steps);
   const tags = { step };
   // Spread ticks over as many client IPs as there are simulated tabs.
-  const pool = Math.max(1, Number(step) || TABS[0]);
+  const pool = Math.max(1, targetTabs());
   const ip = ipFor(1 + Math.floor(Math.random() * pool));
   if (Math.random() < LOAD_SHARE) pageLoad(ip, tags);
   else poll(ip, tags);

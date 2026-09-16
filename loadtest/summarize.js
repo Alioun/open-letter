@@ -10,9 +10,12 @@ import { join } from "path";
 const dir = process.argv[2] || "loadtest/results/" + new Date().toISOString().slice(0, 10);
 const raw = join(dir, "raw");
 const P95_OK = { visitors: 500, mixed: 500, signup: 1000 };
-// Seconds each step is held — the k6 scripts' defaults, used to derive per-step
-// request rates (k6's own `rate` is averaged over the whole run).
-const HOLD = { visitors: 60, mixed: 60, signup: 40 };
+// Seconds each step is held, used to derive per-step request rates (k6's own
+// `rate` is averaged over the whole run). Defaults match the k6 scripts; pass
+// the same HOLD you ran with (HOLD=45 bun loadtest/summarize.js …) to override.
+const HOLD = process.env.HOLD
+  ? { visitors: +process.env.HOLD, mixed: +process.env.HOLD, signup: +process.env.HOLD }
+  : { visitors: 60, mixed: 60, signup: 40 };
 
 const num = (s) => parseFloat(String(s).replace(/[^\d.]/g, "")) || 0;
 const parseName = (f) => {
