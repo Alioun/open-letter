@@ -14,6 +14,7 @@ const APP_TABLES = [
   "kv_state_cache",
   "kv_not_typo",
   "occupation_not_typo",
+  "mailing_deliveries",
 ];
 
 // Honker tables exist only after initJobs() has run.

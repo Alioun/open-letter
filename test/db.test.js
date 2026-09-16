@@ -298,6 +298,74 @@ describe("campaigns", () => {
     expect(ids).toHaveLength(1);
   });
 
+  const minutesAgo = (m) => new Date(Date.now() - m * 60_000).toISOString();
+
+  test("a 'sending' campaign is reclaimable only once its heartbeat is stale", async () => {
+    const t = await addTemplate();
+    const c = await q.createCampaign({ templateId: t.id, subject: "s", scheduledAt: past() });
+    expect((await q.claimCampaignById(c.id))?.attempts).toBe(1);
+    // Live sender: heartbeat fresh -> not claimable, not due.
+    expect(await q.claimCampaignById(c.id)).toBeNull();
+    expect(await q.getDueCampaignIds()).not.toContain(c.id);
+
+    // Process died mid-send: heartbeat stale -> due and claimable again.
+    await db.query("UPDATE campaigns SET heartbeat_at = ? WHERE id = ?").run(minutesAgo(11), c.id);
+    expect(await q.getDueCampaignIds()).toContain(c.id);
+    expect((await q.claimCampaignById(c.id))?.attempts).toBe(2);
+  });
+
+  test("failed campaigns back off between attempts and abort at the cap", async () => {
+    const t = await addTemplate();
+    const c = await q.createCampaign({ templateId: t.id, subject: "s", scheduledAt: past() });
+    await q.claimCampaignById(c.id);
+    await q.markCampaignFailed(c.id);
+    // Within the 1-minute backoff after the first failure.
+    expect(await q.getDueCampaignIds()).not.toContain(c.id);
+    await db.query("UPDATE campaigns SET heartbeat_at = ? WHERE id = ?").run(minutesAgo(2), c.id);
+    expect(await q.getDueCampaignIds()).toContain(c.id);
+
+    await db.query("UPDATE campaigns SET attempts = ? WHERE id = ?").run(q.MAX_MAILING_ATTEMPTS, c.id);
+    await q.markCampaignFailed(c.id);
+    let row = await db.query("SELECT status FROM campaigns WHERE id = ?").get(c.id);
+    expect(row.status).toBe("aborted");
+    await db.query("UPDATE campaigns SET heartbeat_at = ? WHERE id = ?").run(minutesAgo(600), c.id);
+    expect(await q.getDueCampaignIds()).not.toContain(c.id);
+
+    expect(await q.retryAbortedCampaign(c.id)).toBe(true);
+    row = await db.query("SELECT status, attempts FROM campaigns WHERE id = ?").get(c.id);
+    expect(row).toEqual({ status: "failed", attempts: 0 });
+    expect(await q.getDueCampaignIds()).toContain(c.id);
+  });
+
+  test("the delivery log is erased with the address and aged out once a campaign is done", async () => {
+    const t = await addTemplate();
+    const done = await q.createCampaign({ templateId: t.id, subject: "d", scheduledAt: past() });
+    const open = await q.createCampaign({ templateId: t.id, subject: "o", scheduledAt: past() });
+    await q.markCampaignSent(done.id, 1);
+    await q.claimCampaignById(open.id);
+    await q.markCampaignFailed(open.id);
+    await q.markDelivered(`campaign:${done.id}`, ["x@x.org"]);
+    await q.markDelivered(`campaign:${open.id}`, ["x@x.org"]);
+    await db
+      .query("UPDATE mailing_deliveries SET sent_at = ?")
+      .run(new Date(Date.now() - 31 * 86400_000).toISOString());
+    expect(await q.deleteOldDeliveries()).toBe(1); // the finished campaign's row
+    expect(await q.countDelivered(`campaign:${open.id}`)).toBe(1);
+
+    const s = await addVerifiedSigner();
+    await q.markDelivered(`campaign:${open.id}`, [s.email]);
+    await q.eraseEmail(s.email);
+    expect(await q.getDeliveredEmails(`campaign:${open.id}`)).not.toContain(s.email);
+  });
+
+  test("the delivery log records each address once per mailing", async () => {
+    await q.markDelivered("campaign:1", ["a@x.org", "b@x.org"]);
+    await q.markDelivered("campaign:1", ["b@x.org"]); // retry reports it again
+    await q.markDelivered("campaign:2", ["a@x.org"]);
+    expect(await q.countDelivered("campaign:1")).toBe(2);
+    expect([...(await q.getDeliveredEmails("campaign:1"))].sort()).toEqual(["a@x.org", "b@x.org"]);
+  });
+
   test("getNewsletterRecipientsByIds (ANY->IN) returns picked verified subscribers", async () => {
     const a = await addVerifiedSigner({ newsletter: 1 });
     const b = await addVerifiedSigner({ newsletter: 1 });
@@ -330,6 +398,19 @@ describe("zoom", () => {
     expect(m.status).toBe("sent");
     expect(m.recipient_count).toBe(5);
     expect(m.sent_at).toBeTruthy();
+  });
+
+  test("a zoom mailing stuck in 'sending' is reclaimed; event reset clears its log", async () => {
+    expect(await q.claimZoomMailing("reminder")).toBe(true);
+    await q.markDelivered("zoom-reminder", ["a@x.org"]);
+    expect(await q.claimZoomMailing("reminder")).toBe(false);
+    await db
+      .query("UPDATE zoom_event_mailings SET updated_at = ? WHERE kind = 'reminder'")
+      .run(new Date(Date.now() - 11 * 60_000).toISOString());
+    expect(await q.claimZoomMailing("reminder")).toBe(true);
+
+    await q.resetZoomMailings();
+    expect(await q.countDelivered("zoom-reminder")).toBe(0);
   });
 });
 

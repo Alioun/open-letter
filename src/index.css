@@ -3124,7 +3124,8 @@ footer {
   color: var(--weiss);
 }
 
-.status-failed {
+.status-failed,
+.status-aborted {
   background: var(--fehler);
   border-color: var(--fehler);
   color: var(--weiss);

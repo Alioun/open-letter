@@ -114,6 +114,11 @@ CREATE TABLE IF NOT EXISTS campaigns (
   sent_offset     INTEGER NOT NULL DEFAULT 0,
   -- Hand-picked recipient list for audience = 'selection'; JSON array or NULL.
   recipient_ids   TEXT,
+  -- Sending attempts so far; past the cap the campaign is 'aborted'.
+  attempts        INTEGER NOT NULL DEFAULT 0,
+  -- Refreshed while a send runs. A 'sending' row whose heartbeat went stale
+  -- (the process died mid-send) may be claimed again.
+  heartbeat_at    TEXT,
   created_at      TEXT DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ','now'))
 );
 
@@ -177,7 +182,19 @@ CREATE TABLE IF NOT EXISTS zoom_event_mailings (
   status          TEXT NOT NULL DEFAULT 'sending',
   recipient_count INTEGER,
   sent_at         TEXT,
+  -- updated_at doubles as the heartbeat of a running send (see campaigns).
+  attempts        INTEGER NOT NULL DEFAULT 0,
   updated_at      TEXT DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ','now'))
+);
+
+-- Who has already received a mailing ('campaign:<id>', 'zoom-link',
+-- 'zoom-reminder'). A resumed send skips exactly these addresses, so an
+-- interrupted or partly failed mailing neither skips nor repeats anyone.
+CREATE TABLE IF NOT EXISTS mailing_deliveries (
+  mailing   TEXT NOT NULL,
+  email     TEXT NOT NULL,
+  sent_at   TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ','now')),
+  PRIMARY KEY (mailing, email)
 );
 
 CREATE TABLE IF NOT EXISTS app_settings (

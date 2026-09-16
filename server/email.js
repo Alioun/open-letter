@@ -277,13 +277,20 @@ async function sendViaSmtp({ to, subject, html, headers, attachments }) {
   return info.messageId || "";
 }
 
-export async function sendBatchEmails(emails, idempotencyKey = null) {
+// `onDelivered(emails)` is awaited with the messages known to have gone out, as
+// soon as that is known: the whole chunk for Resend, each message for SMTP. The
+// caller records them in its delivery log, so a retry never re-sends them.
+export async function sendBatchEmails(
+  emails,
+  idempotencyKey = null,
+  { onDelivered = async () => {} } = {},
+) {
   return provider === "smtp"
-    ? sendBatchViaSmtp(emails, idempotencyKey)
-    : sendBatchViaResend(emails, idempotencyKey);
+    ? sendBatchViaSmtp(emails, idempotencyKey, onDelivered)
+    : sendBatchViaResend(emails, idempotencyKey, onDelivered);
 }
 
-async function sendBatchViaResend(emails, idempotencyKey = null) {
+async function sendBatchViaResend(emails, idempotencyKey, onDelivered) {
   if (!resendApiKey) {
     throw new Error("RESEND_API_KEY is required to send email");
   }
@@ -323,10 +330,30 @@ async function sendBatchViaResend(emails, idempotencyKey = null) {
       console.log(
         `[email] batch sent ${emails.length} emails via=${transportSummary} ids=${ids}`,
       );
+      await onDelivered(emails);
       return result;
     }
 
-    const retryable = response.status === 429 || response.status >= 500;
+    // Callers derive the key from the chunk's recipients, so a key Resend has
+    // already processed (with a body that differs, e.g. a fresh token) means
+    // this exact set of recipients was sent to before — typically a lost
+    // response. Record it as delivered rather than failing every retry.
+    if (
+      response.status === 409 &&
+      result?.name === "invalid_idempotent_request"
+    ) {
+      console.log(
+        `[email] batch key=${idempotencyKey} already processed by Resend — treating ${emails.length} emails as delivered`,
+      );
+      await onDelivered(emails);
+      return result;
+    }
+
+    const retryable =
+      response.status === 429 ||
+      response.status >= 500 ||
+      // Another request with this key is still in flight — safe to retry.
+      result?.name === "concurrent_idempotent_requests";
     if (retryable && attempt < maxRetries) {
       const delay = Math.pow(2, attempt) * 1000;
       console.log(
@@ -342,8 +369,11 @@ async function sendBatchViaResend(emails, idempotencyKey = null) {
 }
 
 // SMTP has no batch endpoint — send each message individually. The
-// idempotencyKey is logged for traceability but has no SMTP equivalent.
-async function sendBatchViaSmtp(emails, idempotencyKey = null) {
+// idempotencyKey is logged for traceability but has no SMTP equivalent. Each
+// accepted message is reported via onDelivered right away, and one rejected
+// address doesn't stop the rest of the chunk; the chunk throws at the end if
+// any failed, so the mailing is retried for exactly those.
+async function sendBatchViaSmtp(emails, idempotencyKey, onDelivered) {
   console.log(
     `[email] batch sending ${emails.length} emails via=${transportSummary}${
       idempotencyKey ? ` key=${idempotencyKey}` : ""
@@ -351,14 +381,25 @@ async function sendBatchViaSmtp(emails, idempotencyKey = null) {
   );
 
   const ids = [];
+  const failures = [];
   for (const e of emails) {
-    const messageId = await sendViaSmtp(e);
-    ids.push(messageId);
+    try {
+      ids.push(await sendViaSmtp(e));
+    } catch (err) {
+      failures.push(err);
+      continue;
+    }
+    await onDelivered([e]);
   }
 
   console.log(
-    `[email] batch sent ${emails.length} emails via=${transportSummary} ids=${ids.join(", ")}`,
+    `[email] batch sent ${ids.length}/${emails.length} emails via=${transportSummary} ids=${ids.join(", ")}`,
   );
+  if (failures.length) {
+    throw new Error(
+      `SMTP batch: ${failures.length}/${emails.length} failed — first: ${failures[0].message}`,
+    );
+  }
   return { data: ids.map((id) => ({ id })) };
 }
 

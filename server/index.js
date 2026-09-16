@@ -1,4 +1,4 @@
-import { timingSafeEqual } from "node:crypto";
+import { timingSafeEqual, createHash } from "node:crypto";
 import { Buffer } from "node:buffer";
 import { readFileSync, writeFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
@@ -65,7 +65,13 @@ import {
   getDueCampaignIds,
   markCampaignSent,
   markCampaignFailed,
-  incrementCampaignOffset,
+  setCampaignProgress,
+  retryAbortedCampaign,
+  getDeliveredEmails,
+  markDelivered,
+  countDelivered,
+  deleteOldDeliveries,
+  touchZoomMailing,
   getNewsletterRecipients,
   getNewsletterNotZoomRecipients,
   getNewsletterRecipientsByIds,
@@ -744,13 +750,24 @@ function buildZoomEventIcs(zc, { includeLink = false } = {}) {
   });
 }
 
+// Idempotency key for one chunk of a mailing: derived from the chunk's
+// recipients, so a retry of the same recipients reuses it and Resend won't send
+// twice, while a chunk made of different recipients never collides with it.
+function chunkKey(prefix, emails) {
+  const digest = createHash("sha256")
+    .update([...emails].sort().join("\n"))
+    .digest("hex")
+    .slice(0, 32);
+  return `${prefix}/${digest}`;
+}
+
 async function sendCampaign(campaign) {
   const template = await getEmailTemplate(campaign.template_id);
   if (!template) {
     console.error(
       `[campaign] ${campaign.id} template ${campaign.template_id} not found — aborting`,
     );
-    await markCampaignFailed(campaign.id, 0);
+    await markCampaignFailed(campaign.id);
     return;
   }
 
@@ -771,21 +788,31 @@ async function sendCampaign(campaign) {
   const zoomCfg = await getZoomConfig();
   const zoomLinkInfo = zoomCfg ? buildMeetingInfo(zoomCfg) : "";
 
-  // Resume from where a previous run left off (0 for fresh start).
-  const resumeOffset = campaign.sent_offset ?? 0;
-  const todo = recipients.slice(resumeOffset);
-  let sent = 0;
+  // Resume by who was reached, not by list position: the audience is
+  // re-queried on every attempt, and opt-outs or late confirmations in between
+  // would shift positions.
+  const mailing = `campaign:${campaign.id}`;
+  const delivered = await getDeliveredEmails(mailing);
+  const todo = recipients.filter((r) => !delivered.has(r.email));
+  const onDelivered = async (emails) => {
+    await markDelivered(
+      mailing,
+      emails.map((e) => e.to),
+    );
+  };
 
   console.log(
-    `[campaign] ${campaign.id} starting — ${recipients.length} total, resuming from offset=${resumeOffset}, remaining=${todo.length}, audience=${audience}`,
+    `[campaign] ${campaign.id} starting (attempt ${campaign.attempts}) — ${recipients.length} in audience, ${delivered.size} already reached, remaining=${todo.length}, audience=${audience}`,
   );
 
+  // A failing chunk doesn't stop the run: later chunks still go out (a bad
+  // address at the front must not starve everyone behind it), and the run ends
+  // 'failed' so the next attempt retries exactly the recipients not reached.
+  let failures = 0;
   for (let i = 0; i < todo.length; i += 100) {
     const batch = todo.slice(i, i + 100);
-    const chunkIndex = Math.floor((resumeOffset + i) / 100);
 
     const payloads = [];
-    const skipped = [];
     for (const recipient of batch) {
       try {
         const firstName = recipient.name.split(/\s/)[0];
@@ -826,48 +853,52 @@ async function sendCampaign(campaign) {
           headers: buildUnsubscribeHeaders(optOutUrl),
         });
       } catch (prepErr) {
+        // Not logged as delivered, so the next attempt tries this recipient
+        // again; the attempt cap bounds a recipient that can never render.
+        failures++;
         console.error(
           `[campaign] ${campaign.id} skipping recipient ${recipient.id} (prep failed):`,
           prepErr,
         );
-        skipped.push(recipient.id);
       }
     }
 
-    if (payloads.length === 0) {
-      // All skipped — advance offset and continue.
-      await incrementCampaignOffset(campaign.id, batch.length);
-      sent += batch.length;
-      continue;
+    if (payloads.length > 0) {
+      try {
+        await sendBatchEmails(
+          payloads,
+          chunkKey(
+            `campaign-${campaign.id}`,
+            payloads.map((p) => p.to),
+          ),
+          { onDelivered },
+        );
+      } catch (sendErr) {
+        failures++;
+        console.error(`[campaign] ${campaign.id} batch send failed:`, sendErr);
+      }
     }
 
-    try {
-      await sendBatchEmails(
-        payloads,
-        `campaign-${campaign.id}/chunk-${chunkIndex}`,
-      );
-      sent += batch.length;
-      await incrementCampaignOffset(campaign.id, batch.length);
-      console.log(
-        `[campaign] ${campaign.id} progress — ${resumeOffset + sent}/${recipients.length} sent${skipped.length ? `, ${skipped.length} skipped` : ""}`,
-      );
-    } catch (sendErr) {
-      console.error(
-        `[campaign] ${campaign.id} batch send failed at chunk ${chunkIndex}:`,
-        sendErr,
-      );
-      // Persist how many we've sent so far, then mark failed for retry.
-      await markCampaignFailed(campaign.id);
-      return;
-    }
+    const reached = await countDelivered(mailing);
+    await setCampaignProgress(campaign.id, reached);
+    console.log(
+      `[campaign] ${campaign.id} progress — ${reached} reached, ${todo.length - i - batch.length} remaining`,
+    );
 
     if (i + 100 < todo.length) await sleep(batchDelayMs);
   }
 
-  console.log(
-    `[campaign] ${campaign.id} done — ${resumeOffset + sent}/${recipients.length} sent`,
-  );
-  await markCampaignSent(campaign.id, resumeOffset + sent);
+  const reached = await countDelivered(mailing);
+  if (failures > 0) {
+    console.error(
+      `[campaign] ${campaign.id} attempt ${campaign.attempts} finished with ${failures} failure(s) — ${reached} reached, will retry the rest`,
+    );
+    await setCampaignProgress(campaign.id, reached);
+    await markCampaignFailed(campaign.id);
+    return;
+  }
+  console.log(`[campaign] ${campaign.id} done — ${reached} reached`);
+  await markCampaignSent(campaign.id, reached);
 }
 
 // Campaign sending is driven by Honker durable jobs (see the boot section).
@@ -940,6 +971,8 @@ async function sendZoomSignupEmail({ regId, name, email, cfg }) {
       cfg,
     );
     await sendRenderedEmail(payload);
+    // So a resumed run of that mailing doesn't send it to them again.
+    await markDelivered(`zoom-${kind}`, [email]);
   } else {
     const unsubToken = await issueZoomUnsubscribeToken(regId);
     await sendZoomConfirmationEmail({
@@ -959,51 +992,83 @@ async function sendZoomSignupEmail({ regId, name, email, cfg }) {
   }
 }
 
+// Both Zoom mailings skip addresses already in the delivery log, so a run that
+// was interrupted or partly failed resumes with exactly the people not yet
+// reached. They throw when anyone was missed, which marks the mailing 'failed'
+// for a retry (up to MAX_MAILING_ATTEMPTS).
 async function sendZoomLinkMails(cfg) {
+  const mailing = "zoom-link";
   const recipients = await getZoomRecipients();
-  let sent = 0;
+  const delivered = await getDeliveredEmails(mailing);
+  const todo = recipients.filter((r) => !delivered.has(r.email));
+  let failed = 0;
   console.log(
-    `[zoom-mail] link mailing starting — ${recipients.length} recipients`,
+    `[zoom-mail] link mailing starting — ${recipients.length} recipients, ${delivered.size} already reached`,
   );
-  for (const recipient of recipients) {
+  for (const recipient of todo) {
     try {
       const token = await issueZoomUnsubscribeToken(recipient.id);
       const payload = await buildZoomMailPayload("link", recipient, token, cfg);
       await sendRenderedEmail(payload);
-      sent++;
+      await markDelivered(mailing, [recipient.email]);
     } catch (err) {
+      failed++;
       console.error(`[zoom-mail] link send failed for one recipient:`, err);
     }
+    await touchZoomMailing("link");
     await sleep(messageDelayMs); // pace sends to respect provider rate limits
   }
+  const reached = await countDelivered(mailing);
   console.log(
-    `[zoom-mail] link mailing done — ${sent}/${recipients.length} sent`,
+    `[zoom-mail] link mailing done — ${reached}/${recipients.length} reached`,
   );
-  return sent;
+  if (failed > 0) throw new Error(`${failed} link mail(s) failed`);
+  return reached;
 }
 
 async function sendZoomReminderMails(cfg) {
+  const mailing = "zoom-reminder";
   const recipients = await getZoomRecipients();
-  let sent = 0;
+  const delivered = await getDeliveredEmails(mailing);
+  const todo = recipients.filter((r) => !delivered.has(r.email));
+  const onDelivered = (emails) =>
+    markDelivered(
+      mailing,
+      emails.map((e) => e.to),
+    );
+  let failed = 0;
   console.log(
-    `[zoom-mail] reminder starting — ${recipients.length} recipients`,
+    `[zoom-mail] reminder starting — ${recipients.length} recipients, ${delivered.size} already reached`,
   );
-  for (let i = 0; i < recipients.length; i += 100) {
-    const batch = recipients.slice(i, i + 100);
-    const chunkIndex = Math.floor(i / 100);
-    const payloads = [];
-    for (const recipient of batch) {
-      const token = await issueZoomUnsubscribeToken(recipient.id);
-      payloads.push(
-        await buildZoomMailPayload("reminder", recipient, token, cfg),
+  for (let i = 0; i < todo.length; i += 100) {
+    const batch = todo.slice(i, i + 100);
+    try {
+      const payloads = [];
+      for (const recipient of batch) {
+        const token = await issueZoomUnsubscribeToken(recipient.id);
+        payloads.push(
+          await buildZoomMailPayload("reminder", recipient, token, cfg),
+        );
+      }
+      await sendBatchEmails(
+        payloads,
+        chunkKey(
+          "zoom-reminder",
+          payloads.map((p) => p.to),
+        ),
+        { onDelivered },
       );
+    } catch (err) {
+      failed++;
+      console.error("[zoom-mail] reminder chunk failed:", err);
     }
-    await sendBatchEmails(payloads, `zoom-reminder/chunk-${chunkIndex}`);
-    sent += payloads.length;
-    if (i + 100 < recipients.length) await sleep(batchDelayMs);
+    await touchZoomMailing("reminder");
+    if (i + 100 < todo.length) await sleep(batchDelayMs);
   }
-  console.log(`[zoom-mail] reminder done — ${sent}/${recipients.length} sent`);
-  return sent;
+  const reached = await countDelivered(mailing);
+  console.log(`[zoom-mail] reminder done — ${reached}/${recipients.length} reached`);
+  if (failed > 0) throw new Error(`${failed} reminder chunk(s) failed`);
+  return reached;
 }
 
 // Copy for the server-rendered link pages (letter config `pages`).
@@ -2363,6 +2428,18 @@ const server = Bun.serve({
       },
     },
 
+    // An aborted campaign gets a fresh set of attempts; recipients already
+    // reached stay in the delivery log and aren't mailed again.
+    "/api/admin/campaigns/:id/retry": {
+      async POST(req) {
+        return adminJson(req, async () => {
+          const ok = await retryAbortedCampaign(parseInt(req.params.id, 10));
+          if (!ok) return json({ error: "Campaign is not aborted" }, 400);
+          return json({ ok: true });
+        });
+      },
+    },
+
     "/api/admin/newsletter-signers": {
       async GET(req) {
         return adminJson(req, async () => {
@@ -2968,6 +3045,7 @@ async function handleMaintenanceJob({ task }) {
       console.log(`[purge] deleted ${removed} expired unverified sign-up(s)`);
     }
     await deleteExpiredDeletionRequests();
+    await deleteOldDeliveries();
     await deleteExpiredZoomPending();
     await purgeOldErasureLog(new Date(Date.now() - privacy.erasureLogMs));
   } else if (task === "purge-dead-emails") {

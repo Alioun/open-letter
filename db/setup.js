@@ -7,6 +7,13 @@ import cfg from "../config/letter.config.js";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 
+// [table, column, declaration] — keep in sync with db/schema.sql.
+const ADDED_COLUMNS = [
+  ["campaigns", "attempts", "INTEGER NOT NULL DEFAULT 0"],
+  ["campaigns", "heartbeat_at", "TEXT"],
+  ["zoom_event_mailings", "attempts", "INTEGER NOT NULL DEFAULT 0"],
+];
+
 // Default transactional templates seeded from the active letter config. Existing
 // rows are left untouched (ON CONFLICT DO NOTHING), so admin edits are preserved.
 const templates = Object.entries(cfg.email.templates).map(([slug, t]) => ({
@@ -20,6 +27,14 @@ const templates = Object.entries(cfg.email.templates).map(([slug, t]) => ({
 try {
   const schema = readFileSync(join(__dirname, "schema.sql"), "utf-8");
   await db.run(schema);
+  // CREATE TABLE IF NOT EXISTS leaves existing tables as they are, so columns
+  // added to schema.sql later are added here for databases created before.
+  for (const [table, column, decl] of ADDED_COLUMNS) {
+    const cols = await db.query(`PRAGMA table_info(${table})`).all();
+    if (!cols.some((c) => c.name === column)) {
+      await db.run(`ALTER TABLE ${table} ADD COLUMN ${column} ${decl}`);
+    }
+  }
   const insert = db.query(
     `INSERT INTO email_templates (slug, name, subject, html_body)
      VALUES (?, ?, ?, ?) ON CONFLICT (slug) DO NOTHING`,

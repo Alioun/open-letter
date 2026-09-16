@@ -566,6 +566,9 @@ export async function eraseEmail(email) {
   const pending = await db
     .query(`DELETE FROM zoom_pending /* public-neutral */ WHERE email = ? RETURNING id`)
     .get(email);
+  await db
+    .query(`DELETE FROM mailing_deliveries /* public-neutral */ WHERE email = ?`)
+    .run(email);
   if (pending) await deleteJobsByPayload("emails", "pendingId", pending.id);
   if (signer) await deleteEmailJobsForSigner(signer.id);
   if (request) await deleteJobsByPayload("emails", "requestId", request.id);
@@ -922,30 +925,124 @@ export async function getZoomRegistrationByEmail(email) {
   return boolify(row || null, ["delegierter"]);
 }
 
-// Race-safe claim: returns true only if newly inserted or previously failed.
-export async function claimZoomMailing(kind) {
-  const row = await db
+// ---- mailing recovery ------------------------------------------------------
+// A running send refreshes its heartbeat after every message or chunk. If the
+// process dies mid-send the row stays 'sending'; once the heartbeat is older
+// than MAILING_LEASE_MS it may be claimed again, and the delivery log
+// (mailing_deliveries) makes the resumed send skip everyone already reached.
+// Each claim counts as an attempt; a failure at MAX_MAILING_ATTEMPTS marks the
+// mailing 'aborted' instead of 'failed', so a permanent error stops retrying.
+export const MAILING_LEASE_MS = 10 * 60 * 1000;
+export const MAX_MAILING_ATTEMPTS = 5;
+// Wait after the Nth failed attempt before retrying, so a provider outage of a
+// few minutes doesn't use up every attempt (~81 min from first failure to abort).
+const RETRY_BACKOFF_MS = [60_000, 5 * 60_000, 15 * 60_000, 60 * 60_000];
+
+// SQL condition (plus its params) for "this mailing row may be claimed now":
+// failed and past its backoff, or 'sending' with a stale heartbeat. `ts` is the
+// row's heartbeat column. Rows from before the heartbeat existed (NULL) count
+// as stale.
+function retryableMailing(ts) {
+  return {
+    sql: `((status = 'failed' AND (${ts} IS NULL OR ${ts} < CASE attempts
+             WHEN 0 THEN ? WHEN 1 THEN ? WHEN 2 THEN ? WHEN 3 THEN ? ELSE ? END))
+          OR (status = 'sending' AND (${ts} IS NULL OR ${ts} < ?)))`,
+    params: [
+      nowIso(),
+      ...RETRY_BACKOFF_MS.map((ms) => isoAgo(ms)),
+      isoAgo(MAILING_LEASE_MS),
+    ],
+  };
+}
+
+export async function getDeliveredEmails(mailing) {
+  const rows = await db
+    .query(`SELECT email FROM mailing_deliveries WHERE mailing = ?`)
+    .all(mailing);
+  return new Set(rows.map((r) => r.email));
+}
+
+export async function markDelivered(mailing, emails) {
+  if (!emails.length) return;
+  const placeholders = emails.map(() => "(?, ?, ?)").join(", ");
+  const now = nowIso();
+  await db
     .query(
-      `INSERT INTO zoom_event_mailings (kind, status, updated_at)
-       VALUES (?, 'sending', ?)
-       ON CONFLICT (kind) DO UPDATE
-         SET status = 'sending', updated_at = ?
-         WHERE zoom_event_mailings.status = 'failed'
+      `INSERT INTO mailing_deliveries /* public-neutral */ (mailing, email, sent_at)
+       VALUES ${placeholders} ON CONFLICT (mailing, email) DO NOTHING`,
+    )
+    .run(...emails.flatMap((e) => [mailing, e, now]));
+}
+
+// The delivery log holds addresses, so it's kept only as long as a resume can
+// need it: rows older than DELIVERY_LOG_DAYS go, except for campaigns that are
+// still unfinished (sending, failed, or aborted and awaiting an admin retry).
+const DELIVERY_LOG_DAYS = 30;
+
+export async function deleteOldDeliveries() {
+  const res = await db
+    .query(
+      `DELETE FROM mailing_deliveries /* public-neutral */
+       WHERE sent_at < ?
+         AND NOT EXISTS (
+           SELECT 1 FROM campaigns c
+           WHERE 'campaign:' || c.id = mailing_deliveries.mailing
+             AND c.status IN ('sending', 'failed', 'aborted'))`,
+    )
+    .run(isoAgo(DELIVERY_LOG_DAYS * DAY));
+  return res?.changes ?? 0;
+}
+
+export async function countDelivered(mailing) {
+  const row = await db
+    .query(`SELECT COUNT(*) AS n FROM mailing_deliveries WHERE mailing = ?`)
+    .get(mailing);
+  return row?.n ?? 0;
+}
+
+// Race-safe claim: true when newly inserted, previously failed, or 'sending'
+// with a stale heartbeat.
+export async function claimZoomMailing(kind) {
+  const now = nowIso();
+  const inserted = await db
+    .query(
+      `INSERT INTO zoom_event_mailings (kind, status, attempts, updated_at)
+       VALUES (?, 'sending', 1, ?)
+       ON CONFLICT (kind) DO NOTHING
        RETURNING kind`,
     )
-    .get(kind, nowIso(), nowIso());
+    .get(kind, now);
+  if (inserted) return true;
+  const retry = retryableMailing("updated_at");
+  const row = await db
+    .query(
+      `UPDATE zoom_event_mailings
+       SET status = 'sending', attempts = attempts + 1, updated_at = ?
+       WHERE kind = ? AND ${retry.sql}
+       RETURNING kind`,
+    )
+    .get(now, kind, ...retry.params);
   return Boolean(row);
+}
+
+export async function touchZoomMailing(kind) {
+  await db
+    .query(
+      `UPDATE zoom_event_mailings /* public-neutral */ SET updated_at = ? WHERE kind = ?`,
+    )
+    .run(nowIso(), kind);
 }
 
 export async function markZoomMailing(kind, status, count = null) {
   const setSent = status === "sent" ? "sent_at = ?, " : "";
-  const params = [status, count];
+  const params = [status, MAX_MAILING_ATTEMPTS, status, count];
   if (status === "sent") params.push(nowIso());
   params.push(nowIso(), kind);
   await db
     .query(
       `UPDATE zoom_event_mailings
-     SET status = ?, recipient_count = ?, ${setSent}updated_at = ?
+     SET status = CASE WHEN ? = 'failed' AND attempts >= ? THEN 'aborted' ELSE ? END,
+         recipient_count = ?, ${setSent}updated_at = ?
      WHERE kind = ?`,
     )
     .run(...params);
@@ -962,6 +1059,11 @@ export async function listZoomMailings() {
 
 export async function resetZoomMailings() {
   await db.query(`DELETE FROM zoom_event_mailings`).run();
+  await db
+    .query(
+      `DELETE FROM mailing_deliveries WHERE mailing IN ('zoom-link', 'zoom-reminder')`,
+    )
+    .run();
 }
 
 // Wipes all Zoom registrations and resets the mailing state, so the same Zoom
@@ -1147,7 +1249,7 @@ export async function listCampaigns() {
   return await db
     .query(
       `SELECT c.id, c.template_id, t.name AS template_name, c.subject, c.scheduled_at,
-              c.sent_at, c.status, c.recipient_count, c.sent_offset, c.audience,
+              c.sent_at, c.status, c.recipient_count, c.sent_offset, c.attempts, c.audience,
               COALESCE(json_array_length(c.recipient_ids), 0) AS selection_count, c.created_at
        FROM campaigns c
        LEFT JOIN email_templates t ON t.id = c.template_id
@@ -1200,29 +1302,24 @@ export async function cancelCampaign(id) {
   return Boolean(row);
 }
 
-export async function claimDueCampaigns() {
-  // SQLite is a single writer, so no FOR UPDATE SKIP LOCKED is needed.
-  const rows = await db
-    .query(
-      `UPDATE campaigns SET status = 'sending'
-       WHERE scheduled_at <= ? AND status IN ('scheduled', 'failed')
-       RETURNING id, template_id, subject, scheduled_at, audience, sent_offset, recipient_ids`,
-    )
-    .all(nowIso());
-  for (const r of rows) r.recipient_ids = parseIds(r.recipient_ids);
-  return rows;
+// Claimable: scheduled, failed past its backoff, or 'sending' whose heartbeat
+// went stale. Shared by the claim and the reconciler.
+function claimableCampaign() {
+  const retry = retryableMailing("heartbeat_at");
+  return { sql: `(status = 'scheduled' OR ${retry.sql})`, params: retry.params };
 }
 
 // Claim a single campaign for sending (used by the Honker job handler).
 // Returns the row (recipient_ids parsed) or null if it isn't due/claimable.
 export async function claimCampaignById(id) {
+  const claimable = claimableCampaign();
   const row = await db
     .query(
-      `UPDATE campaigns SET status = 'sending'
-       WHERE id = ? AND status IN ('scheduled', 'failed')
-       RETURNING id, template_id, subject, scheduled_at, audience, sent_offset, recipient_ids`,
+      `UPDATE campaigns SET status = 'sending', attempts = attempts + 1, heartbeat_at = ?
+       WHERE id = ? AND ${claimable.sql}
+       RETURNING id, template_id, subject, scheduled_at, audience, sent_offset, recipient_ids, attempts`,
     )
-    .get(id);
+    .get(nowIso(), id, ...claimable.params);
   if (!row) return null;
   row.recipient_ids = parseIds(row.recipient_ids);
   return row;
@@ -1230,39 +1327,55 @@ export async function claimCampaignById(id) {
 
 // Ids of campaigns whose send time has arrived (for the reconciler).
 export async function getDueCampaignIds() {
+  const claimable = claimableCampaign();
   const rows = await db
     .query(
-      `SELECT id FROM campaigns
-       WHERE scheduled_at <= ? AND status IN ('scheduled', 'failed')`,
+      `SELECT id FROM campaigns WHERE scheduled_at <= ? AND ${claimable.sql}`,
     )
-    .all(nowIso());
+    .all(nowIso(), ...claimable.params);
   return rows.map((r) => r.id);
+}
+
+// Progress + heartbeat of a running send. sent_offset is the number of
+// recipients reached so far (from the delivery log), not a list position.
+export async function setCampaignProgress(id, deliveredCount) {
+  await db
+    .query(
+      `UPDATE campaigns /* public-neutral */
+       SET sent_offset = ?, recipient_count = ?, heartbeat_at = ? WHERE id = ?`,
+    )
+    .run(deliveredCount, deliveredCount, nowIso(), id);
 }
 
 export async function markCampaignSent(id, recipientCount) {
   await db
     .query(
-      `UPDATE campaigns SET status = 'sent', sent_at = ?, recipient_count = ? WHERE id = ?`,
+      `UPDATE campaigns SET status = 'sent', sent_at = ?, recipient_count = ?, sent_offset = ? WHERE id = ?`,
     )
-    .run(nowIso(), recipientCount, id);
+    .run(nowIso(), recipientCount, recipientCount, id);
 }
 
-export async function markCampaignFailed(id, recipientCount = null) {
+export async function markCampaignFailed(id) {
   await db
     .query(
-      `UPDATE campaigns SET status = 'failed',
-       recipient_count = COALESCE(?, recipient_count) WHERE id = ?`,
+      `UPDATE campaigns
+       SET status = CASE WHEN attempts >= ? THEN 'aborted' ELSE 'failed' END,
+           heartbeat_at = ?
+       WHERE id = ?`,
     )
-    .run(recipientCount, id);
+    .run(MAX_MAILING_ATTEMPTS, nowIso(), id);
 }
 
-export async function incrementCampaignOffset(id, count) {
-  await db
+// Admin: give an aborted campaign a fresh set of attempts. Already-reached
+// recipients stay in the delivery log and are not mailed again.
+export async function retryAbortedCampaign(id) {
+  const row = await db
     .query(
-      `UPDATE campaigns /* public-neutral */ SET sent_offset = sent_offset + ?, recipient_count = sent_offset + ?
-     WHERE id = ?`,
+      `UPDATE campaigns SET status = 'failed', attempts = 0
+       WHERE id = ? AND status = 'aborted' RETURNING id`,
     )
-    .run(count, count, id);
+    .get(id);
+  return Boolean(row);
 }
 
 // ---- newsletter / zoom recipients ------------------------------------------

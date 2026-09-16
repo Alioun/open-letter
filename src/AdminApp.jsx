@@ -36,6 +36,8 @@ function zoomMailingStatus(mailings, kind) {
   }
   if (m.status === "sending") return "läuft …";
   if (m.status === "failed") return "fehlgeschlagen — wird erneut versucht";
+  if (m.status === "aborted")
+    return "abgebrochen nach wiederholten Fehlern — Server-Log prüfen";
   return m.status;
 }
 const GERMAN_STATES = [
@@ -861,6 +863,13 @@ export default function AdminApp() {
     if (res.ok) reloadCampaigns();
   }
 
+  async function retryCampaign(id) {
+    const res = await api(`/api/admin/campaigns/${id}/retry`, {
+      method: "POST",
+    });
+    if (res.ok) reloadCampaigns();
+  }
+
   function toggleSigner(id) {
     setSelectedSignerIds((prev) => {
       const next = new Set(prev);
@@ -1348,10 +1357,24 @@ export default function AdminApp() {
                     </small>
                   </div>
                   <StatusBadge status={campaign.status} />
-                  {campaign.status === "failed" && campaign.sent_offset > 0 && (
+                  {campaign.status === "failed" && (
                     <small style={{ color: "#b45309" }}>
-                      {campaign.sent_offset} gesendet — wird fortgesetzt
+                      {campaign.sent_offset} erreicht — wird fortgesetzt
                     </small>
+                  )}
+                  {campaign.status === "aborted" && (
+                    <>
+                      <small style={{ color: "#b45309" }}>
+                        {campaign.sent_offset} erreicht — nach{" "}
+                        {campaign.attempts} Versuchen abgebrochen
+                      </small>
+                      <button
+                        type="button"
+                        onClick={() => retryCampaign(campaign.id)}
+                      >
+                        Erneut versuchen
+                      </button>
+                    </>
                   )}
                   {campaign.status === "scheduled" && (
                     <button type="button" onClick={() => cancel(campaign.id)}>
