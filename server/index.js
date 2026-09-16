@@ -36,6 +36,7 @@ import {
   getZoomSettings,
   setZoomSettings,
   confirmSigner,
+  getPendingSignerByToken,
   refreshVerificationToken,
   getSignerIdByEmail,
   createDeletionRequest,
@@ -1005,6 +1006,102 @@ function treffenLinkError() {
   );
 }
 
+// One-click Treffen registration from a newsletter invite (token = the signer's
+// stable unsubscribe token, which proves the address). GET shows a button when
+// the link would register or change something; only the POST writes, so a mail
+// scanner opening the link can't register anyone.
+// ?delegiert=1 → delegate, ?delegiert=0 (or omitted) → non-delegate;
+// &force=1 → change an existing registration's delegate status.
+async function treffenAnmelden(req, { commit }) {
+  const blocked = denyRate(req, "token-link", 120, 15 * 60 * 1000);
+  if (blocked) return blocked;
+  const { token } = req.params;
+  const force = req.url.includes("force=1");
+  try {
+    const zoomCfg = await getZoomConfig();
+    // When the delegate field is off, ignore any ?delegiert=1 in the link so a
+    // stale email button can't register someone as a delegate.
+    const delegiert = zoomCfg.showDelegierter && req.url.includes("delegiert=1");
+    const signer = await getSignerForZoomInvite(token);
+    if (!signer) {
+      return htmlPage(
+        `<h1>Link abgelaufen</h1><p>Dieser Link ist leider nicht mehr gültig. Du kannst dich auf <a href="${BASE_URL}/#zoom">${escapeHtml(new URL(BASE_URL).host)}</a> direkt anmelden.</p>`,
+        410,
+      );
+    }
+
+    const existing = await getZoomRegistrationByEmail(signer.email);
+    const firstName = firstNameHtml(signer.name);
+
+    if (existing && !force) {
+      // The delegate status + toggle only make sense while the field is on;
+      // when off, show a neutral "registriert" line with no toggle.
+      const currentStatus = !zoomCfg.showDelegierter
+        ? ""
+        : existing.delegierter
+          ? " als <strong>Delegierte*r</strong>"
+          : " als einfache*r Teilnehmer*in";
+      let toggleBlock = "";
+      if (zoomCfg.showDelegierter) {
+        const toggleLabel = existing.delegierter
+          ? "Nicht als Delegierte*r anmelden"
+          : "Als Delegierte*r anmelden";
+        const toggleUrl = `${BASE_URL}/api/treffen-anmelden/${encodeURIComponent(token)}?delegiert=${existing.delegierter ? 0 : 1}&force=1`;
+        toggleBlock = `<p><a href="${toggleUrl}" style="color:#e8001c;">${toggleLabel}</a></p>`;
+      }
+      const unsubLink = existing.unsubscribe_token
+        ? `<p><a href="${BASE_URL}/abmelden/${encodeURIComponent(existing.unsubscribe_token)}?from=zoom">Abmelden</a></p>`
+        : "";
+      return htmlPage(
+        `<h1>Du bist bereits angemeldet</h1><p>Hallo <strong>${firstName}</strong>, du bist bereits${currentStatus} für das Treffen registriert.</p>${toggleBlock}${unsubLink}`,
+      );
+    }
+
+    if (!commit) {
+      const what = existing
+        ? delegiert
+          ? "deine Anmeldung auf <strong>Delegierte*r</strong> ändern"
+          : "deine Anmeldung auf <strong>einfache*r Teilnehmer*in</strong> ändern"
+        : `dich zum Treffen${escapeHtml(zoomCfg.whenPhrase)} anmelden${delegiert ? " (als <strong>Delegierte*r</strong>)" : ""}`;
+      return htmlPage(
+        `<h1>Zum Treffen anmelden</h1><p>Hallo <strong>${firstName}</strong>, möchtest du ${what}?</p><form method="post"><button type="submit">${existing ? "Anmeldung ändern" : "Jetzt anmelden"}</button></form>`,
+      );
+    }
+
+    const isNew = !existing;
+    const reg = await insertZoomRegistration({
+      name: signer.name,
+      email: signer.email,
+      kv: signer.kreisverband,
+      delegierter: delegiert,
+    });
+
+    if (isNew) {
+      try {
+        await sendZoomSignupEmail({
+          regId: reg.id,
+          name: signer.name,
+          email: signer.email,
+          cfg: zoomCfg,
+        });
+      } catch (mailErr) {
+        console.error("[treffen-anmelden] confirmation email failed:", mailErr);
+      }
+    }
+
+    const delegateNote = delegiert
+      ? `<p>Du hast dich als <strong>Delegierte*r</strong> angemeldet.</p>`
+      : "";
+    const updatedNote = !isNew ? `<p>Deine Anmeldung wurde aktualisiert.</p>` : "";
+    return htmlPage(
+      `<h1>Du bist dabei!</h1><p>Wir haben deine Anmeldung für das Treffen gespeichert, <strong>${firstName}</strong>.</p>${delegateNote}${updatedNote}${buildMeetingInfo(zoomCfg, { pending: true, timingText: "kurz" })}`,
+    );
+  } catch (err) {
+    console.error(`${req.method} /api/treffen-anmelden error:`, err);
+    return treffenLinkError();
+  }
+}
+
 // Retention periods and link lifetimes from the letter config; the privacy
 // policy quotes the same values.
 const privacy = resolvePrivacy(cfg);
@@ -1579,27 +1676,56 @@ const server = Bun.serve({
       },
     },
 
+    // Sign-up confirmation link. GET shows what will be published; confirming
+    // happens on the button's POST, so a mail security scanner that opens the
+    // link can't confirm a sign-up somebody else submitted for this address.
     "/api/confirm/:token": {
       async GET(req) {
         const blocked = denyRate(req, "token-link", 120, 15 * 60 * 1000);
         if (blocked) return blocked;
         try {
-          const { token } = req.params;
-          const signer = await confirmSigner(token);
-
-          if (signer) {
-            if (cfg.features.stateResolution && signer.kreisverband) {
-              enqueueStateResolution(signer.id, signer.kreisverband);
-            }
-            return Response.redirect(`${getBaseUrl(req)}/?confirmed=1`, 302);
+          const pending = await getPendingSignerByToken(req.params.token);
+          if (!pending) {
+            return Response.redirect(
+              `${getBaseUrl(req)}/?error=token-expired`,
+              302,
+            );
           }
-          return Response.redirect(
-            `${getBaseUrl(req)}/?error=token-expired`,
-            302,
+          const rows = [
+            `Name: ${escapeHtml(pending.name)}`,
+            pending.kreisverband &&
+              `${escapeHtml(cfg.sign?.fields?.kreisverband?.label || "Kreisverband")}: ${escapeHtml(pending.kreisverband)}`,
+            pending.occupation &&
+              `${escapeHtml(cfg.sign?.fields?.occupation?.label || "Beruf")}: ${escapeHtml(pending.occupation)}`,
+            `Name öffentlich anzeigen: ${pending.show_publicly ? "ja" : "nein"}`,
+            `Newsletter: ${pending.newsletter ? "ja" : "nein"}`,
+          ].filter(Boolean);
+          return htmlPage(
+            `<h1>Unterschrift bestätigen</h1><p>Bitte prüfe deine Angaben und bestätige deine Unterschrift.</p><p>${rows.join("<br>")}</p><form method="post"><button type="submit">Unterschrift bestätigen</button></form><p>Stimmt etwas nicht? Dann bestätige nicht – nicht bestätigte Eintragungen löschen wir automatisch.</p>`,
           );
         } catch (err) {
           console.error("GET /api/confirm error:", err);
           return Response.redirect(`${BASE_URL}/?error=server-error`, 302);
+        }
+      },
+      async POST(req) {
+        const blocked = denyRate(req, "token-link", 120, 15 * 60 * 1000);
+        if (blocked) return blocked;
+        try {
+          const signer = await confirmSigner(req.params.token);
+          if (signer) {
+            if (cfg.features.stateResolution && signer.kreisverband) {
+              enqueueStateResolution(signer.id, signer.kreisverband);
+            }
+            return Response.redirect(`${getBaseUrl(req)}/?confirmed=1`, 303);
+          }
+          return Response.redirect(
+            `${getBaseUrl(req)}/?error=token-expired`,
+            303,
+          );
+        } catch (err) {
+          console.error("POST /api/confirm error:", err);
+          return Response.redirect(`${BASE_URL}/?error=server-error`, 303);
         }
       },
     },
@@ -1652,24 +1778,29 @@ const server = Bun.serve({
       },
     },
 
+    // Deletion link. GET only asks; deleting happens on the button's POST, so a
+    // mail scanner opening the link (e.g. after a stranger requested deletion
+    // for this address) can't erase anything.
     "/api/delete/:token": {
       async GET(req) {
         const blocked = denyRate(req, "token-link", 120, 15 * 60 * 1000);
         if (blocked) return blocked;
+        return htmlPage(
+          `<h1>Daten löschen</h1><p>Mit dem Klick auf den Button löschen wir alle Daten, die wir zu deiner E-Mail-Adresse gespeichert haben – deine Unterschrift und deine Anmeldung zum Treffen, falls vorhanden. Das kann nicht rückgängig gemacht werden.</p><form method="post"><button type="submit">Endgültig löschen</button></form><p>Wenn du die Löschung nicht angefordert hast, schließe diese Seite einfach.</p>`,
+        );
+      },
+      async POST(req) {
+        const blocked = denyRate(req, "token-link", 120, 15 * 60 * 1000);
+        if (blocked) return blocked;
         try {
-          const { token } = req.params;
-          const deleted = await deleteByDeletionToken(token);
-
-          if (deleted) {
-            return Response.redirect(`${getBaseUrl(req)}/?deleted=1`, 302);
-          }
+          const deleted = await deleteByDeletionToken(req.params.token);
           return Response.redirect(
-            `${getBaseUrl(req)}/?error=delete-token-expired`,
-            302,
+            `${getBaseUrl(req)}/${deleted ? "?deleted=1" : "?error=delete-token-expired"}`,
+            303,
           );
         } catch (err) {
-          console.error("GET /api/delete error:", err);
-          return Response.redirect(`${BASE_URL}/?error=server-error`, 302);
+          console.error("POST /api/delete error:", err);
+          return Response.redirect(`${BASE_URL}/?error=server-error`, 303);
         }
       },
     },
@@ -1937,128 +2068,11 @@ const server = Bun.serve({
       },
     },
 
-    // One-click Treffen registration from newsletter invite email.
-    // The token is the signer's stable unsubscribe_token.
-    // These signup links do not expire based on the token age.
-    // ?delegiert=1 → registers as delegate, ?delegiert=0 (or omitted) → non-delegate.
+    // One-click Treffen registration from a newsletter invite (see
+    // treffenAnmelden). These links don't expire with the token's age.
     "/api/treffen-anmelden/:token": {
-      async GET(req) {
-        const blocked = denyRate(req, "token-link", 120, 15 * 60 * 1000);
-        if (blocked) return blocked;
-        const { token } = req.params;
-        const force = req.url.includes("force=1");
-        const zoomCfg = await getZoomConfig();
-        // When the delegate field is off, ignore any ?delegiert=1 in the link so a
-        // stale email button can't register someone as a delegate.
-        const delegiert =
-          zoomCfg.showDelegierter && req.url.includes("delegiert=1");
-        try {
-          const signer = await getSignerForZoomInvite(token);
-          if (!signer) {
-            return new Response(
-              simplePage(
-                `<h1>Link abgelaufen</h1><p>Dieser Link ist leider nicht mehr g\u00fcltig. Du kannst dich auf <a href="${BASE_URL}/#zoom">gehaltsdeckel.jetzt</a> direkt anmelden.</p>`,
-              ),
-              {
-                status: 410,
-                headers: { "Content-Type": "text/html; charset=utf-8" },
-              },
-            );
-          }
-
-          const existing = await getZoomRegistrationByEmail(signer.email);
-
-          if (existing && !force) {
-            const firstName = firstNameHtml(signer.name);
-            // The delegate status + toggle only make sense while the field is on;
-            // when off, show a neutral "registriert" line with no toggle.
-            const currentStatus = !zoomCfg.showDelegierter
-              ? ""
-              : existing.delegierter
-                ? " als <strong>Delegierte*r</strong>"
-                : " als einfache*r Teilnehmer*in";
-            let toggleBlock = "";
-            if (zoomCfg.showDelegierter) {
-              const toggleLabel = existing.delegierter
-                ? "Nicht als Delegierte*r anmelden"
-                : "Als Delegierte*r anmelden";
-              const toggleUrl = `${BASE_URL}/api/treffen-anmelden/${encodeURIComponent(token)}?delegiert=${existing.delegierter ? 0 : 1}&force=1`;
-              toggleBlock = `<p><a href="${toggleUrl}" style="color:#e8001c;">${toggleLabel}</a></p>`;
-            }
-            const unsubUrl = existing.unsubscribe_token
-              ? `${BASE_URL}/abmelden/${encodeURIComponent(existing.unsubscribe_token)}?from=zoom`
-              : null;
-            const unsubLink = unsubUrl
-              ? `<p><a href="${unsubUrl}">Abmelden</a></p>`
-              : "";
-            return new Response(
-              simplePage(
-                `<h1>Du bist bereits angemeldet</h1><p>Hallo <strong>${firstName}</strong>, du bist bereits${currentStatus} f\u00fcr das Treffen registriert.</p>${toggleBlock}${unsubLink}`,
-              ),
-              {
-                headers: {
-                  "Content-Type": "text/html; charset=utf-8",
-                  ...securityHeaders,
-                },
-              },
-            );
-          }
-
-          const isNew = !existing;
-
-          const reg = await insertZoomRegistration({
-            name: signer.name,
-            email: signer.email,
-            kv: signer.kreisverband,
-            delegierter: delegiert,
-          });
-
-          if (isNew) {
-            try {
-              await sendZoomSignupEmail({
-                regId: reg.id,
-                name: signer.name,
-                email: signer.email,
-                cfg: zoomCfg,
-              });
-            } catch (mailErr) {
-              console.error(
-                "[treffen-anmelden] confirmation email failed:",
-                mailErr,
-              );
-            }
-          }
-
-          const delegateNote = delegiert
-            ? `<p>Du hast dich als <strong>Delegierte*r</strong> angemeldet.</p>`
-            : "";
-          const updatedNote = !isNew
-            ? `<p>Deine Anmeldung wurde aktualisiert.</p>`
-            : "";
-          return new Response(
-            simplePage(
-              `<h1>Du bist dabei!</h1><p>Wir haben deine Anmeldung f\u00fcr das Treffen gespeichert, <strong>${firstNameHtml(signer.name)}</strong>.</p>${delegateNote}${updatedNote}${buildMeetingInfo(zoomCfg, { pending: true, timingText: "kurz" })}`,
-            ),
-            {
-              headers: {
-                "Content-Type": "text/html; charset=utf-8",
-                ...securityHeaders,
-              },
-            },
-          );
-        } catch (err) {
-          console.error("GET /api/treffen-anmelden error:", err);
-          return new Response(
-            simplePage(
-              `<h1>Fehler</h1><p>Etwas ist schiefgelaufen. Bitte versuche es sp\u00e4ter erneut oder melde dich direkt auf <a href="${BASE_URL}/#zoom">gehaltsdeckel.jetzt</a> an.</p>`,
-            ),
-            {
-              status: 500,
-              headers: { "Content-Type": "text/html; charset=utf-8" },
-            },
-          );
-        }
-      },
+      GET: (req) => treffenAnmelden(req, { commit: false }),
+      POST: (req) => treffenAnmelden(req, { commit: true }),
     },
 
     // One-click List-Unsubscribe for zoom (RFC 8058, no UI)

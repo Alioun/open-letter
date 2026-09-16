@@ -413,6 +413,11 @@ export async function insertSigner({
   token,
   expiresAt,
 }) {
+  // A pending (unconfirmed) sign-up is only replaced once its link expired.
+  // Before that, a second request for the same address — which proves nothing
+  // about who sent it — must not change the name, public display or newsletter
+  // choice the real person is about to confirm; the caller re-sends the
+  // original confirmation instead.
   const row = await db
     .query(
       `INSERT INTO signers /* public-neutral */
@@ -425,8 +430,9 @@ export async function insertSigner({
              newsletter = excluded.newsletter,
              show_publicly = excluded.show_publicly,
              verification_token = excluded.verification_token,
-             token_expires_at = excluded.token_expires_at
-         WHERE signers.verified = 0
+             token_expires_at = excluded.token_expires_at,
+             created_at = strftime('%Y-%m-%dT%H:%M:%fZ','now')
+         WHERE signers.verified = 0 AND signers.token_expires_at <= ?
        RETURNING id, verified`,
     )
     .get(
@@ -438,9 +444,29 @@ export async function insertSigner({
       B(showPublicly),
       token,
       iso(expiresAt),
+      nowIso(),
     );
-  if (!row) return { ok: false, alreadyVerified: true };
-  return { ok: true, alreadyVerified: !!row.verified };
+  if (row) return { ok: true, alreadyVerified: false };
+  const existing = await db
+    .query(`SELECT verified FROM signers WHERE email = ?`)
+    .get(email);
+  if (existing?.verified) return { ok: false, alreadyVerified: true };
+  return { ok: true, alreadyVerified: false, pendingKept: true };
+}
+
+// What an unconfirmed sign-up will publish, shown on the confirmation page
+// before the button is pressed.
+export async function getPendingSignerByToken(token) {
+  return boolify(
+    (await db
+      .query(
+        `SELECT name, kreisverband, occupation, newsletter, show_publicly
+         FROM signers
+         WHERE verification_token = ? AND verified = 0 AND token_expires_at > ?`,
+      )
+      .get(token, nowIso())) || null,
+    ["newsletter", "show_publicly"],
+  );
 }
 
 export async function getVerifiedSignerName(email) {

@@ -16,7 +16,7 @@ const future = () => new Date(Date.now() + 3600_000);
 const past = () => new Date(Date.now() - 1000);
 
 describe("signers: insert / confirm / delete", () => {
-  test("insertSigner inserts, re-updates while unverified, no-ops once verified", async () => {
+  test("insertSigner keeps a pending sign-up, replaces it once expired, no-ops once verified", async () => {
     const email = "dup@example.org";
     const r1 = await q.insertSigner({
       name: "First",
@@ -31,22 +31,37 @@ describe("signers: insert / confirm / delete", () => {
     expect(r1.ok).toBe(true);
     expect(r1.alreadyVerified).toBe(false);
 
-    // Same email, still unverified -> updates name.
-    const r2 = await q.insertSigner({
+    // Same email while the first link is still valid: nothing changes — a
+    // second request can't rewrite what the real person is about to confirm.
+    const attempt = {
       name: "Second",
       email,
       kv: "Hamburg",
       occupation: "",
       newsletter: false,
-      showPublicly: true,
+      showPublicly: false,
       token: "tok-2",
       expiresAt: future(),
-    });
+    };
+    const r2 = await q.insertSigner(attempt);
     expect(r2.ok).toBe(true);
-    expect((await db.query("SELECT name FROM signers WHERE email=?").get(email)).name).toBe("Second");
+    expect(r2.pendingKept).toBe(true);
+    let row = await db
+      .query("SELECT name, show_publicly, verification_token FROM signers WHERE email=?")
+      .get(email);
+    expect(row).toEqual({ name: "First", show_publicly: 1, verification_token: "tok-1" });
+    expect((await q.getPendingSignerByToken("tok-1")).show_publicly).toBe(true);
+
+    // Once the first link expired, a new sign-up replaces the pending row.
+    await db.run("UPDATE signers SET token_expires_at = '2000-01-01T00:00:00.000Z'");
+    const r2b = await q.insertSigner(attempt);
+    expect(r2b.pendingKept).toBeUndefined();
+    row = await db.query("SELECT name FROM signers WHERE email=?").get(email);
+    expect(row.name).toBe("Second");
 
     // Verify, then a further insert is a no-op (already verified).
     await q.confirmSigner("tok-2");
+    expect(await q.getPendingSignerByToken("tok-2")).toBeNull();
     const r3 = await q.insertSigner({
       name: "Third",
       email,
