@@ -8,6 +8,7 @@ const APP_TABLES = [
   "zoom_registrations",
   "deletion_requests",
   "zoom_pending",
+  "erasure_log",
   "zoom_event_mailings",
   "app_settings",
   "kv_state_cache",

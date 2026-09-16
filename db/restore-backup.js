@@ -10,6 +10,8 @@
 //     aside to <path>.pre-restore-<timestamp> first.
 //   * Rebuilds DATABASE_PATH via sqlcipher_export so the restored DB is always
 //     re-keyed to DATABASE_ENCRYPTION_KEY (handles a distinct backup key).
+//   * Re-applies erasures and opt-outs from the replaced database's erasure log
+//     (db/erasure-log.js), so a restore doesn't bring deleted data back.
 // Intended to run while the app is stopped.
 import { readdir, rename, unlink, mkdir } from "node:fs/promises";
 import { existsSync, createReadStream, createWriteStream } from "node:fs";
@@ -18,6 +20,7 @@ import { createGunzip } from "node:zlib";
 import { pipeline } from "node:stream/promises";
 import process from "node:process";
 import { openEncrypted, DB_PATH } from "./connection.js";
+import { readErasureLog, applyErasureLog } from "./erasure-log.js";
 
 const BACKUP_DIR = process.env.BACKUP_DIR || "/app/backups";
 const DB_KEY = process.env.DATABASE_ENCRYPTION_KEY || "";
@@ -31,6 +34,7 @@ const TABLES = [
   "zoom_registrations",
   "deletion_requests",
   "zoom_pending",
+  "erasure_log",
   "zoom_event_mailings",
   "app_settings",
   "kv_state_cache",
@@ -102,6 +106,9 @@ async function main() {
   const srcCounts = await counts(backupDb);
   console.log("[restore] backup row counts:", JSON.stringify(srcCounts));
 
+  // Read the erasure log from the database being replaced, before moving it.
+  const erasures = await readLiveErasureLog();
+
   // Move any existing live DB aside (incl. WAL/SHM sidecars).
   await mkdir(dirname(DB_PATH), { recursive: true });
   if (existsSync(DB_PATH)) {
@@ -141,6 +148,41 @@ async function main() {
     throw new Error(`Row-count mismatch after restore: ${mismatch.join(", ")}`);
   }
   console.log("[restore] OK — all table counts match.");
+
+  if (erasures === null) {
+    console.error(
+      "[restore] WARNING: could not read the erasure log of the replaced database — " +
+        "erasures and opt-outs made after this backup are NOT re-applied. Re-apply them " +
+        "by hand (e.g. from the pre-restore copy) before starting the app.",
+    );
+    return;
+  }
+  const restored = await openEncrypted(DB_PATH, DB_KEY);
+  try {
+    const applied = await applyErasureLog(restored, erasures);
+    console.log(
+      `[restore] re-applied erasure log (${erasures.length} entr${erasures.length === 1 ? "y" : "ies"}):`,
+      JSON.stringify(applied),
+    );
+  } finally {
+    await restored.close();
+  }
+}
+
+// null = there was a database but its log couldn't be read; [] = nothing to do.
+async function readLiveErasureLog() {
+  if (!existsSync(DB_PATH)) return [];
+  let live;
+  try {
+    live = await openEncrypted(DB_PATH, DB_KEY);
+    return await readErasureLog(live);
+  } catch (err) {
+    if (/no such table/i.test(String(err?.message))) return [];
+    console.error(`[restore] reading erasure log failed: ${err.message}`);
+    return null;
+  } finally {
+    await live?.close().catch(() => {});
+  }
 }
 
 main().catch((err) => {

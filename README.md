@@ -406,6 +406,15 @@ bun run db:restore /app/backups/backup-2026-06-09T12-00-00.sqlite.gz
 The restore re-keys the snapshot to `DATABASE_ENCRYPTION_KEY`, so it works even
 if the backup used a separate `BACKUP_ENCRYPTION_KEY`.
 
+A backup predates any deletion or opt-out made after it. So before replacing the
+database, the restore reads its `erasure_log` (an HMAC of the address, what
+happened, and when; kept `privacy.erasureLogDays`) and afterwards re-applies it
+to the restored data: erased addresses are deleted again, newsletter and Treffen
+opt-outs are applied again. Rows created after the logged event are left alone.
+If the old database can't be read, the restore says so loudly — then re-apply
+those requests by hand before starting the app. Edits made on the settings page
+(name, public display) are not logged and are lost with a restore.
+
 ## Hardware requirements
 
 **The smallest VPS you can buy will do.** Measured on the production image under

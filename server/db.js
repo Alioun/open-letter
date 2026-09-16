@@ -12,6 +12,14 @@
 import { db, nowIso, isoAgo, onMutation } from "../db/connection.js";
 import { cached, invalidate } from "./cache.js";
 import { deleteJobsByPayload } from "../db/jobs.js";
+import {
+  recordErasure,
+  forgetErasure,
+  purgeErasureLog,
+  ERASE,
+  NEWSLETTER_OPT_OUT,
+  TREFFEN_OPT_OUT,
+} from "../db/erasure-log.js";
 import cfg from "../config/letter.config.js";
 import { resolvePrivacy } from "../config/privacy.js";
 
@@ -552,6 +560,7 @@ export async function eraseEmail(email) {
   if (pending) await deleteJobsByPayload("emails", "pendingId", pending.id);
   if (signer) await deleteEmailJobsForSigner(signer.id);
   if (request) await deleteJobsByPayload("emails", "requestId", request.id);
+  if (signer || zoom) await recordErasure(db, email, ERASE);
   return Boolean(signer || zoom);
 }
 
@@ -623,6 +632,8 @@ export async function insertZoomRegistration({ name, email, kv, delegierter }) {
        RETURNING id`,
     )
     .get(name, email, kv || "", B(delegierter));
+  // Registering again reverses an earlier Treffen opt-out.
+  await forgetErasure(db, email, TREFFEN_OPT_OUT);
   return { ok: true, id: row.id };
 }
 
@@ -687,9 +698,10 @@ export async function issueZoomUnsubscribeToken(id) {
 export async function deleteZoomRegistrationByUnsubscribeToken(token) {
   const row = await db
     .query(
-      `DELETE FROM zoom_registrations WHERE unsubscribe_token = ? RETURNING id`,
+      `DELETE FROM zoom_registrations WHERE unsubscribe_token = ? RETURNING email`,
     )
     .get(token);
+  if (row) await recordErasure(db, row.email, TREFFEN_OPT_OUT);
   return Boolean(row);
 }
 
@@ -1257,9 +1269,10 @@ export async function optOutNewsletter(token) {
   const row = await db
     .query(
       `UPDATE signers SET newsletter = 0
-       WHERE unsubscribe_token = ? RETURNING id`,
+       WHERE unsubscribe_token = ? RETURNING email`,
     )
     .get(token);
+  if (row) await recordErasure(db, row.email, NEWSLETTER_OPT_OUT);
   return Boolean(row);
 }
 
@@ -1427,6 +1440,10 @@ export async function updateSignerByEmail(
       kreisverband,
       email,
     );
+  if (row) {
+    if (newsletter) await forgetErasure(db, email, NEWSLETTER_OPT_OUT);
+    else await recordErasure(db, email, NEWSLETTER_OPT_OUT);
+  }
   return Boolean(row);
 }
 
@@ -1451,6 +1468,7 @@ export async function optOutNewsletterByEmail(email) {
   const row = await db
     .query(`UPDATE signers SET newsletter = 0 WHERE email = ? RETURNING id`)
     .get(email);
+  if (row) await recordErasure(db, email, NEWSLETTER_OPT_OUT);
   return Boolean(row);
 }
 
@@ -1458,7 +1476,13 @@ export async function deleteZoomByEmail(email) {
   const row = await db
     .query(`DELETE FROM zoom_registrations WHERE email = ? RETURNING id`)
     .get(email);
+  if (row) await recordErasure(db, email, TREFFEN_OPT_OUT);
   return Boolean(row);
+}
+
+// Erasure-log entries older than `before` (see db/erasure-log.js).
+export async function purgeOldErasureLog(before) {
+  return purgeErasureLog(db, before);
 }
 
 // ---- occupations -----------------------------------------------------------

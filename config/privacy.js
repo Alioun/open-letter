@@ -20,6 +20,10 @@ export const PRIVACY_DEFAULTS = {
   // Longest any signature or Treffen registration is kept, counted from when
   // it was made — even if the campaign is still running.
   signerRetentionYears: 3,
+  // Erasures and opt-outs are logged (as an HMAC of the address) for this long,
+  // so restoring a backup can re-apply them. Must cover the backup retention
+  // (BACKUP_KEEP hours, default 48).
+  erasureLogDays: 7,
 };
 
 // The cutoff for signerRetentionYears as of `now`: everything created before
@@ -48,5 +52,6 @@ export function resolvePrivacy(cfg) {
     settingsLinkMs: merged.settingsLinkDays * DAY,
     emailJobRetentionS: Math.round(merged.emailJobRetentionHours * 3600),
     treffenRetentionMs: merged.treffenRetentionDays * DAY,
+    erasureLogMs: merged.erasureLogDays * DAY,
   };
 }

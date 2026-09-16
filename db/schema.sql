@@ -151,6 +151,16 @@ CREATE TABLE IF NOT EXISTS zoom_pending (
   created_at    TEXT DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ','now'))
 );
 
+-- Erasures and opt-outs of the last privacy.erasureLogDays, keyed by an HMAC of
+-- the email address. db/restore-backup.js re-applies them after restoring a
+-- backup, which would otherwise bring the data back. See db/erasure-log.js.
+CREATE TABLE IF NOT EXISTS erasure_log (
+  email_hmac  TEXT NOT NULL,
+  kind        TEXT NOT NULL,
+  at          TEXT NOT NULL,
+  PRIMARY KEY (email_hmac, kind)
+);
+
 -- Pending "delete my data" requests from the privacy-policy form. Keyed by
 -- email, not by signer, so an address that only registered for the Treffen can
 -- be erased too. Rows live for the 24h link validity and are removed on use.

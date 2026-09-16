@@ -48,6 +48,7 @@ import {
   confirmZoomPending,
   deleteExpiredZoomPending,
   deleteExpiredByAge,
+  purgeOldErasureLog,
   healthCheck,
   close,
   listEmailTemplates,
@@ -1107,6 +1108,15 @@ async function treffenAnmelden(req, { commit }) {
 // policy quotes the same values.
 const privacy = resolvePrivacy(cfg);
 const TREFFEN_RETENTION_MS = privacy.treffenRetentionMs;
+// The erasure log must outlive every backup that could be restored.
+{
+  const backupKeepHours = Math.max(1, parseInt(process.env.BACKUP_KEEP || "48", 10));
+  if (privacy.erasureLogDays * 24 < backupKeepHours) {
+    console.warn(
+      `[privacy] erasureLogDays (${privacy.erasureLogDays}) is shorter than BACKUP_KEEP (${backupKeepHours}h): restoring an older backup could bring back erased data`,
+    );
+  }
+}
 const confirmationExpiry = () =>
   new Date(Date.now() + privacy.confirmationLinkMs);
 
@@ -2848,6 +2858,7 @@ async function handleMaintenanceJob({ task }) {
     }
     await deleteExpiredDeletionRequests();
     await deleteExpiredZoomPending();
+    await purgeOldErasureLog(new Date(Date.now() - privacy.erasureLogMs));
   } else if (task === "purge-dead-emails") {
     const removed = await purgeDeadJobs("emails", EMAIL_JOB_TTL_S);
     if (removed > 0) {
