@@ -103,12 +103,13 @@ button {
 
 /* ---------- Skip link ---------- */
 .skip-link {
+  border-radius: var(--radius-button, 0);
   position: absolute;
   left: -9999px;
   top: 0;
   z-index: 100;
   background: var(--rot);
-  color: var(--weiss);
+  color: var(--on-akzent, var(--weiss));
   padding: 8px 16px;
   font-weight: 700;
   text-decoration: none;
@@ -178,7 +179,7 @@ button {
 
 .topbar .cta {
   background: var(--akzent);
-  color: var(--weiss);
+  color: var(--on-akzent, var(--weiss));
   border: none;
   padding: 10px 18px;
   min-height: 44px;
@@ -286,7 +287,7 @@ button {
   .mobile-nav .mobile-nav-cta {
     margin: 12px 24px;
     background: var(--rot);
-    color: var(--weiss);
+    color: var(--on-akzent, var(--weiss));
     justify-content: center;
     gap: 8px;
     font-size: 15px;
@@ -302,7 +303,7 @@ button {
 /* ---------- Hero ---------- */
 .hero {
   position: relative;
-  background: var(--fond);
+  background: var(--hero-bg, var(--fond));
   padding: 64px 28px 72px;
   overflow: hidden;
   border-bottom: 1px solid var(--akzent);
@@ -333,7 +334,7 @@ button {
   align-items: center;
   gap: 10px;
   background: var(--rot);
-  color: var(--weiss);
+  color: var(--on-akzent, var(--weiss));
   padding: 6px 12px;
   font-family: var(--font-display);
   font-weight: 700;
@@ -371,7 +372,7 @@ h1.headline {
   letter-spacing: var(--ls-tight);
   margin: 0 0 24px;
   color: var(--akzent);
-  max-width: 14ch;
+  max-width: var(--headline-max-width, 14ch);
   position: relative;
   z-index: 3;
 }
@@ -385,9 +386,13 @@ h1.headline .rot {
 
 h1.headline .banner {
   background: var(--rot);
-  color: var(--weiss);
-  padding: 0 0.15em;
+  color: var(--on-akzent, var(--weiss));
+  /* Optional bottom padding (style.bannerPadBottom) grows the line box so
+     descenders (g, j, y) stay inside their own banner. */
+  padding: 0 0.15em var(--banner-pad-bottom, 0);
+  border-radius: var(--radius-banner, 0);
   display: inline-block;
+  max-width: 100%;
 }
 
 .sub {
@@ -404,7 +409,8 @@ h1.headline .banner {
   display: inline-block;
   padding: 18px 24px;
   border: 1.5px solid var(--akzent);
-  box-shadow: var(--shadow-md) var(--shadow-md) 0 var(--rot);
+  box-shadow: var(--elev-md, var(--shadow-md) var(--shadow-md) 0 var(--rot));
+  border-radius: var(--radius-card, 0);
 }
 
 .hero-row {
@@ -432,13 +438,14 @@ h1.headline .banner {
 
 .counter-card {
   background: var(--akzent);
-  color: var(--weiss);
+  color: var(--on-akzent, var(--weiss));
   padding: 28px 30px 24px;
   display: flex;
   flex-direction: column;
   gap: 6px;
   border: 1px solid var(--akzent);
-  box-shadow: var(--shadow-md) var(--shadow-md) 0 var(--rot);
+  box-shadow: var(--elev-md, var(--shadow-md) var(--shadow-md) 0 var(--rot));
+  border-radius: var(--radius-card, 0);
 }
 
 .counter-card .label {
@@ -447,7 +454,7 @@ h1.headline .banner {
   font-size: 12px;
   letter-spacing: var(--ls-caps);
   text-transform: uppercase;
-  color: rgba(255, 255, 255, 0.75);
+  color: var(--on-akzent, rgba(255, 255, 255, 0.75));
 }
 
 .counter-card .num {
@@ -456,22 +463,24 @@ h1.headline .banner {
   font-size: clamp(48px, 13vw, 72px);
   line-height: 0.95;
   letter-spacing: var(--ls-tight);
+  color: var(--on-akzent, inherit);
 }
 
 .counter-card .num .unit {
   font-size: 22px;
-  color: rgba(255, 255, 255, 0.75);
+  color: var(--on-akzent, rgba(255, 255, 255, 0.75));
   font-weight: 400;
   margin-left: 8px;
 }
 
 .counter-card .meta {
   font-size: 13px;
-  color: rgba(255, 255, 255, 0.75);
+  color: var(--on-akzent, rgba(255, 255, 255, 0.75));
   margin-top: 4px;
 }
 
 .counter-card .goal-bar {
+  border-radius: var(--radius-button, 0);
   height: 6px;
   background: var(--grau-hell);
   margin-top: 14px;
@@ -482,7 +491,7 @@ h1.headline .banner {
 .counter-card .goal-bar > div {
   height: 100%;
   width: 100%;
-  background: var(--rot);
+  background: var(--goal-fill, var(--rot));
   transform-origin: left;
   transform: scaleX(var(--progress, 0));
   transition: transform 0.8s cubic-bezier(0.2, 0.7, 0.2, 1);
@@ -493,7 +502,7 @@ h1.headline .banner {
   justify-content: space-between;
   font-size: 11px;
   margin-top: 8px;
-  color: rgba(255, 255, 255, 0.65);
+  color: var(--on-akzent, rgba(255, 255, 255, 0.65));
 }
 
 .scrollcta {
@@ -503,9 +512,10 @@ h1.headline .banner {
   font-family: var(--font-display);
   font-weight: 700;
   font-size: 14px;
-  color: var(--akzent);
-  background: var(--weiss);
+  color: var(--cta-fg, var(--akzent));
+  background: var(--cta-bg, var(--weiss));
   border: 1.5px solid var(--akzent);
+  border-radius: var(--radius-button, 0);
   padding: 14px 20px;
   min-height: 44px;
   cursor: pointer;
@@ -517,16 +527,21 @@ h1.headline .banner {
 }
 
 .scrollcta:hover {
-  background: var(--akzent);
-  color: var(--weiss);
-  transform: translate(-2px, -2px);
-  box-shadow: 4px 4px 0 var(--rot);
+  background: var(--cta-hover-bg, var(--akzent));
+  color: var(--cta-hover-fg, var(--weiss));
+  transform: var(--hover-shift, translate(-2px, -2px));
+  box-shadow: var(--elev-sm, 4px 4px 0 var(--rot));
 }
 
 .scrollcta--secondary {
   background: transparent;
   color: var(--akzent);
   border-color: var(--akzent);
+}
+
+.scrollcta--secondary:hover {
+  background: var(--akzent);
+  color: var(--on-akzent, var(--weiss));
 }
 
 /* ---------- Störer (Zoom) ---------- */
@@ -545,12 +560,13 @@ h1.headline .banner {
   width: 240px;
   text-align: left;
   background: var(--rot);
-  color: var(--weiss);
+  color: var(--on-akzent, var(--weiss));
   border: 2px solid var(--akzent);
   padding: 18px 20px;
   cursor: pointer;
   transform: rotate(4deg) translateZ(0);
-  box-shadow: 8px 8px 0 var(--akzent);
+  box-shadow: var(--elev-md, 8px 8px 0 var(--akzent));
+  border-radius: var(--radius-card, 0);
   font-family: var(--font-display);
   transition:
     transform 0.18s ease,
@@ -559,7 +575,7 @@ h1.headline .banner {
 
 .stoerer:hover {
   transform: rotate(2deg) scale(1.04) translateZ(0);
-  box-shadow: 11px 11px 0 var(--akzent);
+  box-shadow: var(--elev-lg, 11px 11px 0 var(--akzent));
 }
 
 .stoerer:focus-visible {
@@ -703,10 +719,12 @@ h1.headline .banner {
 }
 
 .brief-paper {
+  overflow: clip;
   background: var(--fond);
   padding: 56px 64px;
   border: 1px solid var(--akzent);
-  box-shadow: var(--shadow-ml) var(--shadow-ml) 0 var(--akzent);
+  box-shadow: var(--elev-lg, var(--shadow-ml) var(--shadow-ml) 0 var(--akzent));
+  border-radius: var(--radius-card, 0);
   position: relative;
 }
 
@@ -859,8 +877,10 @@ h1.headline .banner {
 }
 
 .faq-list {
+  overflow: clip;
   border: 1px solid var(--akzent);
-  box-shadow: var(--shadow-ml) var(--shadow-ml) 0 var(--akzent);
+  box-shadow: var(--elev-lg, var(--shadow-ml) var(--shadow-ml) 0 var(--akzent));
+  border-radius: var(--radius-card, 0);
   background: var(--weiss);
 }
 
@@ -1057,7 +1077,10 @@ h1.headline .banner {
 
 @media (max-width: 600px) {
   .faq-list {
-    box-shadow: var(--shadow-sm) var(--shadow-sm) 0 var(--akzent);
+    box-shadow: var(
+      --elev-md,
+      var(--shadow-sm) var(--shadow-sm) 0 var(--akzent)
+    );
   }
 
   .faq-q {
@@ -1081,7 +1104,7 @@ h1.headline .banner {
 /* ---------- Forderungen Strip ---------- */
 .demands {
   background: var(--akzent);
-  color: var(--weiss);
+  color: var(--on-akzent, var(--weiss));
   padding: 72px 28px;
   border-bottom: 1px solid var(--akzent);
 }
@@ -1229,7 +1252,8 @@ h1.headline .banner {
   background: var(--fond);
   border: 1px solid var(--akzent);
   padding: 36px;
-  box-shadow: var(--shadow-lg) var(--shadow-lg) 0 var(--rot);
+  box-shadow: var(--elev-lg, var(--shadow-lg) var(--shadow-lg) 0 var(--rot));
+  border-radius: var(--radius-card, 0);
   position: relative;
 }
 
@@ -1244,13 +1268,14 @@ h1.headline .banner {
   top: -14px;
   left: 24px;
   background: var(--akzent);
-  color: var(--weiss);
+  color: var(--on-akzent, var(--weiss));
   font-family: var(--font-display);
   font-weight: 700;
   font-size: 12px;
   letter-spacing: var(--ls-caps);
   text-transform: uppercase;
   padding: 6px 12px;
+  border-radius: var(--radius-button, 0);
 }
 
 .form-card h3 {
@@ -1296,7 +1321,9 @@ h1.headline .banner {
 }
 
 .field input[type="text"],
-.field input[type="email"] {
+.field input[type="email"],
+.field select {
+  border-radius: var(--radius-input, 0);
   width: 100%;
   padding: 14px;
   font-size: 15px;
@@ -1309,7 +1336,8 @@ h1.headline .banner {
     transform 0.1s ease;
 }
 
-.field input:focus {
+.field input:focus,
+.field select:focus {
   box-shadow: 4px 4px 0 var(--rot);
 }
 
@@ -1346,6 +1374,7 @@ h1.headline .banner {
 }
 
 .check input {
+  border-radius: var(--radius-check, 0);
   appearance: none;
   width: 20px;
   height: 20px;
@@ -1385,9 +1414,10 @@ h1.headline .banner {
 }
 
 .submit {
+  border-radius: var(--radius-button, 0);
   width: 100%;
-  background: var(--akzent);
-  color: var(--weiss);
+  background: var(--cta-bg, var(--akzent));
+  color: var(--cta-fg, var(--weiss));
   border: 1.5px solid var(--akzent);
   padding: 18px;
   font-family: var(--font-display);
@@ -1406,9 +1436,10 @@ h1.headline .banner {
 }
 
 .submit:hover:not(:disabled) {
-  background: var(--rot);
-  transform: translate(-2px, -2px);
-  box-shadow: 6px 6px 0 var(--akzent);
+  background: var(--cta-hover-bg, var(--rot));
+  color: var(--cta-hover-fg, var(--cta-fg, var(--weiss)));
+  transform: var(--hover-shift, translate(-2px, -2px));
+  box-shadow: var(--elev-md, 6px 6px 0 var(--akzent));
 }
 
 .submit:disabled {
@@ -1462,7 +1493,8 @@ h1.headline .banner {
   border: 1px solid var(--akzent);
   max-width: 520px;
   width: 100%;
-  box-shadow: 16px 16px 0 var(--akzent);
+  box-shadow: var(--elev-lg, 16px 16px 0 var(--akzent));
+  border-radius: var(--radius-card, 0);
   position: relative;
   animation: pop 0.25s cubic-bezier(0.2, 0.7, 0.2, 1);
 }
@@ -1480,7 +1512,7 @@ h1.headline .banner {
 
 .modal-head {
   background: var(--rot);
-  color: var(--weiss);
+  color: var(--on-akzent, var(--weiss));
   padding: 22px 28px;
   display: flex;
   justify-content: space-between;
@@ -1543,9 +1575,10 @@ h1.headline .banner {
 }
 
 .modal-body .email-pill {
+  border-radius: var(--radius-button, 0);
   display: inline-block;
   background: var(--akzent);
-  color: var(--weiss);
+  color: var(--on-akzent, var(--weiss));
   font-family: ui-monospace, monospace;
   font-size: 13px;
   padding: 4px 10px;
@@ -1569,11 +1602,12 @@ h1.headline .banner {
 }
 
 .modal-body .confirm-btn {
+  border-radius: var(--radius-button, 0);
   width: 100%;
   margin-top: 18px;
   padding: 16px;
   background: var(--akzent);
-  color: var(--weiss);
+  color: var(--on-akzent, var(--weiss));
   border: 1.5px solid var(--akzent);
   font-family: var(--font-display);
   font-weight: 900;
@@ -1587,8 +1621,8 @@ h1.headline .banner {
 
 .modal-body .confirm-btn:hover {
   background: var(--rot);
-  transform: translate(-2px, -2px);
-  box-shadow: 4px 4px 0 var(--akzent);
+  transform: var(--hover-shift, translate(-2px, -2px));
+  box-shadow: var(--elev-sm, 4px 4px 0 var(--akzent));
 }
 
 .confirm-btn--accent {
@@ -1602,6 +1636,7 @@ h1.headline .banner {
 }
 
 .modal-body .resend-btn {
+  border-radius: var(--radius-button, 0);
   width: 100%;
   margin-top: 12px;
   padding: 12px 16px;
@@ -1619,7 +1654,7 @@ h1.headline .banner {
 
 .modal-body .resend-btn:not(:disabled):hover {
   background: var(--akzent);
-  color: var(--weiss);
+  color: var(--on-akzent, var(--weiss));
 }
 
 .modal-body .resend-btn:disabled {
@@ -1642,7 +1677,7 @@ h1.headline .banner {
   height: 80px;
   margin: 8px auto 18px;
   background: var(--erfolg);
-  box-shadow: 6px 6px 0 var(--akzent);
+  box-shadow: var(--elev-md, 6px 6px 0 var(--akzent));
   display: flex;
   align-items: center;
   justify-content: center;
@@ -1703,6 +1738,8 @@ h1.headline .banner {
 }
 
 .stats-row {
+  border-radius: var(--radius-card, 0);
+  overflow: clip;
   display: grid;
   grid-template-columns: repeat(4, 1fr);
   gap: 1px;
@@ -1718,7 +1755,7 @@ h1.headline .banner {
 }
 
 .stat {
-  background: var(--fond);
+  background: var(--stat-bg, var(--fond));
   padding: 22px 24px;
 }
 
@@ -1749,6 +1786,7 @@ h1.headline .banner {
 
 .filter-chip {
   border: 1.5px solid var(--akzent);
+  border-radius: var(--radius-button, 0);
   background: transparent;
   color: var(--akzent);
   padding: 8px 14px;
@@ -1767,15 +1805,16 @@ h1.headline .banner {
 
 .filter-chip:hover {
   background: var(--akzent);
-  color: var(--weiss);
+  color: var(--on-akzent, var(--weiss));
 }
 
 .filter-chip.active {
   background: var(--akzent);
-  color: var(--weiss);
+  color: var(--on-akzent, var(--weiss));
 }
 
 .search {
+  border-radius: var(--radius-button, 0);
   flex: 1;
   min-width: 200px;
   padding: 8px 14px;
@@ -1859,7 +1898,7 @@ h1.headline .banner {
   width: 44px;
   height: 44px;
   background: var(--akzent);
-  color: var(--weiss);
+  color: var(--on-akzent, var(--weiss));
   display: flex;
   align-items: center;
   justify-content: center;
@@ -1911,6 +1950,7 @@ h1.headline .banner {
 }
 
 .signers-foot button {
+  border-radius: var(--radius-button, 0);
   background: transparent;
   border: 1.5px solid var(--akzent);
   color: var(--akzent);
@@ -1924,7 +1964,7 @@ h1.headline .banner {
 
 .signers-foot button:hover {
   background: var(--akzent);
-  color: var(--weiss);
+  color: var(--on-akzent, var(--weiss));
 }
 
 /* ---------- Section number ---------- */
@@ -1954,6 +1994,7 @@ h1.headline .banner {
 }
 
 .occupation-chip {
+  border-radius: var(--radius-button, 0);
   display: inline-flex;
   align-items: center;
   gap: 8px;
@@ -1972,8 +2013,8 @@ h1.headline .banner {
 }
 
 .occupation-chip:hover {
-  transform: translate(-1px, -1px);
-  box-shadow: 3px 3px 0 var(--rot);
+  transform: var(--hover-shift, translate(-1px, -1px));
+  box-shadow: var(--elev-sm, 3px 3px 0 var(--rot));
 }
 
 .occupation-name {
@@ -1986,7 +2027,7 @@ h1.headline .banner {
   font-weight: 900;
   font-size: 12px;
   background: var(--akzent);
-  color: var(--weiss);
+  color: var(--on-akzent, var(--weiss));
   padding: 2px 7px;
   min-width: 22px;
   text-align: center;
@@ -2067,7 +2108,7 @@ h1.headline .banner {
 
 .kv-map-marker:hover .occupation-chip--map,
 .kv-map-marker button.occupation-chip--map:focus-visible {
-  transform: translate(-1px, -1px);
+  transform: var(--hover-shift, translate(-1px, -1px));
   box-shadow: 3px 3px 0 var(--rot);
   outline: none;
 }
@@ -2081,7 +2122,7 @@ h1.headline .banner {
 
 .occupation-chip--active {
   background: var(--akzent);
-  color: var(--weiss);
+  color: var(--on-akzent, var(--weiss));
   border-color: var(--akzent);
   border-style: solid;
 }
@@ -2101,7 +2142,8 @@ h1.headline .banner {
   transform: translate(-50%, calc(-100% - 10px));
   background: var(--weiss);
   border: 1px solid var(--akzent);
-  box-shadow: var(--shadow-sm) var(--shadow-sm) 0 var(--akzent);
+  box-shadow: var(--elev-md, var(--shadow-sm) var(--shadow-sm) 0 var(--akzent));
+  border-radius: var(--radius-card, 0);
   min-width: 180px;
   max-width: 260px;
   animation: map-popup 0.2s cubic-bezier(0.2, 0.7, 0.2, 1) both;
@@ -2124,7 +2166,7 @@ h1.headline .banner {
 
 .kv-map-popup-head {
   background: var(--akzent);
-  color: var(--weiss);
+  color: var(--on-akzent, var(--weiss));
   padding: 10px 14px;
   display: flex;
   justify-content: space-between;
@@ -2278,9 +2320,10 @@ footer {
 
 /* "you" highlight */
 .you-pill {
+  border-radius: var(--radius-button, 0);
   display: inline-block;
   background: var(--rot);
-  color: var(--weiss);
+  color: var(--on-akzent, var(--weiss));
   font-family: var(--font-display);
   font-weight: 700;
   font-size: 10px;
@@ -2345,28 +2388,31 @@ footer {
 @media (max-width: 600px) {
   .sub {
     max-width: 100%;
-    box-shadow: 4px 4px 0 var(--rot);
+    box-shadow: var(--elev-sm, 4px 4px 0 var(--rot));
   }
 }
 
 /* ---------- Box shadow tightening on mobile ---------- */
 @media (max-width: 600px) {
   .counter-card {
-    box-shadow: 4px 4px 0 var(--rot);
+    box-shadow: var(--elev-sm, 4px 4px 0 var(--rot));
   }
 
   .brief-paper {
-    box-shadow: 5px 5px 0 var(--akzent);
+    box-shadow: var(--elev-sm, 5px 5px 0 var(--akzent));
   }
 
   .form-card {
-    box-shadow: 6px 6px 0 var(--rot);
+    box-shadow: var(--elev-md, 6px 6px 0 var(--rot));
   }
 }
 
 @media (max-width: 520px) {
   .modal {
-    box-shadow: var(--shadow-sm) var(--shadow-sm) 0 var(--akzent);
+    box-shadow: var(
+      --elev-md,
+      var(--shadow-sm) var(--shadow-sm) 0 var(--akzent)
+    );
     margin: 0 8px;
   }
 }
@@ -2603,7 +2649,7 @@ footer {
 .campaign-form .cta {
   background: var(--akzent);
   border: 1px solid var(--akzent);
-  color: var(--weiss);
+  color: var(--on-akzent, var(--weiss));
   cursor: pointer;
   font-family: var(--font-display);
   font-weight: 900;
@@ -2650,7 +2696,7 @@ footer {
 
 .admin-list button.active {
   background: var(--akzent);
-  color: var(--weiss);
+  color: var(--on-akzent, var(--weiss));
 }
 
 .admin-list span,
@@ -2697,7 +2743,7 @@ footer {
 .editor-toolbar button:hover,
 .admin-variable-row button:hover {
   background: var(--akzent);
-  color: var(--weiss);
+  color: var(--on-akzent, var(--weiss));
 }
 
 .link-input-row {
@@ -2726,7 +2772,7 @@ footer {
 }
 .link-input-row button:hover {
   background: var(--akzent);
-  color: var(--weiss);
+  color: var(--on-akzent, var(--weiss));
 }
 
 .admin-editor-surface {
@@ -2977,7 +3023,7 @@ footer {
 /* Selected day */
 .rdp-root .rdp-selected .rdp-day_button {
   background-color: var(--akzent);
-  color: var(--weiss);
+  color: var(--on-akzent, var(--weiss));
   border-color: transparent;
   font-weight: 700;
 }
@@ -3020,8 +3066,9 @@ footer {
   min-height: 44px;
   padding: 12px 18px;
   border: 1.5px solid var(--akzent);
-  background: var(--akzent);
-  color: var(--weiss);
+  border-radius: var(--radius-button, 0);
+  background: var(--cta-bg, var(--akzent));
+  color: var(--cta-fg, var(--weiss));
   font-family: var(--font-display);
   font-weight: 900;
   cursor: pointer;
@@ -3031,7 +3078,8 @@ footer {
     box-shadow 0.1s ease;
 }
 .cta:hover:not(:disabled) {
-  background: var(--rot);
+  background: var(--cta-hover-bg, var(--rot));
+  color: var(--cta-hover-fg, var(--cta-fg, var(--weiss)));
 }
 .cta:disabled {
   opacity: 0.5;
@@ -3045,7 +3093,7 @@ footer {
 }
 .cta--outline:hover:not(:disabled) {
   background: var(--akzent);
-  color: var(--weiss);
+  color: var(--on-akzent, var(--weiss));
 }
 .cta--outline:disabled {
   opacity: 0.45;
@@ -3416,7 +3464,7 @@ footer {
 .deletion-form button {
   padding: 10px 18px;
   background: var(--akzent);
-  color: var(--weiss);
+  color: var(--on-akzent, var(--weiss));
   border: 1.5px solid var(--akzent);
   font-family: var(--font-display);
   font-weight: 700;
@@ -3464,7 +3512,7 @@ footer {
   font-size: 14px;
   letter-spacing: var(--ls-caps);
   text-transform: uppercase;
-  color: var(--weiss);
+  color: var(--on-akzent, var(--weiss));
   background: var(--akzent);
   padding: 6px 12px;
   margin-bottom: 18px;
@@ -3499,7 +3547,8 @@ footer {
   max-width: 72ch;
   padding: 22px 28px;
   border: 1.5px solid var(--akzent);
-  box-shadow: var(--shadow-md) var(--shadow-md) 0 var(--rot);
+  box-shadow: var(--elev-md, var(--shadow-md) var(--shadow-md) 0 var(--rot));
+  border-radius: var(--radius-card, 0);
   margin: 0 0 24px;
 }
 

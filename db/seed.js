@@ -1,4 +1,6 @@
 import { db, nowIso } from "./connection.js";
+import cfg from "../config/letter.config.js";
+import { regionLabels } from "../config/region.js";
 
 const VORNAMEN = [
   "Linnea","Jonas","Mahsa","Kerem","Sebastian","Anna-Lena","Mira","Tobias","Cem","Helena",
@@ -23,11 +25,14 @@ const KVS = [
   "Dortmund","Essen","Duisburg","Münster","Göttingen","Kassel","Tübingen","Konstanz",
 ];
 
+// Seed with the letter's fixed regions (e.g. Berlin Bezirke) when it has them.
+const REGIONS = regionLabels(cfg).options ?? KVS;
+
 function pick(arr) { return arr[Math.floor(Math.random() * arr.length)]; }
 
 function makeSigner(minutesAgo) {
   const name = pick(VORNAMEN) + " " + pick(NACHNAMEN);
-  const kv = Math.random() < 0.85 ? pick(KVS) : "";
+  const kv = Math.random() < 0.85 ? pick(REGIONS) : "";
   const email = name.toLowerCase().replace(/\s+/g, ".").replace(/[äöüß]/g, c => ({ ä: "ae", ö: "oe", ü: "ue", ß: "ss" }[c] || c)) + "+" + Date.now() + Math.random().toString(36).slice(2, 6) + "@demo.local";
   const createdAt = new Date(Date.now() - minutesAgo * 60 * 1000);
   return { name, email, kv, createdAt };

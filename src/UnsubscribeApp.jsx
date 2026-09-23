@@ -1,5 +1,8 @@
 import { useEffect, useMemo, useState } from "react";
 import cfg from "../config/letter.config.js";
+import { regionLabels } from "../config/region.js";
+
+const { options: kvOptions, name: kvName } = regionLabels(cfg);
 import { resolvePrivacy } from "../config/privacy.js";
 
 const { settingsLinkDays } = resolvePrivacy(cfg);
@@ -95,7 +98,7 @@ export default function UnsubscribeApp() {
       errors.name = "Bitte kürze den Namen auf maximal 100 Zeichen.";
     }
     if (values.kv.length > 80) {
-      errors.kv = "Bitte kürze den Kreisverband auf maximal 80 Zeichen.";
+      errors.kv = `Bitte kürze den ${kvName} auf maximal 80 Zeichen.`;
     }
     if (values.occupation.length > 80) {
       errors.occupation = "Bitte kürze den Beruf auf maximal 80 Zeichen.";
@@ -239,7 +242,8 @@ export default function UnsubscribeApp() {
                 {d.editable === false && (
                   <p className="sub2">
                     Wir haben dir seit mehr als {settingsLinkDays} Tagen keine
-                    E-Mail mit diesem Link geschickt. Abmelden kannst du dich weiterhin. Um deine Angaben zu ändern oder deine
+                    E-Mail mit diesem Link geschickt. Abmelden kannst du dich
+                    weiterhin. Um deine Angaben zu ändern oder deine
                     Unterschrift zu löschen, nutze den Link aus einer neueren
                     E-Mail oder das Löschformular in der Datenschutzerklärung.
                   </p>
@@ -288,19 +292,38 @@ export default function UnsubscribeApp() {
 
                     <div className="field">
                       <label htmlFor="edit-kv">
-                        Kreisverband <span className="opt"> optional</span>
+                        {kvName} <span className="opt"> optional</span>
                       </label>
-                      <input
-                        id="edit-kv"
-                        type="text"
-                        value={form.kv}
-                        maxLength={80}
-                        onChange={(e) =>
-                          setForm((f) => ({ ...f, kv: e.target.value }))
-                        }
-                        aria-invalid={Boolean(fieldErrors.kv)}
-                        aria-describedby={fieldErrors.kv ? "err-kv" : undefined}
-                      />
+                      {kvOptions ? (
+                        <select
+                          id="edit-kv"
+                          value={form.kv}
+                          onChange={(e) =>
+                            setForm((f) => ({ ...f, kv: e.target.value }))
+                          }
+                        >
+                          <option value="">–</option>
+                          {kvOptions.map((o) => (
+                            <option key={o} value={o}>
+                              {o}
+                            </option>
+                          ))}
+                        </select>
+                      ) : (
+                        <input
+                          id="edit-kv"
+                          type="text"
+                          value={form.kv}
+                          maxLength={80}
+                          onChange={(e) =>
+                            setForm((f) => ({ ...f, kv: e.target.value }))
+                          }
+                          aria-invalid={Boolean(fieldErrors.kv)}
+                          aria-describedby={
+                            fieldErrors.kv ? "err-kv" : undefined
+                          }
+                        />
+                      )}
                       {fieldErrors.kv && (
                         <p className="err" id="err-kv" role="alert">
                           {fieldErrors.kv}

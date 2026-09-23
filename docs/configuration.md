@@ -7,12 +7,12 @@ Everything specific to a campaign lives in `config/letters/<name>/`: `index.js` 
 | Key | What it controls |
 | --- | --- |
 | `brand` | `name`, `wordmark`, `lang`, `locale` |
-| `theme` | `colors` (palette → CSS variables), `fonts` (`display`/`body`), `style` (`shadowOffset`, `radius`, `borderWidth`) — drives the page, emails, and generated images |
+| `theme` | `colors` (palette → CSS variables), `fonts` (`display`/`body`), `style` (`shadowOffset`, `radius`, `borderWidth`, plus optional `shadow: "soft"` for blurred drop shadows instead of offset blocks, `cardRadius`, `buttonRadius`, `headlineMaxWidth`, `inputRadius`, `checkRadius`, `bannerRadius`, `bannerPadBottom`); optional colours `onAkzent`, `ctaBg`, `ctaFg`, `goalFill`, `ctaHoverBg`, `ctaHoverFg`, `heroBg`, `statBg` recolour the counter card, primary buttons, hero and stats — drives the page, emails, and generated images |
 | `meta` | `<head>`: title, description, canonical, OG/Twitter, favicon, JSON-LD `schemaAbout`, optional `analytics` `{src, websiteId, retentionMonths}` |
 | `privacy` | retention periods and link lifetimes, enforced by the server and quoted in the privacy policy — see [Data retention](operations.md#data-retention) |
 | `hero` | headline lines, CTA labels, counter/goal labels, seed `milestones` |
 | `nav` / `navCta` / `list` | nav items, top-bar CTA, signer-list heading |
-| `sign` | section heading, `criteria`, `privacyNote`, form copy, and `fields` (labels/placeholders for the two optional `kreisverband`/`occupation` columns) |
+| `sign` | section heading, `criteria`, `privacyNote`, form copy, and `fields` (labels/placeholders for the two optional `kreisverband`/`occupation` columns). `kreisverband` can be renamed and restricted with `options` (fixed list, shown as a dropdown and enforced server-side), `selectPlaceholder`, `pluralLabel`, `noneLabel` and `rowPrefix` |
 | `footer` / `legal` | footer blurb + contact; Impressum/Datenschutz responsible entity, address, contact, disclaimer |
 | `email` | `from`, `signoff`, `provider` (`resend`/`smtp`) + `smtp` connection details, `providerRetentionDays` (how long the provider keeps sent mail; quoted in the privacy policy), `pacing` (rate-limit delays), and the `templates` map (seeded into the DB, admin-editable) |
 | `pages` | copy for the server-rendered pages behind mail links (confirm, delete, Treffen); defaults in `server/pages.js` |

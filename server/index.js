@@ -269,7 +269,8 @@ async function getZoomConfig() {
         ? s.zoom_show_delegierter === "1"
         : Boolean(cfg.zoom?.form?.showDelegierter),
     // Meeting mode + in-person location, admin-editable over the letter config.
-    mode: (s.zoom_mode || cfg.zoom?.mode) === "inperson" ? "inperson" : "online",
+    mode:
+      (s.zoom_mode || cfg.zoom?.mode) === "inperson" ? "inperson" : "online",
     location: {
       name: s.zoom_location_name ?? cfg.zoom?.location?.name ?? "",
       address: s.zoom_location_address ?? cfg.zoom?.location?.address ?? "",
@@ -356,9 +357,8 @@ writeIfChanged(
 );
 
 const { default: homepage } = await import("../index.generated.html");
-const { default: unsubscribePage } = await import(
-  "../unsubscribe.generated.html"
-);
+const { default: unsubscribePage } =
+  await import("../unsubscribe.generated.html");
 const { default: admin } = await import("../admin.generated.html");
 
 const adminRoute = `/${ADMIN_PATH}`;
@@ -505,6 +505,15 @@ function bodyTooLarge(req) {
 // off, its endpoints 404 and its optional fields are neither stored nor served.
 const ZOOM_ENABLED = Boolean(cfg.features.zoomEvent);
 const KV_ENABLED = Boolean(cfg.features.kreisverbandField);
+const KV_OPTIONS = cfg.sign?.fields?.kreisverband?.options ?? null;
+
+// Clean a submitted region. With fixed options (e.g. Berlin Bezirke) anything
+// not on the list is dropped rather than stored as free text.
+function normalizeKv(raw) {
+  const kv = sanitize(raw || "").replace(/^KV\s*/i, "");
+  if (!KV_OPTIONS || !kv) return kv;
+  return KV_OPTIONS.find((o) => o.toLowerCase() === kv.toLowerCase()) ?? "";
+}
 const OCCUPATION_ENABLED = Boolean(cfg.features.occupationField);
 
 function featureOff() {
@@ -686,11 +695,17 @@ function isLinkWindowOpen(zc) {
 // or when `pending`, it says the link follows by email); for in-person meetings
 // it shows the location/address. Always appends the calendar button. `zc` is the
 // getZoomConfig() result.
-function buildMeetingInfo(zc, { pending = false, timingText = "vor dem Termin" } = {}) {
+function buildMeetingInfo(
+  zc,
+  { pending = false, timingText = "vor dem Termin" } = {},
+) {
   const calBtn = zoomCalendarButton(ZOOM_ICS_URL);
   if (zc?.mode === "inperson") {
     const loc = zc.location || {};
-    const where = [loc.name, loc.address].filter(Boolean).map(escapeHtml).join(", ");
+    const where = [loc.name, loc.address]
+      .filter(Boolean)
+      .map(escapeHtml)
+      .join(", ");
     const wherePart = where
       ? `<p>Wir treffen uns <strong>vor Ort</strong>: ${where}.</p>`
       : `<p>Den genauen Ort schicken wir dir rechtzeitig vor dem Termin per E-Mail.</p>`;
@@ -1066,7 +1081,9 @@ async function sendZoomReminderMails(cfg) {
     if (i + 100 < todo.length) await sleep(batchDelayMs);
   }
   const reached = await countDelivered(mailing);
-  console.log(`[zoom-mail] reminder done — ${reached}/${recipients.length} reached`);
+  console.log(
+    `[zoom-mail] reminder done — ${reached}/${recipients.length} reached`,
+  );
   if (failed > 0) throw new Error(`${failed} reminder chunk(s) failed`);
   return reached;
 }
@@ -1114,7 +1131,8 @@ async function treffenAnmelden(req, { commit }) {
     const zoomCfg = await getZoomConfig();
     // When the delegate field is off, ignore any ?delegiert=1 in the link so a
     // stale email button can't register someone as a delegate.
-    const delegiert = zoomCfg.showDelegierter && req.url.includes("delegiert=1");
+    const delegiert =
+      zoomCfg.showDelegierter && req.url.includes("delegiert=1");
     const signer = await getSignerForZoomInvite(token);
     if (!signer) return treffenLinkExpired();
 
@@ -1225,9 +1243,13 @@ async function runZoomMailingWorker() {
   try {
     const purged =
       (await purgePreviousTreffenRegistrations()) +
-      (await purgeZoomRegistrationsAfter(new Date(eventMs + TREFFEN_RETENTION_MS)));
+      (await purgeZoomRegistrationsAfter(
+        new Date(eventMs + TREFFEN_RETENTION_MS),
+      ));
     if (purged > 0) {
-      console.log(`[purge] deleted ${purged} Treffen registration(s) after the event`);
+      console.log(
+        `[purge] deleted ${purged} Treffen registration(s) after the event`,
+      );
     }
   } catch (err) {
     console.error("[purge] Treffen registrations:", err);
@@ -1580,9 +1602,7 @@ const server = Bun.serve({
           const body = await parseJsonBody(req);
           const name = sanitize(body.name);
           const email = sanitizeEmail(body.email);
-          const kv = KV_ENABLED
-            ? sanitize(body.kv || "").replace(/^KV\s*/i, "")
-            : "";
+          const kv = KV_ENABLED ? normalizeKv(body.kv) : "";
           const occupation = OCCUPATION_ENABLED
             ? sanitize(body.occupation || "")
             : "";
@@ -2061,9 +2081,7 @@ const server = Bun.serve({
 
           const body = await parseJsonBody(req);
           const name = sanitize(body.name || "");
-          const kv = KV_ENABLED
-            ? sanitize(body.kv || "").replace(/^KV\s*/i, "")
-            : "";
+          const kv = KV_ENABLED ? normalizeKv(body.kv) : "";
           const occupation = OCCUPATION_ENABLED
             ? sanitize(body.occupation || "")
             : "";
@@ -2191,7 +2209,10 @@ const server = Bun.serve({
               cfg: zoomCfg,
             });
           } catch (mailErr) {
-            console.error("[treffen-bestaetigen] confirmation email failed:", mailErr);
+            console.error(
+              "[treffen-bestaetigen] confirmation email failed:",
+              mailErr,
+            );
           }
           return htmlPage(
             heading(pages.treffenDone.heading) +
@@ -2230,10 +2251,7 @@ const server = Bun.serve({
         const u = new URL(req.url);
         const dest =
           u.origin +
-          u.pathname.replace(
-            "/api/zoom-anmelden/",
-            "/api/treffen-anmelden/",
-          ) +
+          u.pathname.replace("/api/zoom-anmelden/", "/api/treffen-anmelden/") +
           u.search;
         return Response.redirect(dest, 301);
       },
@@ -2563,7 +2581,11 @@ const server = Bun.serve({
           // Replacing the date of a Treffen that already took place: the current
           // registrations belong to that event and are still deleted
           // TREFFEN_RETENTION_MS after it, whatever the new date is.
-          if (eventChanged && prev.dateSet && prev.eventAt.getTime() <= Date.now()) {
+          if (
+            eventChanged &&
+            prev.dateSet &&
+            prev.eventAt.getTime() <= Date.now()
+          ) {
             await scheduleTreffenPurge(
               new Date(prev.eventAt.getTime() + TREFFEN_RETENTION_MS),
             );

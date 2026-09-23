@@ -11,6 +11,11 @@ import cfg from "../config/letter.config.js";
 import { resolvePrivacy } from "../config/privacy.js";
 import { LetterArticle, FaqContent } from "../config/content.jsx";
 import { ZoomForm } from "./ZoomForm";
+import { KV_NONE, regionLabels } from "../config/region.js";
+
+const region = regionLabels(cfg);
+const kvName = region.name;
+const kvSearchLabel = `Suche nach Name oder ${kvName}`;
 
 const MAP_VB = { x: -60, y: -10, w: 520, h: 520 };
 
@@ -175,7 +180,8 @@ function fetchSessionToken() {
 }
 
 function getApiToken() {
-  if (apiToken && Date.now() < apiTokenExpiresAt) return Promise.resolve(apiToken);
+  if (apiToken && Date.now() < apiTokenExpiresAt)
+    return Promise.resolve(apiToken);
   return fetchSessionToken();
 }
 
@@ -183,7 +189,10 @@ function getApiToken() {
 // (token expired, or the server restarted with a new secret).
 async function apiFetch(path, opts = {}) {
   const doFetch = (t) =>
-    fetch(path, { ...opts, headers: { ...(opts.headers || {}), "X-Api-Token": t } });
+    fetch(path, {
+      ...opts,
+      headers: { ...(opts.headers || {}), "X-Api-Token": t },
+    });
   let token;
   try {
     token = await getApiToken();
@@ -863,7 +872,7 @@ export default function App({ boot = null }) {
         {cfg.features.kreisverbandField && (
           <div className="stat">
             <div className="v">{stats.kvCount}</div>
-            <div className="k">Kreisverbände</div>
+            <div className="k">{region.plural}</div>
           </div>
         )}
       </div>
@@ -942,7 +951,7 @@ export default function App({ boot = null }) {
             }}
             aria-pressed={showKreisverband}
           >
-            Kreisverbände
+            {region.plural}
           </button>
         )}
         {cfg.features.occupationField && (
@@ -961,12 +970,12 @@ export default function App({ boot = null }) {
         {!showOccupations && !showKreisverband && !showMap && (
           <>
             <label htmlFor="signer-search" className="sr-only">
-              Suche nach Name oder Kreisverband
+              {kvSearchLabel}
             </label>
             <input
               id="signer-search"
               className="search"
-              placeholder="Suchen nach Name oder Kreisverband…"
+              placeholder={`${kvSearchLabel.replace(/^Suche/, "Suchen")}…`}
               value={search}
               onChange={(e) => setSearch(e.target.value)}
             />
@@ -988,12 +997,14 @@ export default function App({ boot = null }) {
         )
       ) : showKreisverband ? (
         kvGroups.length === 0 ? (
-          <div className="empty-state">Noch keine Kreisverbände.</div>
+          <div className="empty-state">Noch keine {region.plural}.</div>
         ) : (
           <div className="occupation-grid">
             {kvGroups.map((g) => (
               <div key={g.kreisverband} className="occupation-chip">
-                <span className="occupation-name">{g.kreisverband}</span>
+                <span className="occupation-name">
+                  {g.kreisverband === KV_NONE ? region.none : g.kreisverband}
+                </span>
                 <span className="occupation-count">{g.count}</span>
               </div>
             ))}
@@ -1181,7 +1192,8 @@ export default function App({ boot = null }) {
             className="cta topbar-cta"
             onClick={() => scrollTo(ctaToZoom ? "zoom" : "unterzeichnen")}
           >
-            {ctaToZoom ? ctaLabel : cfg.navCta} <span aria-hidden="true">→</span>
+            {ctaToZoom ? ctaLabel : cfg.navCta}{" "}
+            <span aria-hidden="true">→</span>
           </button>
         )}
         <button
@@ -1337,8 +1349,7 @@ export default function App({ boot = null }) {
                         </span>
                       </div>
                       <div className="meta">
-                        {cfg.hero.goalLabelPrefix}{" "}
-                        {ZIEL.toLocaleString(locale)}{" "}
+                        {cfg.hero.goalLabelPrefix} {ZIEL.toLocaleString(locale)}{" "}
                         {cfg.hero.goalMetaLabel}
                       </div>
                       <div
@@ -1633,7 +1644,7 @@ const SignerRow = memo(function SignerRow({
       <div className="info">
         <div className="name">{name}</div>
         <div className="kv">
-          {kreisverband ? "KV " + kreisverband : "Ohne Kreisverband"}
+          {kreisverband ? region.rowPrefix + kreisverband : region.none}
         </div>
       </div>
       <div className="time">vor {relTime(createdAt)}</div>
@@ -1792,54 +1803,71 @@ const SignForm = memo(function SignForm({
               {cfg.sign.fields.kreisverband.optionalLabel}
             </span>
           </label>
-          <input
-            id="sign-kv"
-            ref={kvInputRef}
-            type="text"
-            value={kv}
-            onChange={(e) => {
-              setKv(e.target.value);
-              setShowSuggest(true);
-              setKvActiveIndex(-1);
-            }}
-            onFocus={() => setShowSuggest(true)}
-            onBlur={() => {
-              setTimeout(() => {
-                setShowSuggest(false);
+          {region.options ? (
+            <select
+              id="sign-kv"
+              value={kv}
+              onChange={(e) => setKv(e.target.value)}
+            >
+              <option value="">{region.selectPlaceholder}</option>
+              {region.options.map((o) => (
+                <option key={o} value={o}>
+                  {o}
+                </option>
+              ))}
+            </select>
+          ) : (
+            <input
+              id="sign-kv"
+              ref={kvInputRef}
+              type="text"
+              value={kv}
+              onChange={(e) => {
+                setKv(e.target.value);
+                setShowSuggest(true);
                 setKvActiveIndex(-1);
-              }, 150);
-              setKv((v) => v.replace(/^KV\s*/i, ""));
-            }}
-            onKeyDown={(e) => {
-              if (!showSuggest || !kvMatches.length) return;
-              if (e.key === "ArrowDown") {
-                e.preventDefault();
-                setKvActiveIndex((i) => Math.min(i + 1, kvMatches.length - 1));
-              } else if (e.key === "ArrowUp") {
-                e.preventDefault();
-                setKvActiveIndex((i) => Math.max(i - 1, 0));
-              } else if (e.key === "Enter" && kvActiveIndex >= 0) {
-                e.preventDefault();
-                setKv(kvMatches[kvActiveIndex]);
-                setShowSuggest(false);
-                setKvActiveIndex(-1);
-              } else if (e.key === "Escape") {
-                setShowSuggest(false);
-                setKvActiveIndex(-1);
-                kvInputRef.current?.focus();
+              }}
+              onFocus={() => setShowSuggest(true)}
+              onBlur={() => {
+                setTimeout(() => {
+                  setShowSuggest(false);
+                  setKvActiveIndex(-1);
+                }, 150);
+                setKv((v) => v.replace(/^KV\s*/i, ""));
+              }}
+              onKeyDown={(e) => {
+                if (!showSuggest || !kvMatches.length) return;
+                if (e.key === "ArrowDown") {
+                  e.preventDefault();
+                  setKvActiveIndex((i) =>
+                    Math.min(i + 1, kvMatches.length - 1),
+                  );
+                } else if (e.key === "ArrowUp") {
+                  e.preventDefault();
+                  setKvActiveIndex((i) => Math.max(i - 1, 0));
+                } else if (e.key === "Enter" && kvActiveIndex >= 0) {
+                  e.preventDefault();
+                  setKv(kvMatches[kvActiveIndex]);
+                  setShowSuggest(false);
+                  setKvActiveIndex(-1);
+                } else if (e.key === "Escape") {
+                  setShowSuggest(false);
+                  setKvActiveIndex(-1);
+                  kvInputRef.current?.focus();
+                }
+              }}
+              placeholder={cfg.sign.fields.kreisverband.placeholder}
+              autoComplete="off"
+              role="combobox"
+              aria-expanded={showSuggest && kv && kvMatches.length > 0}
+              aria-autocomplete="list"
+              aria-controls="kv-listbox"
+              aria-activedescendant={
+                kvActiveIndex >= 0 ? `kv-option-${kvActiveIndex}` : undefined
               }
-            }}
-            placeholder={cfg.sign.fields.kreisverband.placeholder}
-            autoComplete="off"
-            role="combobox"
-            aria-expanded={showSuggest && kv && kvMatches.length > 0}
-            aria-autocomplete="list"
-            aria-controls="kv-listbox"
-            aria-activedescendant={
-              kvActiveIndex >= 0 ? `kv-option-${kvActiveIndex}` : undefined
-            }
-          />
-          {showSuggest && kv && kvMatches.length > 0 && (
+            />
+          )}
+          {!region.options && showSuggest && kv && kvMatches.length > 0 && (
             <div
               id="kv-listbox"
               role="listbox"
@@ -2115,7 +2143,7 @@ function KreisverbandMap({ kvGroups }) {
     let total = 0;
     for (const g of kvGroups) {
       total += g.count;
-      if (g.kreisverband === "Ohne Kreisverband") {
+      if (g.kreisverband === KV_NONE) {
         ohneCount = g.count;
         continue;
       }
@@ -2302,7 +2330,7 @@ function KreisverbandMap({ kvGroups }) {
           ))}
           {mapData.ohneCount > 0 && (
             <div className="occupation-chip">
-              <span className="occupation-name">Ohne Kreisverband</span>
+              <span className="occupation-name">{region.none}</span>
               <span className="occupation-count">{mapData.ohneCount}</span>
             </div>
           )}
@@ -2442,27 +2470,29 @@ function DatenschutzModal({ onClose }) {
           <p>
             <strong>b) Unterschriften</strong>
             <br />
-            Beim Mitzeichnen werden Name, E-Mail-Adresse sowie optionaler
-            Kreisverband und Beruf gespeichert. Rechtsgrundlage ist deine
-            ausdrückliche Einwilligung (Art. 6 Abs. 1 lit. a DS-GVO). Die Daten
-            werden <strong>
-              ausschließlich für diese Petition verwendet
-            </strong>{" "}
-            und – mit Ausnahme der in dieser Erklärung genannten Dienstleister
-            (siehe unten) – nicht an unbeteiligte Dritte weitergegeben oder für
-            andere Zwecke genutzt. Sie werden für die Dauer der Initiative
-            gespeichert und bei Beendigung der Kampagne vollständig gelöscht,
-            spätestens jedoch {privacy.signerRetentionYears} Jahre nach
-            Unterzeichnung (§ 195 BGB) oder auf frühere Anfrage. Nicht
-            bestätigte Eintragungen – bei denen der Bestätigungslink nicht
-            angeklickt wurde – werden automatisch gelöscht, sobald der{" "}
-            {privacy.confirmationLinkHours} Stunden gültige Bestätigungslink
-            abgelaufen ist.
+            Beim Mitzeichnen werden Name und E-Mail-Adresse
+            {[
+              cfg.features.kreisverbandField && kvName,
+              cfg.features.occupationField && "Beruf",
+            ].filter(Boolean).length > 0 &&
+              ` sowie optional ${[cfg.features.kreisverbandField && kvName, cfg.features.occupationField && "Beruf"].filter(Boolean).join(" und ")}`}{" "}
+            gespeichert. Rechtsgrundlage ist deine ausdrückliche Einwilligung
+            (Art. 6 Abs. 1 lit. a DS-GVO). Die Daten werden{" "}
+            <strong>ausschließlich für diese Petition verwendet</strong> und –
+            mit Ausnahme der in dieser Erklärung genannten Dienstleister (siehe
+            unten) – nicht an unbeteiligte Dritte weitergegeben oder für andere
+            Zwecke genutzt. Sie werden für die Dauer der Initiative gespeichert
+            und bei Beendigung der Kampagne vollständig gelöscht, spätestens
+            jedoch {privacy.signerRetentionYears} Jahre nach Unterzeichnung (§
+            195 BGB) oder auf frühere Anfrage. Nicht bestätigte Eintragungen –
+            bei denen der Bestätigungslink nicht angeklickt wurde – werden
+            automatisch gelöscht, sobald der {privacy.confirmationLinkHours}{" "}
+            Stunden gültige Bestätigungslink abgelaufen ist.
           </p>
           <p>
             Wenn du zustimmst, dass dein Name öffentlich angezeigt wird,
             erscheinen dein Name
-            {cfg.features.kreisverbandField && ", dein Kreisverband"}
+            {cfg.features.kreisverbandField && `, dein ${kvName}`}
             {cfg.features.stateResolution &&
               " und das daraus ermittelte Bundesland"}{" "}
             sowie das Datum der Unterzeichnung in der Liste auf dieser Website.
@@ -2487,8 +2517,9 @@ function DatenschutzModal({ onClose }) {
             . Deine Unterschrift bleibt davon unberührt. Über den Link in
             unseren E-Mails zu deiner Unterschrift und in Kampagnen-E-Mails
             kannst du außerdem deine Angaben ändern oder deine Unterschrift
-            löschen; dafür gilt er {privacy.settingsLinkDays} Tage ab der letzten
-            E-Mail, die ihn enthielt. Abmelden kannst du dich damit unbegrenzt.
+            löschen; dafür gilt er {privacy.settingsLinkDays} Tage ab der
+            letzten E-Mail, die ihn enthielt. Abmelden kannst du dich damit
+            unbegrenzt.
           </p>
           <p>
             Damit bei einer unterbrochenen Sendung niemand eine E-Mail doppelt
@@ -2508,11 +2539,11 @@ function DatenschutzModal({ onClose }) {
               Wenn du dich zum {cfg.zoom?.navLabel || "Treffen"} anmeldest,
               speichern wir deinen Namen, deine E-Mail-Adresse, optional deinen
               Kreisverband und gegebenenfalls die Angabe, ob du Delegierte*r
-              bist. Die Anmeldung wird erst wirksam, wenn du sie über den Link in
-              einer unserer E-Mails bestätigst; nicht bestätigte Anmeldungen
+              bist. Die Anmeldung wird erst wirksam, wenn du sie über den Link
+              in einer unserer E-Mails bestätigst; nicht bestätigte Anmeldungen
               löschen wir nach {privacy.confirmationLinkHours} Stunden. Wir
-              nutzen die Daten ausschließlich, um dir Informationen, Zugangsdaten
-              und eine Erinnerung zum Treffen zu schicken
+              nutzen die Daten ausschließlich, um dir Informationen,
+              Zugangsdaten und eine Erinnerung zum Treffen zu schicken
               {cfg.email?.provider === "resend" &&
                 " (Versand über Resend, siehe unten)"}
               . Rechtsgrundlage ist deine Einwilligung (Art. 6 Abs. 1 lit. a
@@ -2520,14 +2551,16 @@ function DatenschutzModal({ onClose }) {
               E-Mails widerrufen kannst. Die Anmeldungen werden{" "}
               {privacy.treffenRetentionDays} Tage nach dem Treffen gelöscht. Mit
               dem Link in den E-Mails zum Treffen kannst du, solange deine
-              Anmeldung besteht, deine Angaben ändern, dich abmelden oder alle zu
-              deiner E-Mail-Adresse gespeicherten Daten löschen. An Anbieter von
-              Videokonferenzen geben wir deine Daten nicht weiter.
+              Anmeldung besteht, deine Angaben ändern, dich abmelden oder alle
+              zu deiner E-Mail-Adresse gespeicherten Daten löschen. An Anbieter
+              von Videokonferenzen geben wir deine Daten nicht weiter.
             </p>
           )}
           {cfg.email?.provider === "resend" && (
             <p>
-              <strong>{sectionLetter("resend")}) E-Mail-Versand über Resend</strong>
+              <strong>
+                {sectionLetter("resend")}) E-Mail-Versand über Resend
+              </strong>
               <br />
               Für den Versand von E-Mails (Bestätigungs-, Lösch- und
               Kampagnen-E-Mails
@@ -2547,11 +2580,11 @@ function DatenschutzModal({ onClose }) {
               ).
               {cfg.email.providerRetentionDays &&
                 ` Resend speichert die versendeten E-Mails einschließlich Inhalt, Zustellstatus und Protokollen ${cfg.email.providerRetentionDays} Tage und löscht sie danach.`}{" "}
-              Die Verarbeitung erfolgt auf Servern innerhalb der EU. Soweit
-              es im Einzelfall dennoch zu einem Zugriff aus einem Drittland
-              (z. B. durch die US-Muttergesellschaft) kommen kann, ist dieser
-              durch geeignete Garantien abgesichert (Art. 44 ff. DS-GVO).
-              Weitere Informationen findest du in der{" "}
+              Die Verarbeitung erfolgt auf Servern innerhalb der EU. Soweit es
+              im Einzelfall dennoch zu einem Zugriff aus einem Drittland (z. B.
+              durch die US-Muttergesellschaft) kommen kann, ist dieser durch
+              geeignete Garantien abgesichert (Art. 44 ff. DS-GVO). Weitere
+              Informationen findest du in der{" "}
               <a
                 href="https://resend.com/legal/privacy-policy"
                 target="_blank"
@@ -2572,14 +2605,16 @@ function DatenschutzModal({ onClose }) {
           )}
           {cfg.features.stateResolution && (
             <p>
-              <strong>{sectionLetter("state")}) Ermittlung des Bundeslandes</strong>
+              <strong>
+                {sectionLetter("state")}) Ermittlung des Bundeslandes
+              </strong>
               <br />
-              Sofern du einen Kreisverband angibst, wird dieser zur Zuordnung des
-              Bundeslandes einmalig an den Dienst Nominatim der OpenStreetMap
-              Foundation (Server in der EU / im Vereinigten Königreich)
-              übermittelt. Dein Name und deine E-Mail-Adresse werden dabei nicht
-              übertragen. Rechtsgrundlage ist Art. 6 Abs. 1 lit. f DS-GVO
-              (berechtigtes Interesse an einer regionalen Auswertung).
+              Sofern du einen Kreisverband angibst, wird dieser zur Zuordnung
+              des Bundeslandes einmalig an den Dienst Nominatim der
+              OpenStreetMap Foundation (Server in der EU / im Vereinigten
+              Königreich) übermittelt. Dein Name und deine E-Mail-Adresse werden
+              dabei nicht übertragen. Rechtsgrundlage ist Art. 6 Abs. 1 lit. f
+              DS-GVO (berechtigtes Interesse an einer regionalen Auswertung).
             </p>
           )}
           {cfg.meta.analytics?.src && (
@@ -2614,17 +2649,16 @@ function DatenschutzModal({ onClose }) {
             Die Datenbank und ihre Sicherungskopien sind verschlüsselt
             gespeichert. Das schützt die Daten bei Verlust oder Diebstahl der
             Datenträger oder Sicherungskopien. Sicherungskopien werden stündlich
-            erstellt und nach {privacy.backupRetentionHours} Stunden
-            gelöscht. Gelöschte Daten – etwa
-            nach einer Löschanfrage oder einer abgelaufenen Bestätigung – können
-            bis dahin noch in Sicherungskopien enthalten sein. Sicherungskopien
-            werden ausschließlich zur Wiederherstellung nach einem technischen
-            Ausfall verwendet. Damit eine Wiederherstellung gelöschte Daten nicht
-            zurückbringt, vermerken wir Löschungen, Abmeldungen und das Ausblenden
-            deines Namens aus der öffentlichen Liste für{" "}
-            {privacy.erasureLogDays} Tage – nur als nicht umkehrbarer Prüfwert
-            deiner E-Mail-Adresse, nicht die Adresse selbst – und wenden sie nach
-            einer Wiederherstellung erneut an.
+            erstellt und nach {privacy.backupRetentionHours} Stunden gelöscht.
+            Gelöschte Daten – etwa nach einer Löschanfrage oder einer
+            abgelaufenen Bestätigung – können bis dahin noch in Sicherungskopien
+            enthalten sein. Sicherungskopien werden ausschließlich zur
+            Wiederherstellung nach einem technischen Ausfall verwendet. Damit
+            eine Wiederherstellung gelöschte Daten nicht zurückbringt, vermerken
+            wir Löschungen, Abmeldungen und das Ausblenden deines Namens aus der
+            öffentlichen Liste für {privacy.erasureLogDays} Tage – nur als nicht
+            umkehrbarer Prüfwert deiner E-Mail-Adresse, nicht die Adresse selbst
+            – und wenden sie nach einer Wiederherstellung erneut an.
           </p>
 
           <h5>3. Deine Rechte</h5>

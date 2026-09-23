@@ -1,4 +1,6 @@
 import { useCallback, useEffect, useState } from "react";
+import cfg from "../config/letter.config.js";
+import { regionLabels } from "../config/region.js";
 import { DayPicker } from "react-day-picker";
 import { format, parse, isValid } from "date-fns";
 import { de } from "date-fns/locale";
@@ -14,6 +16,11 @@ import {
   markInputRule,
   markPasteRule,
 } from "@tiptap/core";
+
+const region = regionLabels(cfg);
+// Bundesland filter, column and card only make sense with state resolution.
+const STATES_ON = Boolean(cfg.features?.stateResolution);
+const OCCUPATION_ON = Boolean(cfg.features?.occupationField);
 
 const TOKEN_KEY = "gehaltsdeckel_admin_token";
 const AUDIENCE_LABELS = {
@@ -1225,7 +1232,9 @@ export default function AdminApp() {
                   <option value="email_not_zoom">Newsletter ohne Zoom</option>
                   <option value="zoom">Zoom-Anmelder (alle)</option>
                   {zoomShowDelegierter && (
-                    <option value="zoom_delegates">Nur Delegierte (Zoom)</option>
+                    <option value="zoom_delegates">
+                      Nur Delegierte (Zoom)
+                    </option>
                   )}
                 </select>
               </div>
@@ -1400,29 +1409,31 @@ export default function AdminApp() {
               <div className="admin-card-title">Filter</div>
               <div className="signer-filter-bar">
                 <div className="field">
-                  <label>Suche (Name, E-Mail, Kreisverband)</label>
+                  <label>Suche (Name, E-Mail, {region.name})</label>
                   <input
                     value={signerSearch}
                     onChange={(e) => setSignerSearch(e.target.value)}
                     placeholder="Suchen…"
                   />
                 </div>
+                {STATES_ON && (
+                  <div className="field">
+                    <label>Bundesland</label>
+                    <select
+                      value={signerStateFilter}
+                      onChange={(e) => setSignerStateFilter(e.target.value)}
+                    >
+                      <option value="">Alle</option>
+                      {signerFilterOpts.states.map((s) => (
+                        <option key={s.state} value={s.state}>
+                          {s.state} ({s.count})
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                )}
                 <div className="field">
-                  <label>Bundesland</label>
-                  <select
-                    value={signerStateFilter}
-                    onChange={(e) => setSignerStateFilter(e.target.value)}
-                  >
-                    <option value="">Alle</option>
-                    {signerFilterOpts.states.map((s) => (
-                      <option key={s.state} value={s.state}>
-                        {s.state} ({s.count})
-                      </option>
-                    ))}
-                  </select>
-                </div>
-                <div className="field">
-                  <label>Kreisverband</label>
+                  <label>{region.name}</label>
                   <select
                     value={signerKvFilter}
                     onChange={(e) => setSignerKvFilter(e.target.value)}
@@ -1506,14 +1517,16 @@ export default function AdminApp() {
                                 selectedSignerIds.has(r.id),
                               )
                             }
-                            onChange={(e) => toggleCurrentPage(e.target.checked)}
+                            onChange={(e) =>
+                              toggleCurrentPage(e.target.checked)
+                            }
                           />
                         </th>
                         <th>Name</th>
                         <th>E-Mail</th>
-                        <th>Kreisverband</th>
-                        <th>Bundesland</th>
-                        <th>Tätigkeit</th>
+                        <th>{region.name}</th>
+                        {STATES_ON && <th>Bundesland</th>}
+                        {OCCUPATION_ON && <th>Tätigkeit</th>}
                         <th>Unterschrieben</th>
                       </tr>
                     </thead>
@@ -1537,8 +1550,8 @@ export default function AdminApp() {
                           <td>{r.name}</td>
                           <td>{r.email}</td>
                           <td>{r.kreisverband || "—"}</td>
-                          <td>{r.state || "—"}</td>
-                          <td>{r.occupation || "—"}</td>
+                          {STATES_ON && <td>{r.state || "—"}</td>}
+                          {OCCUPATION_ON && <td>{r.occupation || "—"}</td>}
                           <td>
                             {new Date(r.created_at).toLocaleDateString("de-DE")}
                           </td>
@@ -1998,7 +2011,7 @@ export default function AdminApp() {
                   <thead>
                     <tr>
                       <th>Name</th>
-                      <th>Kreisverband</th>
+                      <th>{region.name}</th>
                       {zoomShowDelegierter && <th>Delegierte*r</th>}
                       <th>E-Mail</th>
                       <th>Angemeldet</th>
@@ -2050,8 +2063,9 @@ export default function AdminApp() {
             >
               <div className="admin-card-title">Meilensteine (Ziel)</div>
               <p className="admin-muted" style={{ marginBottom: 8 }}>
-                Kommagetrennte Zielmarken für den Fortschrittsbalken. Die nächste
-                Marke oberhalb der aktuellen Unterschriftenzahl ist das Ziel.
+                Kommagetrennte Zielmarken für den Fortschrittsbalken. Die
+                nächste Marke oberhalb der aktuellen Unterschriftenzahl ist das
+                Ziel.
               </p>
               <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
                 <input
@@ -2077,205 +2091,210 @@ export default function AdminApp() {
                 )}
             </form>
 
-            <div className="admin-card" style={{ gridColumn: "1 / -1" }}>
-              <div className="admin-card-title">Bundesland-Zuordnung</div>
-              {stateResolution && (
-                <div className="state-resolution-stats">
-                  <p>
-                    <strong>{stateResolution.resolvedKvs}</strong> Kreisverbände
-                    zugeordnet, <strong>{stateResolution.unresolvedKvs}</strong>{" "}
-                    offen
-                  </p>
-                  <p>
-                    <strong>{stateResolution.resolvedSigners}</strong>{" "}
-                    Mitzeichner*innen mit Bundesland,{" "}
-                    <strong>{stateResolution.unresolvedSigners}</strong> ohne
-                  </p>
-                  {stateResolution.queueLength > 0 && (
-                    <p className="admin-muted">
-                      Warteschlange: {stateResolution.queueLength} ausstehend
+            {STATES_ON && (
+              <div className="admin-card" style={{ gridColumn: "1 / -1" }}>
+                <div className="admin-card-title">Bundesland-Zuordnung</div>
+                {stateResolution && (
+                  <div className="state-resolution-stats">
+                    <p>
+                      <strong>{stateResolution.resolvedKvs}</strong>{" "}
+                      {region.plural}
+                      zugeordnet,{" "}
+                      <strong>{stateResolution.unresolvedKvs}</strong> offen
                     </p>
-                  )}
-                </div>
-              )}
-              {unresolvedKvs.length > 0 && (
-                <div style={{ marginTop: 12 }}>
-                  <p className="admin-muted" style={{ marginBottom: 8 }}>
-                    Offene Kreisverbände:
-                  </p>
-                  <div
-                    style={{
-                      maxHeight: 300,
-                      overflowY: "auto",
-                      fontSize: 13,
-                      display: "flex",
-                      flexDirection: "column",
-                      gap: 6,
-                    }}
-                  >
-                    {unresolvedKvs.map((kv) => (
-                      <div
-                        key={kv.kreisverband}
-                        style={{
-                          display: "flex",
-                          alignItems: "center",
-                          gap: 8,
-                          flexWrap: "wrap",
-                        }}
-                      >
-                        <span style={{ minWidth: 180 }}>
-                          {kv.kreisverband}{" "}
-                          <span className="admin-muted">({kv.count})</span>
-                        </span>
-                        <select
-                          value={kvStateSelections[kv.kreisverband] || ""}
-                          onChange={(e) =>
-                            setKvStateSelections((prev) => ({
-                              ...prev,
-                              [kv.kreisverband]: e.target.value,
-                            }))
-                          }
-                          className="admin-compact-select"
-                        >
-                          <option value="">– Bundesland –</option>
-                          {GERMAN_STATES.map((s) => (
-                            <option key={s} value={s}>
-                              {s}
-                            </option>
-                          ))}
-                        </select>
-                        <button
-                          type="button"
-                          className="cta cta--outline admin-compact-btn"
-                          disabled={
-                            !kvStateSelections[kv.kreisverband] ||
-                            assigningKv === kv.kreisverband
-                          }
-                          onClick={async () => {
-                            setAssigningKv(kv.kreisverband);
-                            try {
-                              const res = await api(
-                                "/api/admin/assign-kv-state",
-                                {
-                                  method: "POST",
-                                  body: JSON.stringify({
-                                    kreisverband: kv.kreisverband,
-                                    state: kvStateSelections[kv.kreisverband],
-                                  }),
-                                },
-                              );
-                              if (res.ok) {
-                                setUnresolvedKvs((prev) =>
-                                  prev.filter(
-                                    (u) => u.kreisverband !== kv.kreisverband,
-                                  ),
-                                );
-                                setKvStateSelections((prev) => {
-                                  const next = { ...prev };
-                                  delete next[kv.kreisverband];
-                                  return next;
-                                });
-                                const statusRes = await api(
-                                  "/api/admin/state-resolution-status",
-                                );
-                                if (statusRes.ok)
-                                  setStateResolution(await statusRes.json());
-                              }
-                            } catch {
-                              /* ignore */
-                            }
-                            setAssigningKv(null);
+                    <p>
+                      <strong>{stateResolution.resolvedSigners}</strong>{" "}
+                      Mitzeichner*innen mit Bundesland,{" "}
+                      <strong>{stateResolution.unresolvedSigners}</strong> ohne
+                    </p>
+                    {stateResolution.queueLength > 0 && (
+                      <p className="admin-muted">
+                        Warteschlange: {stateResolution.queueLength} ausstehend
+                      </p>
+                    )}
+                  </div>
+                )}
+                {unresolvedKvs.length > 0 && (
+                  <div style={{ marginTop: 12 }}>
+                    <p className="admin-muted" style={{ marginBottom: 8 }}>
+                      Offene {region.plural}:
+                    </p>
+                    <div
+                      style={{
+                        maxHeight: 300,
+                        overflowY: "auto",
+                        fontSize: 13,
+                        display: "flex",
+                        flexDirection: "column",
+                        gap: 6,
+                      }}
+                    >
+                      {unresolvedKvs.map((kv) => (
+                        <div
+                          key={kv.kreisverband}
+                          style={{
+                            display: "flex",
+                            alignItems: "center",
+                            gap: 8,
+                            flexWrap: "wrap",
                           }}
                         >
-                          {assigningKv === kv.kreisverband ? "…" : "Zuordnen"}
-                        </button>
-                      </div>
-                    ))}
+                          <span style={{ minWidth: 180 }}>
+                            {kv.kreisverband}{" "}
+                            <span className="admin-muted">({kv.count})</span>
+                          </span>
+                          <select
+                            value={kvStateSelections[kv.kreisverband] || ""}
+                            onChange={(e) =>
+                              setKvStateSelections((prev) => ({
+                                ...prev,
+                                [kv.kreisverband]: e.target.value,
+                              }))
+                            }
+                            className="admin-compact-select"
+                          >
+                            <option value="">– Bundesland –</option>
+                            {GERMAN_STATES.map((s) => (
+                              <option key={s} value={s}>
+                                {s}
+                              </option>
+                            ))}
+                          </select>
+                          <button
+                            type="button"
+                            className="cta cta--outline admin-compact-btn"
+                            disabled={
+                              !kvStateSelections[kv.kreisverband] ||
+                              assigningKv === kv.kreisverband
+                            }
+                            onClick={async () => {
+                              setAssigningKv(kv.kreisverband);
+                              try {
+                                const res = await api(
+                                  "/api/admin/assign-kv-state",
+                                  {
+                                    method: "POST",
+                                    body: JSON.stringify({
+                                      kreisverband: kv.kreisverband,
+                                      state: kvStateSelections[kv.kreisverband],
+                                    }),
+                                  },
+                                );
+                                if (res.ok) {
+                                  setUnresolvedKvs((prev) =>
+                                    prev.filter(
+                                      (u) => u.kreisverband !== kv.kreisverband,
+                                    ),
+                                  );
+                                  setKvStateSelections((prev) => {
+                                    const next = { ...prev };
+                                    delete next[kv.kreisverband];
+                                    return next;
+                                  });
+                                  const statusRes = await api(
+                                    "/api/admin/state-resolution-status",
+                                  );
+                                  if (statusRes.ok)
+                                    setStateResolution(await statusRes.json());
+                                }
+                              } catch {
+                                /* ignore */
+                              }
+                              setAssigningKv(null);
+                            }}
+                          >
+                            {assigningKv === kv.kreisverband ? "…" : "Zuordnen"}
+                          </button>
+                        </div>
+                      ))}
+                    </div>
                   </div>
-                </div>
-              )}
-              <div className="admin-actions">
-                <button
-                  type="button"
-                  className="cta"
-                  disabled={resolving}
-                  onClick={async () => {
-                    setResolving(true);
-                    setResolveMessage("");
-                    try {
-                      const res = await api("/api/admin/resolve-states", {
-                        method: "POST",
-                      });
-                      if (res.ok) {
-                        const data = await res.json();
-                        setResolveMessage(
-                          data.enqueued > 0
-                            ? `${data.enqueued} Mitzeichner*innen zur Zuordnung eingereiht.`
-                            : "Keine unzugeordneten Mitzeichner*innen gefunden.",
-                        );
-                        const [statusRes, unresRes] = await Promise.all([
-                          api("/api/admin/state-resolution-status"),
-                          api("/api/admin/unresolved-kvs"),
-                        ]);
-                        if (statusRes.ok)
-                          setStateResolution(await statusRes.json());
-                        if (unresRes.ok)
-                          setUnresolvedKvs(await unresRes.json());
-                      } else {
+                )}
+                <div className="admin-actions">
+                  <button
+                    type="button"
+                    className="cta"
+                    disabled={resolving}
+                    onClick={async () => {
+                      setResolving(true);
+                      setResolveMessage("");
+                      try {
+                        const res = await api("/api/admin/resolve-states", {
+                          method: "POST",
+                        });
+                        if (res.ok) {
+                          const data = await res.json();
+                          setResolveMessage(
+                            data.enqueued > 0
+                              ? `${data.enqueued} Mitzeichner*innen zur Zuordnung eingereiht.`
+                              : "Keine unzugeordneten Mitzeichner*innen gefunden.",
+                          );
+                          const [statusRes, unresRes] = await Promise.all([
+                            api("/api/admin/state-resolution-status"),
+                            api("/api/admin/unresolved-kvs"),
+                          ]);
+                          if (statusRes.ok)
+                            setStateResolution(await statusRes.json());
+                          if (unresRes.ok)
+                            setUnresolvedKvs(await unresRes.json());
+                        } else {
+                          setResolveMessage("Fehler bei der Zuordnung.");
+                        }
+                      } catch {
                         setResolveMessage("Fehler bei der Zuordnung.");
                       }
-                    } catch {
-                      setResolveMessage("Fehler bei der Zuordnung.");
-                    }
-                    setResolving(false);
-                  }}
-                >
-                  {resolving ? "Wird gestartet…" : "Zuordnung starten"}
-                </button>
-                <button
-                  type="button"
-                  className="cta cta--outline"
-                  disabled={resolving}
-                  onClick={async () => {
-                    setResolving(true);
-                    setResolveMessage("");
-                    try {
-                      const res = await api("/api/admin/re-enqueue-all", {
-                        method: "POST",
-                      });
-                      if (res.ok) {
-                        const data = await res.json();
-                        setResolveMessage(
-                          `Cache geleert (${data.cacheCleared}), ${data.enqueued} zur Zuordnung eingereiht.`,
-                        );
-                        const [statusRes, unresRes] = await Promise.all([
-                          api("/api/admin/state-resolution-status"),
-                          api("/api/admin/unresolved-kvs"),
-                        ]);
-                        if (statusRes.ok)
-                          setStateResolution(await statusRes.json());
-                        if (unresRes.ok)
-                          setUnresolvedKvs(await unresRes.json());
-                      } else {
+                      setResolving(false);
+                    }}
+                  >
+                    {resolving ? "Wird gestartet…" : "Zuordnung starten"}
+                  </button>
+                  <button
+                    type="button"
+                    className="cta cta--outline"
+                    disabled={resolving}
+                    onClick={async () => {
+                      setResolving(true);
+                      setResolveMessage("");
+                      try {
+                        const res = await api("/api/admin/re-enqueue-all", {
+                          method: "POST",
+                        });
+                        if (res.ok) {
+                          const data = await res.json();
+                          setResolveMessage(
+                            `Cache geleert (${data.cacheCleared}), ${data.enqueued} zur Zuordnung eingereiht.`,
+                          );
+                          const [statusRes, unresRes] = await Promise.all([
+                            api("/api/admin/state-resolution-status"),
+                            api("/api/admin/unresolved-kvs"),
+                          ]);
+                          if (statusRes.ok)
+                            setStateResolution(await statusRes.json());
+                          if (unresRes.ok)
+                            setUnresolvedKvs(await unresRes.json());
+                        } else {
+                          setResolveMessage(
+                            "Fehler bei der erneuten Zuordnung.",
+                          );
+                        }
+                      } catch {
                         setResolveMessage("Fehler bei der erneuten Zuordnung.");
                       }
-                    } catch {
-                      setResolveMessage("Fehler bei der erneuten Zuordnung.");
-                    }
-                    setResolving(false);
-                  }}
-                >
-                  {resolving ? "Wird gestartet…" : "Alle erneut prüfen"}
-                </button>
+                      setResolving(false);
+                    }}
+                  >
+                    {resolving ? "Wird gestartet…" : "Alle erneut prüfen"}
+                  </button>
+                </div>
+                {resolveMessage && (
+                  <p className="admin-muted">{resolveMessage}</p>
+                )}
               </div>
-              {resolveMessage && (
-                <p className="admin-muted">{resolveMessage}</p>
-              )}
-            </div>
+            )}
             {outlierGroups.length > 0 && (
               <div className="admin-card" style={{ gridColumn: "1 / -1" }}>
                 <div className="admin-card-title">
-                  KV-Tippfehler (
+                  {region.name}-Tippfehler (
                   {outlierGroups.reduce((n, g) => n + g.outliers.length, 0)})
                 </div>
                 <div className="outlier-groups">
