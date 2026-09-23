@@ -162,12 +162,16 @@ export function InviteModal({ firstName, onClose }) {
   );
 }
 
-// result: { count } | { below } | { invalid: true }
+// result: { count } | { below } | { min, max } | { min } | { invalid: true }
 export function InviteStatsModal({ result, onClose }) {
   let text;
   if (result.invalid) text = T.statsInvalid;
   else if (result.below != null)
     text = fillInvite(T.statsBelow, { threshold: result.below });
+  else if (result.max != null)
+    text = fillInvite(T.statsRange, { min: result.min, max: result.max });
+  else if (result.min != null)
+    text = fillInvite(T.statsAtLeast, { min: result.min });
   else text = fillInvite(T.statsCount, { count: result.count });
   return (
     <InviteDialog title={T.statsHeading} onClose={onClose}>

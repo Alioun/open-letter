@@ -19,13 +19,21 @@ const DEFAULTS = {
   copiedLabel: "Kopiert",
   moreLabel: "Mehr …",
   statsHeading: "Deine Einladungen",
-  // "{count}" people signed via the link; below the threshold the page says
-  // statsBelow instead, so the count can't reveal that one particular person
-  // signed.
+  // How exact the private stats page is. Every step the inviter can see is a
+  // chance to tell that one particular person signed, so coarser is safer:
+  //   "ranges"    — "{min}–{max}" between the statsRanges bounds (default)
+  //   "threshold" — "fewer than {threshold}", then the exact number
+  //   "exact"     — always the exact number
+  statsMode: "ranges",
+  // Lower bounds of the ranges (ascending). Below the first: statsBelow; from
+  // the last on: statsAtLeast.
+  statsRanges: [3, 5, 10, 25, 50, 100, 250, 500, 1000],
+  statsThreshold: 3,
   statsCount: "{count} Menschen haben über deinen Link unterschrieben.",
   statsBelow: "Weniger als {threshold} Menschen haben bisher über deinen Link unterschrieben.",
+  statsRange: "{min} bis {max} Menschen haben über deinen Link unterschrieben.",
+  statsAtLeast: "Mindestens {min} Menschen haben über deinen Link unterschrieben.",
   statsInvalid: "Dieser Statistik-Link ist ungültig oder wurde durch einen neueren ersetzt.",
-  statsThreshold: 3,
 };
 
 export function resolveInvite(cfg) {
@@ -40,7 +48,23 @@ export function fillInvite(text, values) {
   );
 }
 
-// What the stats page may show: the exact count only from the threshold up.
-export function thresholdCount(count, threshold) {
-  return count >= threshold ? { count } : { below: threshold };
+// What the stats page may show for `count`, per the letter's statsMode:
+// { count } | { below } | { min, max } | { min } (at least).
+export function statsDisplay(count, invite) {
+  const mode = invite.statsMode;
+  if (mode === "exact") return { count };
+  if (mode === "threshold") {
+    return count >= invite.statsThreshold
+      ? { count }
+      : { below: invite.statsThreshold };
+  }
+  const bounds = [...invite.statsRanges].sort((a, b) => a - b);
+  if (!bounds.length || count < bounds[0]) return { below: bounds[0] ?? 1 };
+  for (let i = bounds.length - 1; i >= 0; i--) {
+    if (count >= bounds[i]) {
+      return i === bounds.length - 1
+        ? { min: bounds[i] }
+        : { min: bounds[i], max: bounds[i + 1] - 1 };
+    }
+  }
 }

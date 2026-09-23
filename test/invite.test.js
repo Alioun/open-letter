@@ -3,7 +3,7 @@ import cfg from "../config/letter.config.js";
 import { resetDb, db } from "./helpers.js";
 import * as q from "../server/db.js";
 import { prepareQueuedEmail } from "../server/queued-email.js";
-import { thresholdCount, fillInvite } from "../config/invite.js";
+import { statsDisplay, fillInvite, resolveInvite } from "../config/invite.js";
 
 beforeEach(resetDb);
 
@@ -113,10 +113,22 @@ describe("invite page and stats", () => {
     expect(await q.getInviteStats(s.inviteCode, second.token)).toEqual({ count: 0 });
   });
 
-  test("below the threshold only 'fewer than' is shown", () => {
-    expect(thresholdCount(0, 3)).toEqual({ below: 3 });
-    expect(thresholdCount(2, 3)).toEqual({ below: 3 });
-    expect(thresholdCount(3, 3)).toEqual({ count: 3 });
+  test("stats are shown as exact as the letter's statsMode allows", () => {
+    const at = (mode, extra = {}) => (n) =>
+      statsDisplay(n, { ...resolveInvite({}), statsMode: mode, ...extra });
+    const threshold = at("threshold");
+    expect(threshold(2)).toEqual({ below: 3 });
+    expect(threshold(3)).toEqual({ count: 3 });
+    expect(at("exact")(1)).toEqual({ count: 1 });
+
+    const ranges = at("ranges", { statsRanges: [3, 5, 10] });
+    expect(ranges(2)).toEqual({ below: 3 });
+    expect(ranges(3)).toEqual({ min: 3, max: 4 });
+    expect(ranges(9)).toEqual({ min: 5, max: 9 });
+    expect(ranges(10)).toEqual({ min: 10 });
+    expect(ranges(400)).toEqual({ min: 10 });
+    // Defaults to ranges.
+    expect(statsDisplay(7, resolveInvite({}))).toEqual({ min: 5, max: 9 });
   });
 
   test("fillInvite leaves unknown placeholders alone", () => {

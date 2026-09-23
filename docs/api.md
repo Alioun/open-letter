@@ -19,7 +19,7 @@ under `/api/admin/*` behind the admin login and is not listed here.
 | `GET`  | `/api/confirm/:token`             | Email confirmation link — verifies + redirects           |
 | `GET`  | `/i/:code`                        | Invite page (no analytics); `#s=<token>` shows private stats |
 | `GET`  | `/api/invite/:code`               | `{firstName\|null}` for an invite link; 30/15 min per IP  |
-| `POST` | `/api/invite-stats`               | `{code, token}` → `{count}` or `{below}`; 20/15 min per IP |
+| `POST` | `/api/invite-stats`               | `{code, token}` → `{count}`, `{below}`, `{min, max}` or `{min}` per `invite.statsMode`; 20/15 min per IP |
 | `POST` | `/api/request-deletion`           | Request a signature-deletion link by email               |
 | `GET`  | `/api/delete/:token`              | Delete a signature via a deletion-link token             |
 | `GET`  | `/api/unsubscribe/:token`         | Newsletter unsubscribe state                             |

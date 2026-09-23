@@ -6,7 +6,7 @@ import { SignJWT, jwtVerify } from "jose";
 import cfg, { LETTER_NAME } from "../config/letter.config.js";
 import { regionLabels } from "../config/region.js";
 import { resolvePrivacy, retentionCutoff } from "../config/privacy.js";
-import { resolveInvite, thresholdCount } from "../config/invite.js";
+import { resolveInvite, statsDisplay } from "../config/invite.js";
 import {
   renderIndexHtml,
   renderUnsubscribeHtml,
@@ -1554,7 +1554,7 @@ const server = Bun.serve({
           const stats = await getInviteStats(body.code, body.token);
           if (!stats) return json({ error: "Not found" }, 404);
           return json(
-            thresholdCount(stats.count, resolveInvite(cfg).statsThreshold),
+            statsDisplay(stats.count, resolveInvite(cfg)),
             200,
             { "Cache-Control": "no-store" },
           );

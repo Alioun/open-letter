@@ -2480,6 +2480,21 @@ function sectionLetter(id) {
   return String.fromCharCode("d".charCodeAt(0) + order.indexOf(id));
 }
 
+// How exact the invite stats are, and what that lets an inviter infer.
+function inviteStatsPrivacy(invite) {
+  const risk =
+    "lässt sich an einer Änderung erkennen, ob eine bestimmte Person unterschrieben hat – etwa wenn der Link zuletzt nur an diese Person ging.";
+  if (invite.statsMode === "exact") {
+    return `Der Statistik-Link zeigt die genaue Zahl. Daran ${risk}`;
+  }
+  if (invite.statsMode === "threshold") {
+    const t = invite.statsThreshold;
+    return `Solange die Anzahl unter ${t} liegt, zeigt der Statistik-Link keine genaue Zahl, danach die genaue. Liegt sie bereits bei ${t - 1} oder mehr, ${risk}`;
+  }
+  const bounds = [...invite.statsRanges].sort((a, b) => a - b);
+  return `Der Statistik-Link zeigt keine genaue Zahl, sondern nur einen Bereich (Grenzen: ${bounds.join(", ")}). Nur wenn die Anzahl gerade eine dieser Grenzen erreicht, ${risk}`;
+}
+
 function DatenschutzModal({ onClose }) {
   const trapRef = useFocusTrap(true);
   const [deletionEmail, setDeletionEmail] = useState("");
@@ -2697,13 +2712,8 @@ function DatenschutzModal({ onClose }) {
               Unterschriften, die über deinen Link bestätigt wurden. Wer über
               deinen Link unterschrieben hat, speichern wir nicht: Der Code der
               Einladung wird bei einer Unterschrift nur bis zu ihrer Bestätigung
-              aufbewahrt und dann gelöscht; nur die Anzahl steigt. Solange die
-              Anzahl unter {resolveInvite(cfg).statsThreshold} liegt, zeigt der
-              Statistik-Link keine genaue Zahl. Ab dann ist die Zahl genau:
-              Liegt sie bereits bei {resolveInvite(cfg).statsThreshold - 1}{" "}
-              oder mehr, lässt sich an einer Änderung erkennen, ob eine
-              bestimmte Person unterschrieben hat – etwa wenn der Link danach
-              nur an diese Person ging. Dein Vorname
+              aufbewahrt und dann gelöscht; nur die Anzahl steigt.{" "}
+              {inviteStatsPrivacy(resolveInvite(cfg))} Dein Vorname
               erscheint auf deinem Einladungslink nur, wenn du das beim
               Unterschreiben ausdrücklich ausgewählt hast – wer den Link
               öffnet, erfährt dann, dass du den Brief unterschrieben hast.

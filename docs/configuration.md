@@ -17,7 +17,7 @@ Everything specific to a campaign lives in `config/letters/<name>/`: `index.js` 
 | `email` | `from`, `signoff`, `provider` (`resend`/`smtp`) + `smtp` connection details, `providerRetentionDays` (how long the provider keeps sent mail; quoted in the privacy policy), `pacing` (rate-limit delays), and the `templates` map (seeded into the DB, admin-editable) |
 | `pages` | copy for the server-rendered pages behind mail links (confirm, delete, Treffen); defaults in `server/pages.js` |
 | `features` | `kreisverbandField`, `occupationField`, `germanyMap`, `stateResolution`, `zoomEvent`, `inviteLinks` — toggle the optional modules |
-| `invite` | invite-link texts and `statsThreshold` (only read when `features.inviteLinks`); omitted keys use the defaults in `config/invite.js`. Placeholders: `{firstName}`, `{title}`, `{url}` |
+| `invite` | invite-link texts and how exact the private stats are: `statsMode` (`"ranges"` default, `"threshold"`, `"exact"`), `statsRanges`, `statsThreshold` (only read when `features.inviteLinks`); omitted keys use the defaults in `config/invite.js`. Placeholders: `{firstName}`, `{title}`, `{url}` |
 | `zoom` | event label/date/duration (only read when `features.zoomEvent`) |
 
 

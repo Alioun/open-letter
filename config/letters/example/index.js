@@ -269,6 +269,10 @@ export default {
     statsHeading: "Your invites",
     statsCount: "{count} people signed through your link.",
     statsBelow: "Fewer than {threshold} people have signed through your link so far.",
+    statsRange: "{min} to {max} people signed through your link.",
+    statsAtLeast: "At least {min} people signed through your link.",
+    // "ranges" (default), "threshold" or "exact"; see config/invite.js.
+    statsMode: "ranges",
     statsInvalid: "This stats link is invalid or was replaced by a newer one.",
     statsThreshold: 3,
   },
