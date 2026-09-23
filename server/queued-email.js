@@ -12,6 +12,7 @@ import {
   getZoomRegistrationForMail,
   issueUnsubscribeToken,
   issueZoomUnsubscribeToken,
+  issueInviteStatsToken,
 } from "./db.js";
 import { buildUnsubscribeHeaders } from "./email.js";
 
@@ -38,6 +39,14 @@ async function unsubscribeArgs(baseUrl, { signerId, email }) {
     headers: buildUnsubscribeHeaders(optOut),
     unsubscribeUrl: `${baseUrl}/abmelden/${token}${query}`,
   };
+}
+
+// A fresh stats token, issued as the mail goes out: the job payload carries
+// only the signer id, and a retried job just issues another one.
+async function inviteArgs(signerId) {
+  const issued = await issueInviteStatsToken(signerId);
+  if (!issued) return {};
+  return { inviteCode: issued.inviteCode, statsToken: issued.token };
 }
 
 // Returns the arguments for the mail's send function, or null when the mail
@@ -99,6 +108,8 @@ export async function prepareQueuedEmail(payload) {
     if (signer.verified || !notExpired(signer.token_expires_at)) return null;
   } else if (kind === "already-signed") {
     if (!signer.verified) return null;
+  } else if (kind === "invite") {
+    if (!signer.verified || !signer.invite_code) return null;
   } else {
     throw new Error(`unknown email kind: ${kind}`);
   }
@@ -109,6 +120,7 @@ export async function prepareQueuedEmail(payload) {
     name: signer.name,
     baseUrl,
     ...(kind === "verification" && { token: signer.verification_token }),
+    ...(kind === "invite" && (await inviteArgs(signer.id))),
     ...(await unsubscribeArgs(baseUrl, { signerId: signer.id })),
   };
 }

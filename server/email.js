@@ -143,6 +143,8 @@ const URL_VARIABLES = new Set([
   "linkInfo",
   "zoomJaUrl",
   "zoomJaDelegiertUrl",
+  "inviteUrl",
+  "statsUrl",
 ]);
 
 export function interpolateTemplate(value, variables = {}) {
@@ -156,7 +158,7 @@ export function interpolateTemplate(value, variables = {}) {
     (_, key, inner) => (variables[key] ? inner : ""),
   );
   return sectioned.replace(
-    /\{\{\s*(name|firstName|confirmUrl|deleteUrl|signerCount|unsubscribeUrl|eventLabel|eventWhen|linkInfo|zoomJaUrl|zoomJaDelegiertUrl|linkHours)\s*\}\}/g,
+    /\{\{\s*(name|firstName|confirmUrl|deleteUrl|signerCount|unsubscribeUrl|eventLabel|eventWhen|linkInfo|zoomJaUrl|zoomJaDelegiertUrl|linkHours|inviteUrl|statsUrl)\s*\}\}/g,
     (_, key) => {
       const raw = String(variables[key] ?? "");
       return URL_VARIABLES.has(key) ? raw : escapeHtml(raw);
@@ -505,6 +507,39 @@ export async function sendVerificationEmail({
     confirmUrl,
     unsubscribeUrl,
   });
+
+  await sendRenderedEmail({
+    to,
+    subject: rendered.subject,
+    html: rendered.html,
+    headers,
+  });
+}
+
+// Sent once the signature is confirmed: the personal invite link plus the
+// private stats link. The stats token is only in this mail (see
+// issueInviteStatsToken), so it is never logged or stored in a job payload.
+export async function sendInviteEmail({
+  to,
+  name,
+  inviteCode,
+  statsToken,
+  baseUrl,
+  headers,
+  unsubscribeUrl,
+}) {
+  console.log(`[email] invite toDomain=${getEmailDomain(to)}`);
+  const inviteUrl = `${baseUrl}/i/${inviteCode}`;
+  const rendered = await renderTemplateBySlug("invite", {
+    name,
+    firstName: name.split(/\s/)[0],
+    inviteUrl,
+    // In the fragment, which browsers never send: the token stays out of
+    // server and proxy logs and Referer headers.
+    statsUrl: `${inviteUrl}#s=${statsToken}`,
+    unsubscribeUrl,
+  });
+  if (!rendered) throw new Error("invite template missing");
 
   await sendRenderedEmail({
     to,

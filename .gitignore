@@ -7,6 +7,7 @@ node_modules
 index.generated.html
 admin.generated.html
 unsubscribe.generated.html
+invite.generated.html
 
 # Encrypted SQLite database, WAL/SHM sidecars, backups
 data/

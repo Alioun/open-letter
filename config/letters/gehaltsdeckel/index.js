@@ -234,6 +234,18 @@ export default {
       <p>Mit solidarischen Grüßen<br>Initiative Gehaltsdeckel</p>
     `,
       },
+      invite: {
+        name: "Einladungslink nach Bestätigung",
+        subject: "Danke! Dein persönlicher Einladungslink — Gehaltsdeckel jetzt",
+        htmlBody: `
+      <p>Hallo {{firstName}},</p>
+      <p>deine Unterschrift ist bestätigt – danke!</p>
+      <p>Hier ist dein persönlicher Einladungslink. Teile ihn mit Menschen, die mitzeichnen könnten:<br><a href="{{inviteUrl}}">{{inviteUrl}}</a></p>
+      <p>Über deinen privaten Statistik-Link siehst du, wie viele über deine Einladung unterschrieben haben. Gib ihn nicht weiter:<br><a href="{{statsUrl}}">Meine Einladungen ansehen</a></p>
+      <p>Wer über deinen Link unterschreibt, erfahren wir nicht und speichern wir nicht – nur die Anzahl.</p>
+      <p>Mit solidarischen Grüßen<br>Initiative Gehaltsdeckel</p>
+    `,
+      },
       deletion: {
         name: "Loschung der Unterschrift",
         subject: "Deine Unterschrift löschen — Gehaltsdeckel jetzt",
@@ -349,7 +361,15 @@ export default {
   },
 
   // ---- Optional / domain-specific feature flags ------------------------------
+  // Invite link texts (only read when features.inviteLinks). Omitted keys use
+  // the defaults in config/invite.js. {firstName}, {title}, {url}.
+  invite: {},
+
   features: {
+    // Personal invite link after confirming, with share buttons, an invite
+    // mail and a private stats link (texts: `invite` block, config/invite.js).
+    // Off here: successMode removes the sign form.
+    inviteLinks: false,
     // The two optional signer fields (also see sign.fields above).
     kreisverbandField: true,
     occupationField: true,

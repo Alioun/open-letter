@@ -1635,6 +1635,77 @@ h1.headline .banner {
   outline-offset: 2px;
 }
 
+/* Personal invite link (features.inviteLinks), inside the success modal. */
+.invite-share {
+  margin-top: 22px;
+  padding-top: 18px;
+  border-top: 1px solid var(--akzent);
+  text-align: left;
+}
+
+.invite-share__heading {
+  font-family: var(--font-display);
+  font-weight: 700;
+  margin: 0 0 10px;
+}
+
+.invite-share__link {
+  display: flex;
+  gap: 8px;
+}
+
+.invite-share__link input {
+  flex: 1;
+  min-width: 0;
+  padding: 10px 12px;
+  border: 1.5px solid var(--akzent);
+  font: inherit;
+  background: var(--weiss);
+  color: var(--akzent);
+}
+
+.invite-share__link button,
+.invite-share__buttons a,
+.invite-share__buttons button {
+  padding: 10px 14px;
+  border: 1.5px solid var(--akzent);
+  background: var(--weiss);
+  color: var(--akzent);
+  font-family: var(--font-display);
+  font-weight: 700;
+  font-size: 14px;
+  text-decoration: none;
+  cursor: pointer;
+  white-space: nowrap;
+}
+
+.invite-share__link button:hover,
+.invite-share__buttons a:hover,
+.invite-share__buttons button:hover {
+  background: var(--akzent);
+  color: var(--weiss);
+}
+
+.invite-share__link button:focus-visible,
+.invite-share__buttons a:focus-visible,
+.invite-share__buttons button:focus-visible {
+  outline: 3px solid var(--rot);
+  outline-offset: 2px;
+}
+
+.invite-share__buttons {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 10px;
+}
+
+.invite-share__note {
+  font-size: 14px;
+  color: var(--grau);
+  margin: 12px 0 0;
+}
+
 .modal-body .resend-btn {
   border-radius: var(--radius-button, 0);
   width: 100%;

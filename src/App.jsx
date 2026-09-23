@@ -9,9 +9,22 @@ import {
 } from "react";
 import cfg from "../config/letter.config.js";
 import { resolvePrivacy } from "../config/privacy.js";
+import { resolveInvite } from "../config/invite.js";
 import { LetterArticle, FaqContent } from "../config/content.jsx";
 import { ZoomForm } from "./ZoomForm";
 import { KV_NONE, regionLabels } from "../config/region.js";
+import {
+  InviteShare,
+  InviteModal,
+  InviteStatsModal,
+  readInviteLocation,
+  rememberInviteRef,
+  takeInviteRef,
+  forgetInviteRef,
+  inviteOptInLabel,
+} from "./Invite";
+
+const INVITES = Boolean(cfg.features.inviteLinks);
 
 const region = regionLabels(cfg);
 const kvName = region.name;
@@ -240,6 +253,12 @@ export default function App({ boot = null }) {
   const [resendSent, setResendSent] = useState(false);
   const [resendError, setResendError] = useState(null);
   const [showSuccess, setShowSuccess] = useState(false);
+  // Own invite code, shown in the success modal after confirming.
+  const [ownInviteCode, setOwnInviteCode] = useState(null);
+  // Landing on someone's invite link: { firstName } for the modal.
+  const [invitedBy, setInvitedBy] = useState(null);
+  // Private stats link: { count } | { below } | { invalid }.
+  const [inviteStats, setInviteStats] = useState(null);
   const [submitError, setSubmitError] = useState(null);
   const [navOpen, setNavOpen] = useState(false);
   const [showImpressum, setShowImpressum] = useState(false);
@@ -410,6 +429,35 @@ export default function App({ boot = null }) {
     }, 10000);
     return () => clearInterval(interval);
   }, [filter, search, fetchStats]);
+
+  useEffect(() => {
+    if (!INVITES) return;
+    const invite = readInviteLocation();
+    if (!invite) return;
+    // Redirect target after confirming: the new signer's own link.
+    if (invite.confirmed) {
+      forgetInviteRef();
+      setOwnInviteCode(invite.code);
+      setShowSuccess(true);
+      return;
+    }
+    if (invite.statsToken) {
+      apiFetch("/api/invite-stats", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ code: invite.code, token: invite.statsToken }),
+      })
+        .then((res) => (res.ok ? res.json() : { invalid: true }))
+        .then(setInviteStats)
+        .catch(() => setInviteStats({ invalid: true }));
+      return;
+    }
+    rememberInviteRef(invite.code);
+    apiFetch(`/api/invite/${invite.code}`)
+      .then((res) => (res.ok ? res.json() : null))
+      .then((data) => data && setInvitedBy(data))
+      .catch(() => {});
+  }, []);
 
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
@@ -602,7 +650,10 @@ export default function App({ boot = null }) {
       const res = await apiFetch("/api/sign", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(data),
+        body: JSON.stringify({
+          ...data,
+          ...(INVITES && { ref: takeInviteRef() }),
+        }),
       });
       const result = await res.json();
       if (!res.ok) {
@@ -1554,6 +1605,7 @@ export default function App({ boot = null }) {
                 mit deinem Kreisverband - wir wollen vor dem nächsten Parteitag
                 bei {ZIEL} stehen.
               </p>
+              {ownInviteCode && <InviteShare code={ownInviteCode} />}
               <button
                 className="confirm-btn confirm-btn--accent"
                 onClick={() => {
@@ -1566,6 +1618,20 @@ export default function App({ boot = null }) {
             </div>
           </div>
         </div>
+      )}
+
+      {invitedBy && (
+        <InviteModal
+          firstName={invitedBy.firstName}
+          onClose={() => setInvitedBy(null)}
+        />
+      )}
+
+      {inviteStats && (
+        <InviteStatsModal
+          result={inviteStats}
+          onClose={() => setInviteStats(null)}
+        />
       )}
 
       {showDeleted && (
@@ -1664,6 +1730,7 @@ const SignForm = memo(function SignForm({
   const [occupation, setOccupation] = useState("");
   const [agree, setAgree] = useState(false);
   const [newsletter, setNewsletter] = useState(false);
+  const [inviteShowName, setInviteShowName] = useState(false);
   const [showSuggest, setShowSuggest] = useState(false);
   const [showOccSuggest, setShowOccSuggest] = useState(false);
   const [kvActiveIndex, setKvActiveIndex] = useState(-1);
@@ -1722,6 +1789,7 @@ const SignForm = memo(function SignForm({
       occupation: occupation.trim(),
       newsletter,
       agree,
+      ...(INVITES && { inviteShowName }),
     });
     setSubmitting(false);
     if (!ok) return;
@@ -1731,6 +1799,7 @@ const SignForm = memo(function SignForm({
     setOccupation("");
     setAgree(false);
     setNewsletter(false);
+    setInviteShowName(false);
     setErrors({});
   }
 
@@ -2009,6 +2078,18 @@ const SignForm = memo(function SignForm({
             jederzeit abbestellbar).
           </span>
         </label>
+        {INVITES && (
+          <label className="check">
+            <input
+              type="checkbox"
+              checked={inviteShowName}
+              onChange={(e) => setInviteShowName(e.target.checked)}
+            />
+            <span>
+              {inviteOptInLabel} <span className="opt">(optional)</span>
+            </span>
+          </label>
+        )}
       </div>
 
       <button type="submit" className="submit" disabled={submitting}>
@@ -2392,6 +2473,7 @@ function sectionLetter(id) {
   const order = [
     cfg.features.zoomEvent && "zoom",
     cfg.email?.provider === "resend" && "resend",
+    cfg.features.inviteLinks && "invite",
     cfg.features.stateResolution && "state",
     cfg.meta.analytics?.src && "analytics",
   ].filter(Boolean);
@@ -2601,6 +2683,38 @@ function DatenschutzModal({ onClose }) {
                 Liste der Unterauftragsverarbeiter
               </a>
               . Rechtsgrundlage ist Art. 6 Abs. 1 lit. a und lit. f DS-GVO.
+            </p>
+          )}
+          {cfg.features.inviteLinks && (
+            <p>
+              <strong>{sectionLetter("invite")}) Persönlicher Einladungslink</strong>
+              <br />
+              Nach der Bestätigung deiner Unterschrift erhältst du einen
+              persönlichen Einladungslink, den du teilen kannst, und per E-Mail
+              einen privaten Statistik-Link. Dafür speichern wir zu deiner
+              Unterschrift einen zufälligen Code, einen Prüfwert des
+              Statistik-Links (nicht den Link selbst) und die Anzahl der
+              Unterschriften, die über deinen Link bestätigt wurden. Wer über
+              deinen Link unterschrieben hat, speichern wir nicht: Der Code der
+              Einladung wird bei einer Unterschrift nur bis zu ihrer Bestätigung
+              aufbewahrt und dann gelöscht; nur die Anzahl steigt. Solange die
+              Anzahl unter {resolveInvite(cfg).statsThreshold} liegt, zeigt der
+              Statistik-Link keine genaue Zahl, damit du nicht erkennen kannst,
+              ob eine bestimmte Person unterschrieben hat. Dein Vorname
+              erscheint auf deinem Einladungslink nur, wenn du das beim
+              Unterschreiben ausdrücklich ausgewählt hast – wer den Link
+              öffnet, erfährt dann, dass du den Brief unterschrieben hast.
+              Rechtsgrundlage dafür ist deine ausdrückliche Einwilligung (Art. 6
+              Abs. 1 lit. a, Art. 9 Abs. 2 lit. a DS-GVO), die du jederzeit über
+              deine E-Mail-Einstellungen oder per E-Mail an{" "}
+              <a href={`mailto:${cfg.legal.contactEmail}`}>
+                {cfg.legal.contactEmail}
+              </a>{" "}
+              widerrufen kannst. Die Angaben werden mit deiner Unterschrift
+              gelöscht. Die Seiten der Einladungslinks werden nicht in der
+              Reichweitenmessung erfasst. Die Teilen-Buttons sind einfache
+              Links; erst wenn du einen anklickst, öffnet sich der jeweilige
+              Messenger.
             </p>
           )}
           {cfg.features.stateResolution && (

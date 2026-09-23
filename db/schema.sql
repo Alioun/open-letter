@@ -30,6 +30,17 @@ CREATE TABLE IF NOT EXISTS signers (
   deletion_token_expires_at     TEXT,
   unsubscribe_token             TEXT UNIQUE,
   unsubscribe_token_created_at  TEXT,
+  -- Personal invite link (features.inviteLinks). Set on confirmation, so only
+  -- verified signers have one. Only the stats token's SHA-256 is stored; the
+  -- token itself exists in the invite mail alone. invite_count is the one
+  -- aggregate kept about invitees: who signed through whose link isn't stored.
+  -- pending_ref holds the inviter's code on an unconfirmed row until confirm
+  -- (then NULL) and goes with the row when an unconfirmed sign-up is purged.
+  invite_code                   TEXT,
+  invite_stats_hash             TEXT,
+  invite_show_name              INTEGER NOT NULL DEFAULT 0,
+  invite_count                  INTEGER NOT NULL DEFAULT 0,
+  pending_ref                   TEXT,
   created_at                    TEXT DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ','now'))
 );
 

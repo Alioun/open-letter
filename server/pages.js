@@ -39,6 +39,7 @@ export const DEFAULT_PAGE_COPY = {
     nameLabel: "Name",
     publicLabel: "Name öffentlich anzeigen",
     newsletterLabel: "Newsletter",
+    inviteNameLabel: "Vorname auf deinem Einladungslink",
     yes: "ja",
     no: "nein",
     button: "Unterschrift bestätigen",

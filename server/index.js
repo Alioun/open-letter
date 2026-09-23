@@ -6,6 +6,7 @@ import { SignJWT, jwtVerify } from "jose";
 import cfg, { LETTER_NAME } from "../config/letter.config.js";
 import { regionLabels } from "../config/region.js";
 import { resolvePrivacy, retentionCutoff } from "../config/privacy.js";
+import { resolveInvite, thresholdCount } from "../config/invite.js";
 import {
   renderIndexHtml,
   renderUnsubscribeHtml,
@@ -38,6 +39,9 @@ import {
   setZoomSettings,
   confirmSigner,
   getPendingSignerByToken,
+  getInviteByCode,
+  getInviteStats,
+  isInviteCode,
   refreshVerificationToken,
   getSignerIdByEmail,
   createDeletionRequest,
@@ -124,6 +128,7 @@ import {
   interpolateTemplate,
   renderTemplateBySlug,
   sendAlreadySignedEmail,
+  sendInviteEmail,
   zoomCalendarButton,
   messageDelayMs,
   batchDelayMs,
@@ -351,6 +356,16 @@ writeIfChanged(
   "unsubscribe.generated.html",
   renderUnsubscribeHtml(indexTemplate, cfg, LETTER_NAME),
 );
+// /i/<code>: the normal page, minus analytics. The path carries the invite
+// code (and the stats link's fragment a token), which must not end up in
+// analytics as a per-person page view.
+writeIfChanged(
+  "invite.generated.html",
+  renderIndexHtml(indexTemplate, cfg, LETTER_NAME, {
+    analytics: false,
+    private: true,
+  }),
+);
 writeIfChanged(
   "admin.generated.html",
   readFileSync(new URL("../admin.template.html", import.meta.url), "utf8")
@@ -362,6 +377,7 @@ const { default: homepage } = await import("../index.generated.html");
 const { default: unsubscribePage } =
   await import("../unsubscribe.generated.html");
 const { default: admin } = await import("../admin.generated.html");
+const { default: invitePage } = await import("../invite.generated.html");
 
 const adminRoute = `/${ADMIN_PATH}`;
 const jwtSecret = new TextEncoder().encode(ADMIN_JWT_SECRET);
@@ -521,6 +537,7 @@ function normalizeKv(raw, keep = "") {
   return KV_OPTIONS.find(same) ?? (keep && same(keep) ? keep : "");
 }
 const OCCUPATION_ENABLED = Boolean(cfg.features.occupationField);
+const INVITES_ENABLED = Boolean(cfg.features.inviteLinks);
 
 function featureOff() {
   return new Response("Not found", { status: 404 });
@@ -1374,6 +1391,8 @@ const server = Bun.serve({
     "/": homepage,
     [adminRoute]: admin,
     "/abmelden/:token": unsubscribePage,
+    // Personal invite link: the normal page; the client shows the invite.
+    ...(INVITES_ENABLED && { "/i/:code": invitePage }),
 
     "/og.png": {
       async GET() {
@@ -1502,6 +1521,49 @@ const server = Bun.serve({
       },
     },
 
+    // What an invite link shows. Only the inviter's first name, and only when
+    // they opted in; the rate limit keeps codes from being enumerated.
+    "/api/invite/:code": {
+      async GET(req) {
+        if (!INVITES_ENABLED) return featureOff();
+        const blocked = await denyPublic(req, "invite-read", 30, 15 * 60 * 1000);
+        if (blocked) return blocked;
+        try {
+          const invite = await getInviteByCode(req.params.code);
+          if (!invite) return json({ error: "Not found" }, 404);
+          return json(invite, 200, { "Cache-Control": "no-store" });
+        } catch (err) {
+          console.error("GET /api/invite error:", err);
+          return json({ error: "Internal server error" }, 500);
+        }
+      },
+    },
+
+    // Private stats for an invite link. POST so the token stays out of URLs
+    // and logs; below the threshold only "fewer than N" is returned.
+    "/api/invite-stats": {
+      async POST(req) {
+        if (!INVITES_ENABLED) return featureOff();
+        const blocked = denyRate(req, "invite-stats", 20, 15 * 60 * 1000);
+        if (blocked) return blocked;
+        try {
+          if (bodyTooLarge(req))
+            return json({ error: "Payload too large" }, 413);
+          const body = await parseJsonBody(req);
+          const stats = await getInviteStats(body.code, body.token);
+          if (!stats) return json({ error: "Not found" }, 404);
+          return json(
+            thresholdCount(stats.count, resolveInvite(cfg).statsThreshold),
+            200,
+            { "Cache-Control": "no-store" },
+          );
+        } catch (err) {
+          console.error("POST /api/invite-stats error:", err);
+          return json({ error: "Internal server error" }, 500);
+        }
+      },
+    },
+
     "/api/stats": {
       async GET(req) {
         const blocked = await denyPublic(req, "public-read", 120, 60 * 1000);
@@ -1614,6 +1676,11 @@ const server = Bun.serve({
             : "";
           const newsletter = Boolean(body.newsletter);
           const showPublicly = body.agree === true;
+          // Unknown codes are dropped at confirm (nothing matches them); a
+          // malformed one isn't stored at all.
+          const inviteRef =
+            INVITES_ENABLED && isInviteCode(body.ref) ? body.ref : null;
+          const inviteShowName = INVITES_ENABLED && body.inviteShowName === true;
 
           if (name.length < 2) {
             return json(
@@ -1640,6 +1707,8 @@ const server = Bun.serve({
             showPublicly,
             token,
             expiresAt,
+            inviteRef,
+            inviteShowName,
           });
 
           const signerId = await getSignerIdByEmail(email);
@@ -1847,6 +1916,8 @@ const server = Bun.serve({
               `${escapeHtml(cfg.sign?.fields?.occupation?.label || "Beruf")}: ${escapeHtml(pending.occupation)}`,
             `${copy.publicLabel}: ${yesNo(pending.show_publicly)}`,
             `${copy.newsletterLabel}: ${yesNo(pending.newsletter)}`,
+            INVITES_ENABLED &&
+              `${copy.inviteNameLabel}: ${yesNo(pending.invite_show_name)}`,
           ].filter(Boolean);
           return htmlPage(
             heading(copy.heading) +
@@ -1868,6 +1939,19 @@ const server = Bun.serve({
           if (signer) {
             if (cfg.features.stateResolution && signer.kreisverband) {
               enqueueStateResolution(signer.id, signer.kreisverband);
+            }
+            if (INVITES_ENABLED && signer.inviteCode) {
+              await queueEmail("invite", {
+                signerId: signer.id,
+                baseUrl: getBaseUrl(req),
+              });
+              // The invite code isn't secret (it's what gets shared), but the
+              // invite page is the one without analytics. The stats token only
+              // goes out in the mail.
+              return Response.redirect(
+                `${getBaseUrl(req)}/i/${signer.inviteCode}?confirmed=1`,
+                303,
+              );
             }
             return Response.redirect(`${getBaseUrl(req)}/?confirmed=1`, 303);
           }
@@ -2112,6 +2196,9 @@ const server = Bun.serve({
             occupation,
             newsletter,
             showPublicly,
+            inviteShowName: INVITES_ENABLED
+              ? Boolean(body.inviteShowName)
+              : undefined,
           });
           await updateZoomByEmail(email, {
             name,
@@ -3024,6 +3111,8 @@ async function sendQueuedEmail(payload) {
       return await sendVerificationEmail(args);
     case "already-signed":
       return await sendAlreadySignedEmail(args);
+    case "invite":
+      return await sendInviteEmail(args);
     case "deletion":
       return await sendDeletionEmail(args);
     case "treffen-verification": {

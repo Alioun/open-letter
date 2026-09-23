@@ -20,6 +20,7 @@ import {
   NEWSLETTER_OPT_OUT,
   TREFFEN_OPT_OUT,
   HIDE_PUBLICLY,
+  HIDE_INVITE_NAME,
 } from "../db/erasure-log.js";
 import cfg from "../config/letter.config.js";
 import { resolvePrivacy } from "../config/privacy.js";
@@ -437,6 +438,8 @@ export async function insertSigner({
   showPublicly,
   token,
   expiresAt,
+  inviteRef = null,
+  inviteShowName = false,
 }) {
   // A pending (unconfirmed) sign-up is only replaced once its link expired.
   // Before that, a second request for the same address — which proves nothing
@@ -446,8 +449,8 @@ export async function insertSigner({
   const row = await db
     .query(
       `INSERT INTO signers /* public-neutral */
-         (name, email, kreisverband, occupation, newsletter, show_publicly, verification_token, token_expires_at)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+         (name, email, kreisverband, occupation, newsletter, show_publicly, verification_token, token_expires_at, pending_ref, invite_show_name)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
        ON CONFLICT (email) DO UPDATE
          SET name = excluded.name,
              kreisverband = excluded.kreisverband,
@@ -456,6 +459,8 @@ export async function insertSigner({
              show_publicly = excluded.show_publicly,
              verification_token = excluded.verification_token,
              token_expires_at = excluded.token_expires_at,
+             pending_ref = excluded.pending_ref,
+             invite_show_name = excluded.invite_show_name,
              created_at = strftime('%Y-%m-%dT%H:%M:%fZ','now')
          WHERE signers.verified = 0 AND signers.token_expires_at <= ?
        RETURNING id, verified`,
@@ -469,6 +474,8 @@ export async function insertSigner({
       B(showPublicly),
       token,
       iso(expiresAt),
+      inviteRef,
+      B(inviteShowName),
       nowIso(),
     );
   if (row) return { ok: true, alreadyVerified: false };
@@ -493,12 +500,12 @@ export async function getPendingSignerByToken(token) {
   return boolify(
     (await db
       .query(
-        `SELECT name, kreisverband, occupation, newsletter, show_publicly
+        `SELECT name, kreisverband, occupation, newsletter, show_publicly, invite_show_name
          FROM signers
          WHERE verification_token = ? AND verified = 0 AND token_expires_at > ?`,
       )
       .get(token, nowIso())) || null,
-    ["newsletter", "show_publicly"],
+    ["newsletter", "show_publicly", "invite_show_name"],
   );
 }
 
@@ -519,17 +526,103 @@ export async function refreshVerificationToken(email, token, expiresAt) {
   return row ? row.name : null;
 }
 
+// Crockford base32: no I, L, O or U, so a code read aloud or retyped survives.
+const INVITE_ALPHABET = "0123456789abcdefghjkmnpqrstvwxyz";
+export const INVITE_CODE_LENGTH = 8;
+
+// 8 characters = 40 random bits: enumerating codes to find signers' names
+// takes ~10^12 tries, against the 4-character version's 1.7M.
+export function generateInviteCode() {
+  const bytes = crypto.getRandomValues(new Uint8Array(INVITE_CODE_LENGTH));
+  return Array.from(bytes, (b) => INVITE_ALPHABET[b & 31]).join("");
+}
+
+export function isInviteCode(value) {
+  return (
+    typeof value === "string" &&
+    value.length === INVITE_CODE_LENGTH &&
+    [...value].every((c) => INVITE_ALPHABET.includes(c))
+  );
+}
+
+export function hashStatsToken(token) {
+  return new Bun.CryptoHasher("sha256").update(String(token)).digest("hex");
+}
+
 export async function confirmSigner(token) {
+  // The row's inviter is read first, since SQLite's RETURNING only sees the new
+  // values. The UPDATE is what claims the token, so only the request that
+  // confirms credits the inviter; pending_ref is cleared by it, leaving no link
+  // between the two people. (No transaction: the connection is shared with
+  // concurrent requests.)
+  const pending = await db
+    .query(`SELECT pending_ref FROM signers WHERE verification_token = ?`)
+    .get(token);
   const row = await db
     .query(
       `UPDATE signers
-       SET verified = 1, verification_token = NULL, token_expires_at = NULL
+       SET verified = 1, verification_token = NULL, token_expires_at = NULL,
+           invite_code = COALESCE(invite_code, ?), pending_ref = NULL
        WHERE verification_token = ? AND verified = 0 AND token_expires_at > ?
-       RETURNING id, kreisverband`,
+       RETURNING id, kreisverband, invite_code`,
     )
-    .get(token, nowIso());
+    .get(generateInviteCode(), token, nowIso());
   if (!row) return null;
-  return { id: row.id, kreisverband: row.kreisverband };
+  const ref = pending?.pending_ref;
+  if (ref && ref !== row.invite_code) {
+    await db
+      .query(
+        `UPDATE signers /* public-neutral */ SET invite_count = invite_count + 1
+         WHERE invite_code = ? AND verified = 1`,
+      )
+      .run(ref);
+  }
+  return {
+    id: row.id,
+    kreisverband: row.kreisverband,
+    inviteCode: row.invite_code,
+  };
+}
+
+// What an invite link shows: the inviter's first name when they opted in,
+// otherwise nothing personal. null for unknown or unconfirmed codes.
+export async function getInviteByCode(code) {
+  if (!isInviteCode(code)) return null;
+  const row = await db
+    .query(
+      `SELECT name, invite_show_name FROM signers
+       WHERE invite_code = ? AND verified = 1`,
+    )
+    .get(code);
+  if (!row) return null;
+  return {
+    firstName: row.invite_show_name ? row.name.split(/\s/)[0] : null,
+  };
+}
+
+// Issue a fresh stats token for the invite mail. Only its hash is stored, so a
+// re-sent mail invalidates the previous stats link.
+export async function issueInviteStatsToken(id) {
+  const token = crypto.randomUUID().replaceAll("-", "");
+  const row = await db
+    .query(
+      `UPDATE signers /* public-neutral */ SET invite_stats_hash = ?
+       WHERE id = ? AND verified = 1 AND invite_code IS NOT NULL
+       RETURNING invite_code`,
+    )
+    .get(hashStatsToken(token), id);
+  return row ? { token, inviteCode: row.invite_code } : null;
+}
+
+export async function getInviteStats(code, token) {
+  if (!isInviteCode(code) || typeof token !== "string" || !token) return null;
+  const row = await db
+    .query(
+      `SELECT invite_count FROM signers
+       WHERE invite_code = ? AND invite_stats_hash = ? AND verified = 1`,
+    )
+    .get(code, hashStatsToken(token));
+  return row ? { count: row.invite_count } : null;
 }
 
 // Start a deletion for an address we hold data for — a signature, a Treffen
@@ -624,7 +717,7 @@ export async function getSignerForMail(id) {
   return (
     (await db
       .query(
-        `SELECT id, name, email, verified, verification_token, token_expires_at
+        `SELECT id, name, email, verified, verification_token, token_expires_at, invite_code
          FROM signers WHERE id = ?`,
       )
       .get(id)) || null
@@ -1180,7 +1273,7 @@ export async function getShowDelegierter() {
 // ---- email templates -------------------------------------------------------
 
 const SYSTEM_SLUGS_SQL =
-  "slug IN ('verification', 'deletion', 'open-letter-update')";
+  "slug IN ('verification', 'deletion', 'open-letter-update', 'invite')";
 
 export async function listEmailTemplates() {
   return boolifyAll(
@@ -1224,7 +1317,7 @@ export async function createEmailTemplate({ name, subject, htmlBody }) {
     .replace(/[^a-z0-9]+/g, "-")
     .replace(/^-|-$/g, "")
     .slice(0, 48);
-  const reserved = ["verification", "deletion", "open-letter-update"];
+  const reserved = ["verification", "deletion", "open-letter-update", "invite"];
   const safeSlugBase = reserved.some((prefix) => slugBase.startsWith(prefix))
     ? `newsletter-${slugBase || "template"}`
     : slugBase || "newsletter";
@@ -1254,7 +1347,7 @@ export async function deleteEmailTemplate(id) {
   const row = await db
     .query(
       `DELETE FROM email_templates
-       WHERE id = ? AND slug NOT IN ('verification', 'deletion', 'open-letter-update')
+       WHERE id = ? AND slug NOT IN ('verification', 'deletion', 'open-letter-update', 'invite')
        RETURNING id`,
     )
     .get(id);
@@ -1606,7 +1699,7 @@ export async function getUnifiedUnsubscribeState(token, source) {
 
   const signer = await db
     .query(
-      `SELECT name, kreisverband, occupation, newsletter, show_publicly, verified
+      `SELECT name, kreisverband, occupation, newsletter, show_publicly, invite_show_name, verified
     FROM signers WHERE email = ?`,
     )
     .get(email);
@@ -1642,6 +1735,7 @@ export async function getUnifiedUnsubscribeState(token, source) {
     kreisverband: signer?.kreisverband ?? "",
     occupation: signer?.occupation ?? "",
     showPublicly: Boolean(signer?.show_publicly ?? true),
+    inviteShowName: Boolean(signer?.invite_show_name),
     zoomName: zoom?.name ?? "",
     zoomKv: zoom?.kreisverband ?? "",
     delegierter: Boolean(zoom?.delegierter ?? false),
@@ -1657,8 +1751,10 @@ export async function getUnifiedUnsubscribeState(token, source) {
 // when the Kreisverband changes lets the state backfill re-resolve it.
 export async function updateSignerByEmail(
   email,
-  { name, kreisverband, occupation, newsletter, showPublicly },
+  { name, kreisverband, occupation, newsletter, showPublicly, inviteShowName },
 ) {
+  // inviteShowName is undefined when invite links are off: left unchanged.
+  const inviteName = inviteShowName === undefined ? null : B(inviteShowName);
   const row = await db
     .query(
       `UPDATE signers SET
@@ -1667,6 +1763,7 @@ export async function updateSignerByEmail(
         occupation = ?,
         newsletter = ?,
         show_publicly = ?,
+        invite_show_name = COALESCE(?, invite_show_name),
         state = CASE WHEN kreisverband IS NOT ? THEN '' ELSE state END
       WHERE email = ?
       RETURNING id`,
@@ -1677,6 +1774,7 @@ export async function updateSignerByEmail(
       occupation,
       B(newsletter),
       B(showPublicly),
+      inviteName,
       kreisverband,
       email,
     );
@@ -1686,6 +1784,9 @@ export async function updateSignerByEmail(
     // Taking the name off the public list must survive a restore as well.
     if (showPublicly) await forgetErasure(db, email, HIDE_PUBLICLY);
     else await recordErasure(db, email, HIDE_PUBLICLY);
+    // Withdrawn consent to the name on the invite link, likewise.
+    if (inviteShowName === false) await recordErasure(db, email, HIDE_INVITE_NAME);
+    else if (inviteShowName) await forgetErasure(db, email, HIDE_INVITE_NAME);
   }
   return Boolean(row);
 }

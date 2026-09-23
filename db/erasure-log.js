@@ -25,6 +25,7 @@ export const ERASE = "erase"; // everything for the address
 export const NEWSLETTER_OPT_OUT = "newsletter-opt-out";
 export const TREFFEN_OPT_OUT = "treffen-opt-out";
 export const HIDE_PUBLICLY = "hide-publicly"; // name taken off the public list
+export const HIDE_INVITE_NAME = "hide-invite-name"; // first name off the invite link
 
 function hmacKey() {
   const key = process.env.DATABASE_ENCRYPTION_KEY || "";
@@ -84,6 +85,7 @@ export async function applyErasureLog(db, entries) {
     [NEWSLETTER_OPT_OUT]: 0,
     [TREFFEN_OPT_OUT]: 0,
     [HIDE_PUBLICLY]: 0,
+    [HIDE_INVITE_NAME]: 0,
   };
   if (byHmac.size === 0) return applied;
 
@@ -95,6 +97,12 @@ export async function applyErasureLog(db, entries) {
   );
   await db.run(ERASURE_LOG_DDL);
   const has = (t) => existing.has(t);
+  // A backup from before invite links has no invite_show_name to reset.
+  const hasInviteName =
+    has("signers") &&
+    (await db.query(`PRAGMA table_info(signers)`).all()).some(
+      (c) => c.name === "invite_show_name",
+    );
   const emails = new Set();
   for (const t of ["signers", "zoom_registrations", "zoom_pending", "deletion_requests"].filter(has)) {
     for (const row of await db.query(`SELECT email FROM ${t}`).all()) {
@@ -131,6 +139,14 @@ export async function applyErasureLog(db, entries) {
           .query(
             `UPDATE signers SET show_publicly = 0
              WHERE email = ? AND show_publicly = 1 AND created_at < ?`,
+          )
+          .run(email, at);
+        if (res?.changes) applied[kind]++;
+      } else if (kind === HIDE_INVITE_NAME && hasInviteName) {
+        const res = await db
+          .query(
+            `UPDATE signers SET invite_show_name = 0
+             WHERE email = ? AND invite_show_name = 1 AND created_at < ?`,
           )
           .run(email, at);
         if (res?.changes) applied[kind]++;

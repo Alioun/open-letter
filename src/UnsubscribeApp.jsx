@@ -23,6 +23,7 @@ const EMPTY_FORM = {
   occupation: "",
   newsletter: false,
   showPublicly: true,
+  inviteShowName: false,
   delegierter: false,
 };
 
@@ -33,6 +34,7 @@ function formFromData(d) {
     occupation: d.occupation || "",
     newsletter: Boolean(d.newsletter),
     showPublicly: d.showPublicly ?? true,
+    inviteShowName: Boolean(d.inviteShowName),
     delegierter: Boolean(d.delegierter),
   };
 }
@@ -376,6 +378,23 @@ export default function UnsubscribeApp() {
                             />
                             <span>Meinen Namen öffentlich anzeigen</span>
                           </label>
+                          {cfg.features.inviteLinks && (
+                            <label className="check">
+                              <input
+                                type="checkbox"
+                                checked={form.inviteShowName}
+                                onChange={(e) =>
+                                  setForm((f) => ({
+                                    ...f,
+                                    inviteShowName: e.target.checked,
+                                  }))
+                                }
+                              />
+                              <span>
+                                Meinen Vornamen auf meinem Einladungslink zeigen
+                              </span>
+                            </label>
+                          )}
                           <label className="check">
                             <input
                               type="checkbox"

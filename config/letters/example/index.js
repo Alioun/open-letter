@@ -182,6 +182,18 @@ export default {
       <p>Kind regards<br>The Open Letter team</p>
     `,
       },
+      invite: {
+        name: "Invite link after confirming",
+        subject: "Thank you! Your personal invite link — Open Letter",
+        htmlBody: `
+      <p>Hello {{firstName}},</p>
+      <p>your signature is confirmed — thank you!</p>
+      <p>Here is your personal invite link. Share it with people who might sign too:<br><a href="{{inviteUrl}}">{{inviteUrl}}</a></p>
+      <p>Your private stats link shows how many people signed through your invite. Don't share it:<br><a href="{{statsUrl}}">See my invites</a></p>
+      <p>We don't learn or store who signed through your link — only how many.</p>
+      <p>Kind regards<br>The Open Letter team</p>
+    `,
+      },
       deletion: {
         name: "Delete your signature",
         subject: "Delete your signature — Open Letter",
@@ -227,6 +239,7 @@ export default {
       nameLabel: "Name",
       publicLabel: "Show my name publicly",
       newsletterLabel: "Updates by email",
+      inviteNameLabel: "First name on your invite link",
       yes: "yes",
       no: "no",
       button: "Confirm signature",
@@ -240,7 +253,30 @@ export default {
     },
   },
 
+  // Invite link texts (only read when features.inviteLinks). Omitted keys use
+  // the German defaults in config/invite.js. {firstName}, {title}, {url}.
+  invite: {
+    optInLabel: "Show my first name on my personal invite link (otherwise the invite stays anonymous)",
+    modalText: "{firstName} invites you to sign the letter “{title}” too.",
+    modalTextAnonymous: "You've been invited to sign the letter “{title}”.",
+    modalButton: "Read the letter",
+    successHeading: "Here is your personal invite link:",
+    successNote: "Share it with people who might sign. We've emailed you your private stats link.",
+    shareMessage: "I signed the open letter “{title}”. Sign it too: {url}",
+    copyLabel: "Copy link",
+    copiedLabel: "Copied",
+    moreLabel: "More …",
+    statsHeading: "Your invites",
+    statsCount: "{count} people signed through your link.",
+    statsBelow: "Fewer than {threshold} people have signed through your link so far.",
+    statsInvalid: "This stats link is invalid or was replaced by a newer one.",
+    statsThreshold: 3,
+  },
+
   features: {
+    // Personal invite link after confirming, with share buttons, an invite
+    // mail and a private stats link (texts: `invite` block, config/invite.js).
+    inviteLinks: true,
     kreisverbandField: false,
     occupationField: false,
     germanyMap: false,
