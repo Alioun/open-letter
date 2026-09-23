@@ -545,6 +545,13 @@ export function isInviteCode(value) {
   );
 }
 
+// What the invite modal shows as the first name: the first word of the one
+// name field. Shown to the signer on the confirm page before they agree, since
+// "Berger, Anna" would otherwise put a surname on the link.
+export function inviteDisplayName(name) {
+  return String(name || "").trim().split(/\s/)[0];
+}
+
 export function hashStatsToken(token) {
   return new Bun.CryptoHasher("sha256").update(String(token)).digest("hex");
 }
@@ -566,7 +573,7 @@ export async function confirmSigner(token) {
        WHERE verification_token = ? AND verified = 0 AND token_expires_at > ?
        RETURNING id, kreisverband, invite_code`,
     )
-    .get(generateInviteCode(), token, nowIso());
+    .get(cfg.features.inviteLinks ? generateInviteCode() : null, token, nowIso());
   if (!row) return null;
   const ref = pending?.pending_ref;
   if (ref && ref !== row.invite_code) {
@@ -596,7 +603,7 @@ export async function getInviteByCode(code) {
     .get(code);
   if (!row) return null;
   return {
-    firstName: row.invite_show_name ? row.name.split(/\s/)[0] : null,
+    firstName: row.invite_show_name ? inviteDisplayName(row.name) : null,
   };
 }
 
@@ -1699,7 +1706,7 @@ export async function getUnifiedUnsubscribeState(token, source) {
 
   const signer = await db
     .query(
-      `SELECT name, kreisverband, occupation, newsletter, show_publicly, invite_show_name, verified
+      `SELECT name, kreisverband, occupation, newsletter, show_publicly, invite_show_name, invite_code, verified
     FROM signers WHERE email = ?`,
     )
     .get(email);
@@ -1736,6 +1743,7 @@ export async function getUnifiedUnsubscribeState(token, source) {
     occupation: signer?.occupation ?? "",
     showPublicly: Boolean(signer?.show_publicly ?? true),
     inviteShowName: Boolean(signer?.invite_show_name),
+    hasInviteCode: Boolean(signer?.invite_code),
     zoomName: zoom?.name ?? "",
     zoomKv: zoom?.kreisverband ?? "",
     delegierter: Boolean(zoom?.delegierter ?? false),

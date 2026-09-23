@@ -190,7 +190,7 @@ export default {
       <p>your signature is confirmed — thank you!</p>
       <p>Here is your personal invite link. Share it with people who might sign too:<br><a href="{{inviteUrl}}">{{inviteUrl}}</a></p>
       <p>Your private stats link shows how many people signed through your invite. Don't share it:<br><a href="{{statsUrl}}">See my invites</a></p>
-      <p>We don't learn or store who signed through your link — only how many.</p>
+      <p>We don't keep who signed through your link: once a signature is confirmed, only the count remains.</p>
       <p>Kind regards<br>The Open Letter team</p>
     `,
       },

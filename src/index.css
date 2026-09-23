@@ -1677,6 +1677,10 @@ h1.headline .banner {
   text-decoration: none;
   cursor: pointer;
   white-space: nowrap;
+  min-height: 44px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
 }
 
 .invite-share__link button:hover,

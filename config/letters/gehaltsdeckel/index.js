@@ -242,7 +242,7 @@ export default {
       <p>deine Unterschrift ist bestätigt – danke!</p>
       <p>Hier ist dein persönlicher Einladungslink. Teile ihn mit Menschen, die mitzeichnen könnten:<br><a href="{{inviteUrl}}">{{inviteUrl}}</a></p>
       <p>Über deinen privaten Statistik-Link siehst du, wie viele über deine Einladung unterschrieben haben. Gib ihn nicht weiter:<br><a href="{{statsUrl}}">Meine Einladungen ansehen</a></p>
-      <p>Wer über deinen Link unterschreibt, erfahren wir nicht und speichern wir nicht – nur die Anzahl.</p>
+      <p>Wer über deinen Link unterschrieben hat, speichern wir nicht dauerhaft: Nach der Bestätigung einer Unterschrift bleibt nur die Anzahl.</p>
       <p>Mit solidarischen Grüßen<br>Initiative Gehaltsdeckel</p>
     `,
       },

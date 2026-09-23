@@ -43,7 +43,7 @@ bun run db:seed         # optional, in a second terminal
 
 ## Launch your own letter
 
-1. Copy a letter: `cp -r config/letters/example config/letters/my-letter` (`example` is a minimal English starter; `gehaltsdeckel` uses every feature).
+1. Copy a letter: `cp -r config/letters/example config/letters/my-letter` (`example` is a minimal English starter; `gehaltsdeckel` uses nearly every feature; invite links are on only in `example`, since gehaltsdeckel's success mode removes the sign form).
 2. Edit `index.js` (brand, theme, copy, legal entity, emails, `features`) and `content.jsx` (the letter and FAQ).
 3. Register it in the `LETTERS` map in `config/letter.config.js` and the `CONTENT` map in `config/content.jsx`.
 4. Replace assets in `public/` and regenerate the social image with `bun run og` while the site is running.

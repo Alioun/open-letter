@@ -1,10 +1,16 @@
-import { describe, test, expect, beforeEach } from "bun:test";
+import { describe, test, expect, beforeEach, beforeAll, afterAll } from "bun:test";
+import cfg from "../config/letter.config.js";
 import { resetDb, db } from "./helpers.js";
 import * as q from "../server/db.js";
 import { prepareQueuedEmail } from "../server/queued-email.js";
 import { thresholdCount, fillInvite } from "../config/invite.js";
 
 beforeEach(resetDb);
+
+// The default test letter has invite links off; codes are only issued when on.
+const wasOn = cfg.features.inviteLinks;
+beforeAll(() => (cfg.features.inviteLinks = true));
+afterAll(() => (cfg.features.inviteLinks = wasOn));
 
 const future = () => new Date(Date.now() + 3600_000);
 
@@ -130,6 +136,23 @@ describe("invite mail", () => {
     await signAndConfirm("pend@example.org", { confirm: false });
     const pendingId = await q.getSignerIdByEmail("pend@example.org");
     expect(await prepareQueuedEmail({ kind: "invite", signerId: pendingId, baseUrl: "https://x" })).toBeNull();
+  });
+});
+
+describe("feature off", () => {
+  test("confirming issues no invite code", async () => {
+    cfg.features.inviteLinks = false;
+    try {
+      const s = await signAndConfirm("off@example.org");
+      expect(s.inviteCode).toBeNull();
+    } finally {
+      cfg.features.inviteLinks = true;
+    }
+  });
+
+  test("the displayed first name is the first word", () => {
+    expect(q.inviteDisplayName("  Berger, Anna")).toBe("Berger,");
+    expect(q.inviteDisplayName("Nora Muster")).toBe("Nora");
   });
 });
 

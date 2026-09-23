@@ -2699,8 +2699,9 @@ function DatenschutzModal({ onClose }) {
               Einladung wird bei einer Unterschrift nur bis zu ihrer Bestätigung
               aufbewahrt und dann gelöscht; nur die Anzahl steigt. Solange die
               Anzahl unter {resolveInvite(cfg).statsThreshold} liegt, zeigt der
-              Statistik-Link keine genaue Zahl, damit du nicht erkennen kannst,
-              ob eine bestimmte Person unterschrieben hat. Dein Vorname
+              Statistik-Link keine genaue Zahl. Ab dann ist die Zahl genau: Wer
+              seinen Link nur an eine Person schickt, kann an einer Änderung
+              erkennen, ob diese unterschrieben hat. Dein Vorname
               erscheint auf deinem Einladungslink nur, wenn du das beim
               Unterschreiben ausdrücklich ausgewählt hast – wer den Link
               öffnet, erfährt dann, dass du den Brief unterschrieben hast.

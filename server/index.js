@@ -40,6 +40,7 @@ import {
   confirmSigner,
   getPendingSignerByToken,
   getInviteByCode,
+  inviteDisplayName,
   getInviteStats,
   isInviteCode,
   refreshVerificationToken,
@@ -1917,7 +1918,11 @@ const server = Bun.serve({
             `${copy.publicLabel}: ${yesNo(pending.show_publicly)}`,
             `${copy.newsletterLabel}: ${yesNo(pending.newsletter)}`,
             INVITES_ENABLED &&
-              `${copy.inviteNameLabel}: ${yesNo(pending.invite_show_name)}`,
+              `${copy.inviteNameLabel}: ${
+                pending.invite_show_name
+                  ? escapeHtml(inviteDisplayName(pending.name))
+                  : copy.no
+              }`,
           ].filter(Boolean);
           return htmlPage(
             heading(copy.heading) +
@@ -1941,10 +1946,17 @@ const server = Bun.serve({
               enqueueStateResolution(signer.id, signer.kreisverband);
             }
             if (INVITES_ENABLED && signer.inviteCode) {
-              await queueEmail("invite", {
-                signerId: signer.id,
-                baseUrl: getBaseUrl(req),
-              });
+              // The signature is confirmed at this point: a failed mail (sent
+              // inline when the queue is down) must not turn that into an
+              // error page, since the token is already used up.
+              try {
+                await queueEmail("invite", {
+                  signerId: signer.id,
+                  baseUrl: getBaseUrl(req),
+                });
+              } catch (err) {
+                console.error("[email] invite mail failed:", err.message);
+              }
               // The invite code isn't secret (it's what gets shared), but the
               // invite page is the one without analytics. The stats token only
               // goes out in the mail.

@@ -378,7 +378,7 @@ export default function UnsubscribeApp() {
                             />
                             <span>Meinen Namen öffentlich anzeigen</span>
                           </label>
-                          {cfg.features.inviteLinks && (
+                          {cfg.features.inviteLinks && d.hasInviteCode && (
                             <label className="check">
                               <input
                                 type="checkbox"

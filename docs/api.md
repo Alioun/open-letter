@@ -17,6 +17,9 @@ under `/api/admin/*` behind the admin login and is not listed here.
 | `POST` | `/api/sign`                       | Submit a signature — triggers verification email         |
 | `POST` | `/api/resend-verification`        | Re-send the verification email for a pending signature   |
 | `GET`  | `/api/confirm/:token`             | Email confirmation link — verifies + redirects           |
+| `GET`  | `/i/:code`                        | Invite page (no analytics); `#s=<token>` shows private stats |
+| `GET`  | `/api/invite/:code`               | `{firstName\|null}` for an invite link; 30/15 min per IP  |
+| `POST` | `/api/invite-stats`               | `{code, token}` → `{count}` or `{below}`; 20/15 min per IP |
 | `POST` | `/api/request-deletion`           | Request a signature-deletion link by email               |
 | `GET`  | `/api/delete/:token`              | Delete a signature via a deletion-link token             |
 | `GET`  | `/api/unsubscribe/:token`         | Newsletter unsubscribe state                             |
@@ -65,5 +68,5 @@ Returns `{signers: [{id, name, kreisverband, created_at}], total}`. Email addres
 
 ## GET /api/confirm/:token
 
-Verifies a signature if the token is valid and not expired. Redirects to `/?confirmed=1` on success, `/?error=token-expired` on failure.
+Verifies a signature if the token is valid and not expired. Redirects to `/?confirmed=1` on success (`/i/<invite code>?confirmed=1` when `features.inviteLinks` is on), `/?error=token-expired` on failure.
 
