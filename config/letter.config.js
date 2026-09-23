@@ -10,6 +10,7 @@
 import gehaltsdeckel from "./letters/gehaltsdeckel/index.js";
 import example from "./letters/example/index.js";
 import { activeLetterName } from "./active-letter.js";
+import { UI_DEFAULTS, deepMerge } from "./ui.js";
 
 const LETTERS = {
   gehaltsdeckel,
@@ -19,5 +20,7 @@ const LETTERS = {
 export const LETTER_NAME = activeLetterName();
 
 const config = LETTERS[LETTER_NAME] || gehaltsdeckel;
+// Interface texts: the letter's `ui` block over the defaults.
+config.ui = deepMerge(UI_DEFAULTS, config.ui || {});
 
 export default config;

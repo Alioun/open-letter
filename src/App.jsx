@@ -13,6 +13,7 @@ import { resolveInvite } from "../config/invite.js";
 import { LetterArticle, FaqContent } from "../config/content.jsx";
 import { ZoomForm } from "./ZoomForm";
 import { KV_NONE, regionLabels } from "../config/region.js";
+import { fillText } from "../config/ui.js";
 import {
   InviteShare,
   InviteModal,
@@ -26,9 +27,8 @@ import {
 
 const INVITES = Boolean(cfg.features.inviteLinks);
 
-const region = regionLabels(cfg);
-const kvName = region.name;
-const kvSearchLabel = `Suche nach Name oder ${kvName}`;
+// Read while rendering, so admin text overrides applied after load count.
+const region = () => regionLabels(cfg);
 
 const MAP_VB = { x: -60, y: -10, w: 520, h: 520 };
 
@@ -42,15 +42,18 @@ function initials(name) {
   return (parts[0][0] + parts[parts.length - 1][0]).toUpperCase();
 }
 
+// "vor 3 Std" etc.; "gerade eben" stands alone (no "vor").
 function relTime(ts) {
+  const t = cfg.ui.time;
   const diff = Math.floor((Date.now() - new Date(ts).getTime()) / 1000);
-  if (diff < 60) return "gerade eben";
-  if (diff < 3600) return Math.floor(diff / 60) + " Min";
-  if (diff < 86400) return Math.floor(diff / 3600) + " Std";
+  const ago = (key, n) => `${t.prefix} ${fillText(t[key], { n })}`.trim();
+  if (diff < 60) return t.justNow;
+  if (diff < 3600) return ago("minutes", Math.floor(diff / 60));
+  if (diff < 86400) return ago("hours", Math.floor(diff / 3600));
   const days = Math.floor(diff / 86400);
-  if (days < 7) return days + (days === 1 ? " Tag" : " Tagen");
-  if (diff < 86400 * 30) return Math.floor(diff / (86400 * 7)) + " Wo";
-  return Math.floor(diff / (86400 * 30)) + " Mon";
+  if (days < 7) return ago(days === 1 ? "day" : "days", days);
+  if (diff < 86400 * 30) return ago("weeks", Math.floor(diff / (86400 * 7)));
+  return ago("months", Math.floor(diff / (86400 * 30)));
 }
 
 const KNOWN_EMAIL_DOMAINS = new Set([
@@ -336,7 +339,7 @@ export default function App({ boot = null }) {
       setSignersTotal(data.total);
       setError(null);
     } catch {
-      setError("Daten konnten nicht geladen werden.");
+      setError(cfg.ui.list.loadError);
     } finally {
       setLoading(false);
     }
@@ -476,9 +479,7 @@ export default function App({ boot = null }) {
       // an already confirmed address gets the "already signed" mail, an
       // unconfirmed one its confirmation link again — without the page revealing
       // which.
-      setSubmitError(
-        "Dieser Bestätigungslink wurde schon verwendet oder ist abgelaufen. Vielleicht ist deine Unterschrift also schon bestätigt: Trag einfach noch einmal dieselbe E-Mail-Adresse ein. Ist sie schon bestätigt, bekommst du eine E-Mail, dass alles passt – sonst noch einmal einen Bestätigungslink.",
-      );
+      setSubmitError(cfg.ui.errors.tokenExpired);
       window.history.replaceState({}, "", window.location.pathname);
       requestAnimationFrame(() => {
         const field = document.getElementById("sign-name");
@@ -486,9 +487,7 @@ export default function App({ boot = null }) {
         field?.scrollIntoView({ block: "center" });
       });
     } else if (params.get("error") === "delete-token-expired") {
-      setSubmitError(
-        "Der Löschlink ist abgelaufen. Bitte fordere über die Datenschutzseite einen neuen an.",
-      );
+      setSubmitError(cfg.ui.errors.deleteTokenExpired);
       window.history.replaceState({}, "", window.location.pathname);
     }
   }, []);
@@ -657,7 +656,7 @@ export default function App({ boot = null }) {
       });
       const result = await res.json();
       if (!res.ok) {
-        setSubmitError(result.error || "Ein Fehler ist aufgetreten.");
+        setSubmitError(result.error || cfg.ui.errors.generic);
         return false;
       }
       setEmailModal({
@@ -670,7 +669,7 @@ export default function App({ boot = null }) {
       });
       return true;
     } catch {
-      setSubmitError("Verbindung fehlgeschlagen. Bitte versuche es erneut.");
+      setSubmitError(cfg.ui.errors.network);
       return false;
     }
   }, []);
@@ -686,13 +685,13 @@ export default function App({ boot = null }) {
         });
         const result = await res.json();
         if (!res.ok) {
-          setZoomError(result.error || "Ein Fehler ist aufgetreten.");
+          setZoomError(result.error || cfg.ui.errors.generic);
           return false;
         }
         fetchZoomCount();
         return true;
       } catch {
-        setZoomError("Verbindung fehlgeschlagen. Bitte versuche es erneut.");
+        setZoomError(cfg.ui.errors.network);
         return false;
       }
     },
@@ -736,13 +735,12 @@ export default function App({ boot = null }) {
       const result = await res.json();
       if (!res.ok) {
         setResendError(
-          result.error ||
-            "Senden fehlgeschlagen. Bitte versuche es später erneut.",
+          result.error || cfg.ui.errors.resendFailed,
         );
         return;
       }
     } catch {
-      setResendError("Verbindung fehlgeschlagen. Bitte versuche es erneut.");
+      setResendError(cfg.ui.errors.network);
       return;
     }
     setResendSent(true);
@@ -794,7 +792,7 @@ export default function App({ boot = null }) {
       <section
         className="section sign-section zoom-section"
         id="zoom"
-        aria-label="Anmeldung zum Treffen"
+        aria-label={cfg.ui.sections.zoom}
       >
         <div className="section-inner">
           <div className="sign-grid">
@@ -816,7 +814,7 @@ export default function App({ boot = null }) {
               )}
               {zoomInPerson && zoomLocationText && (
                 <p className="zoom-where">
-                  <strong>Ort:</strong> {zoomLocationText}
+                  <strong>{cfg.ui.zoomForm.locationLabel}</strong> {zoomLocationText}
                   {zoomLocation?.mapsUrl && (
                     <>
                       {" · "}
@@ -825,7 +823,7 @@ export default function App({ boot = null }) {
                         target="_blank"
                         rel="noopener noreferrer"
                       >
-                        Karte
+                        {cfg.ui.zoomForm.mapLink}
                       </a>
                     </>
                   )}
@@ -903,32 +901,32 @@ export default function App({ boot = null }) {
           />
         </div>
         <div className="total">
-          <b>+{stats.today}</b> in den letzten 24 Stunden
+          <b>+{stats.today}</b> {cfg.ui.list.last24h}
         </div>
       </div>
 
       <div className="stats-row">
         <div className="stat">
           <div className="v">{total.toLocaleString("de-DE")}</div>
-          <div className="k">Gesamt verifiziert</div>
+          <div className="k">{cfg.ui.list.statTotal}</div>
         </div>
         <div className="stat">
           <div className="v">+{stats.today}</div>
-          <div className="k">Heute</div>
+          <div className="k">{cfg.ui.list.statToday}</div>
         </div>
         <div className="stat">
           <div className="v">+{stats.week}</div>
-          <div className="k">Diese Woche</div>
+          <div className="k">{cfg.ui.list.statWeek}</div>
         </div>
         {cfg.features.kreisverbandField && (
           <div className="stat">
             <div className="v">{stats.kvCount}</div>
-            <div className="k">{region.plural}</div>
+            <div className="k">{region().plural}</div>
           </div>
         )}
       </div>
 
-      <div className="filters" role="group" aria-label="Filter">
+      <div className="filters" role="group" aria-label={cfg.ui.list.filterAria}>
         <button
           className={
             "filter-chip " +
@@ -952,7 +950,7 @@ export default function App({ boot = null }) {
             setFilter("alle");
           }}
         >
-          Alle
+          {cfg.ui.list.filterAll}
         </button>
         <button
           className={
@@ -977,7 +975,7 @@ export default function App({ boot = null }) {
             setFilter("neueste");
           }}
         >
-          Neueste
+          {cfg.ui.list.filterNewest}
         </button>
         {cfg.features.germanyMap && (
           <button
@@ -989,7 +987,7 @@ export default function App({ boot = null }) {
               setShowMap((v) => !v);
             }}
           >
-            Karte
+            {cfg.ui.list.filterMap}
           </button>
         )}
         {cfg.features.kreisverbandField && (
@@ -1002,7 +1000,7 @@ export default function App({ boot = null }) {
             }}
             aria-pressed={showKreisverband}
           >
-            {region.plural}
+            {region().plural}
           </button>
         )}
         {cfg.features.occupationField && (
@@ -1015,18 +1013,20 @@ export default function App({ boot = null }) {
             }}
             aria-pressed={showOccupations}
           >
-            Berufe
+            {cfg.ui.list.filterOccupations}
           </button>
         )}
         {!showOccupations && !showKreisverband && !showMap && (
           <>
             <label htmlFor="signer-search" className="sr-only">
-              {kvSearchLabel}
+              {fillText(cfg.ui.list.searchLabel, { region: region().name })}
             </label>
             <input
               id="signer-search"
               className="search"
-              placeholder={`${kvSearchLabel.replace(/^Suche/, "Suchen")}…`}
+              placeholder={fillText(cfg.ui.list.searchPlaceholder, {
+                region: region().name,
+              })}
               value={search}
               onChange={(e) => setSearch(e.target.value)}
             />
@@ -1042,19 +1042,21 @@ export default function App({ boot = null }) {
 
       {showMap ? (
         kvGroups.length === 0 ? (
-          <div className="empty-state">Lade Karte…</div>
+          <div className="empty-state">{cfg.ui.list.loadingMap}</div>
         ) : (
           <KreisverbandMap kvGroups={kvGroups} />
         )
       ) : showKreisverband ? (
         kvGroups.length === 0 ? (
-          <div className="empty-state">Noch keine {region.plural}.</div>
+          <div className="empty-state">
+            {fillText(cfg.ui.list.emptyRegions, { regions: region().plural })}
+          </div>
         ) : (
           <div className="occupation-grid">
             {kvGroups.map((g) => (
               <div key={g.kreisverband} className="occupation-chip">
                 <span className="occupation-name">
-                  {g.kreisverband === KV_NONE ? region.none : g.kreisverband}
+                  {g.kreisverband === KV_NONE ? region().none : g.kreisverband}
                 </span>
                 <span className="occupation-count">{g.count}</span>
               </div>
@@ -1063,7 +1065,7 @@ export default function App({ boot = null }) {
         )
       ) : showOccupations ? (
         occupationGroups.length === 0 ? (
-          <div className="empty-state">Noch keine Berufe angegeben.</div>
+          <div className="empty-state">{cfg.ui.list.emptyOccupations}</div>
         ) : (
           <div className="occupation-grid">
             {occupationGroups.map((g) => (
@@ -1075,7 +1077,7 @@ export default function App({ boot = null }) {
           </div>
         )
       ) : loading && signers.length === 0 ? (
-        <div className="empty-state">Lade Unterschriften…</div>
+        <div className="empty-state">{cfg.ui.list.loading}</div>
       ) : (
         <>
           <div className="signers-grid">
@@ -1092,11 +1094,13 @@ export default function App({ boot = null }) {
 
           <div className="signers-foot">
             <span>
-              {signers.length} von {signersTotal.toLocaleString("de-DE")}{" "}
-              angezeigt
+              {fillText(cfg.ui.list.shown, {
+                shown: signers.length,
+                total: signersTotal.toLocaleString(locale),
+              })}
             </span>
             {signers.length < signersTotal && (
-              <button onClick={handleLoadMore}>Weitere laden</button>
+              <button onClick={handleLoadMore}>{cfg.ui.list.loadMore}</button>
             )}
           </div>
         </>
@@ -1115,28 +1119,28 @@ export default function App({ boot = null }) {
       id: "brief",
       shouldRender: true,
       sectionClass: "",
-      ariaLabel: "Der offene Brief",
+      ariaLabel: cfg.ui.sections.brief,
       body: briefBody,
     },
     {
       id: "unterzeichnen",
       shouldRender: !successMode,
       sectionClass: "sign-section",
-      ariaLabel: "Unterschriftenformular",
+      ariaLabel: cfg.ui.sections.sign,
       body: signBody,
     },
     {
       id: "liste",
       shouldRender: true,
       sectionClass: "signers-section",
-      ariaLabel: "Liste der Unterstützer*innen",
+      ariaLabel: cfg.ui.sections.list,
       body: listeBody,
     },
     {
       id: "faq",
       shouldRender: true,
       sectionClass: "faq-section",
-      ariaLabel: "FAQ",
+      ariaLabel: cfg.ui.sections.faq,
       body: faqBody,
     },
   ];
@@ -1187,7 +1191,7 @@ export default function App({ boot = null }) {
   return (
     <>
       <a href="#main" className="skip-link">
-        Zum Inhalt springen
+        {cfg.ui.chrome.skipLink}
       </a>
 
       <div
@@ -1203,7 +1207,7 @@ export default function App({ boot = null }) {
         <a
           href="#main"
           className="wordmark"
-          aria-label="Zum Seitenanfang"
+          aria-label={cfg.ui.chrome.toTop}
           onClick={(e) => {
             e.preventDefault();
             scrollTo("main");
@@ -1211,7 +1215,7 @@ export default function App({ boot = null }) {
         >
           <span className="dot" aria-hidden="true"></span> {cfg.brand.wordmark}
         </a>
-        <nav aria-label="Hauptnavigation">
+        <nav aria-label={cfg.ui.chrome.mainNav}>
           {navItems.map((n) => (
             <a
               key={n.id}
@@ -1249,7 +1253,7 @@ export default function App({ boot = null }) {
         )}
         <button
           className={"hamburger" + (navOpen ? " open" : "")}
-          aria-label={navOpen ? "Menü schließen" : "Menü öffnen"}
+          aria-label={navOpen ? cfg.ui.chrome.menuClose : cfg.ui.chrome.menuOpen}
           aria-expanded={navOpen}
           aria-controls="mobile-nav"
           onClick={() => setNavOpen((v) => !v)}
@@ -1263,7 +1267,7 @@ export default function App({ boot = null }) {
         id="mobile-nav"
         ref={mobileNavRef}
         className={"mobile-nav" + (navOpen ? " open" : "")}
-        aria-label="Mobilnavigation"
+        aria-label={cfg.ui.chrome.mobileNav}
         aria-hidden={!navOpen}
       >
         {navItems.map((n) => (
@@ -1313,7 +1317,7 @@ export default function App({ boot = null }) {
         <section
           className="hero"
           aria-label={
-            successMode ? "Ankündigung" : "Titelbild und Unterschriftenzähler"
+            successMode ? cfg.ui.hero.ariaSuccess : cfg.ui.hero.ariaCampaign
           }
         >
           <div className="hero-inner">
@@ -1351,7 +1355,7 @@ export default function App({ boot = null }) {
                         className="scrollcta"
                         onClick={() => scrollTo("zoom")}
                       >
-                        {cfg.success?.ctaZoom || "Anmelden"}{" "}
+                        {cfg.success?.ctaZoom || cfg.ui.hero.successCtaFallback}{" "}
                         <span aria-hidden="true">→</span>
                       </button>
                     )}
@@ -1362,7 +1366,7 @@ export default function App({ boot = null }) {
                         target="_blank"
                         rel="noopener noreferrer"
                       >
-                        {cfg.success?.antragLabel || "Mehr erfahren"}{" "}
+                        {cfg.success?.antragLabel || cfg.ui.hero.successAntragFallback}{" "}
                         <span aria-hidden="true">→</span>
                       </a>
                     )}
@@ -1390,13 +1394,16 @@ export default function App({ boot = null }) {
                   <div className="counter-wrap">
                     <div
                       className="counter-card"
-                      aria-label={`${total.toLocaleString("de-DE")} von ${ZIEL.toLocaleString("de-DE")} Unterschriften`}
+                      aria-label={fillText(cfg.ui.hero.counterAria, {
+                        total: total.toLocaleString(locale),
+                        goal: ZIEL.toLocaleString(locale),
+                      })}
                     >
                       <div className="label">{cfg.hero.counterLabel}</div>
                       <div className="num">
-                        {total.toLocaleString("de-DE")}
+                        {total.toLocaleString(locale)}
                         <span className="unit">
-                          / {ZIEL.toLocaleString("de-DE")}
+                          / {ZIEL.toLocaleString(locale)}
                         </span>
                       </div>
                       <div className="meta">
@@ -1406,7 +1413,7 @@ export default function App({ boot = null }) {
                       <div
                         className="goal-bar"
                         role="progressbar"
-                        aria-label="Fortschritt zum Unterschriftenziel"
+                        aria-label={cfg.ui.hero.progressAria}
                         aria-valuenow={Math.min(100, pct)}
                         aria-valuemin={0}
                         aria-valuemax={100}
@@ -1415,12 +1422,13 @@ export default function App({ boot = null }) {
                         <div></div>
                       </div>
                       <div className="goal-meta">
-                        <span>{pct}% erreicht</span>
+                        <span>{fillText(cfg.ui.hero.reached, { pct })}</span>
                         <span>
-                          Aktualisiert{" "}
-                          {new Date().toLocaleTimeString("de-DE", {
-                            hour: "2-digit",
-                            minute: "2-digit",
+                          {fillText(cfg.ui.hero.updated, {
+                            time: new Date().toLocaleTimeString(locale, {
+                              hour: "2-digit",
+                              minute: "2-digit",
+                            }),
                           })}
                         </span>
                       </div>
@@ -1428,20 +1436,25 @@ export default function App({ boot = null }) {
 
                     {
                       /* zoom module — toggle via features.zoomEvent */ zoomEnabled &&
-                        total >= 2000 &&
+                        cfg.ui.stoerer.showFrom > 0 &&
+                        total >= cfg.ui.stoerer.showFrom &&
                         zoomOpen && (
                           <button
                             className="stoerer"
                             onClick={() => scrollTo("zoom")}
-                            aria-label="Jetzt zum Treffen anmelden"
+                            aria-label={cfg.ui.stoerer.aria}
                           >
-                            <span className="stoerer-head">Wir sind 2000!</span>
+                            <span className="stoerer-head">
+                              {fillText(cfg.ui.stoerer.head, {
+                                count: cfg.ui.stoerer.showFrom.toLocaleString(locale),
+                              })}
+                            </span>
                             <span className="stoerer-body">
-                              Jetzt treffen wir uns und planen die nächsten
-                              Schritte.
+                              {cfg.ui.stoerer.body}
                             </span>
                             <span className="stoerer-cta">
-                              Sei dabei! <span aria-hidden="true">→</span>
+                              {cfg.ui.stoerer.cta}{" "}
+                              <span aria-hidden="true">→</span>
                             </span>
                           </button>
                         )
@@ -1486,26 +1499,26 @@ export default function App({ boot = null }) {
               <p>{cfg.footer.blurb}</p>
             </div>
             <div>
-              <h3>Kontakt</h3>
+              <h3>{cfg.ui.chrome.footerContact}</h3>
               <a href={`mailto:${cfg.footer.contactEmail}`}>
                 {cfg.footer.contactEmail}
               </a>
             </div>
             <div>
-              <h3>Rechtliches</h3>
+              <h3>{cfg.ui.chrome.footerLegal}</h3>
               <button
                 type="button"
                 className="footer-link"
                 onClick={() => setShowImpressum(true)}
               >
-                Impressum
+                {cfg.ui.chrome.impressum}
               </button>
               <button
                 type="button"
                 className="footer-link"
                 onClick={() => setShowDatenschutz(true)}
               >
-                Datenschutz
+                {cfg.ui.chrome.datenschutz}
               </button>
             </div>
           </div>
@@ -1523,28 +1536,20 @@ export default function App({ boot = null }) {
             ref={emailTrapRef}
           >
             <div className="modal-head">
-              <h3 id="email-modal-title">Bitte E-Mail bestätigen</h3>
-              <button onClick={closeModal} aria-label="Schließen">
+              <h3 id="email-modal-title">{cfg.ui.emailModal.title}</h3>
+              <button onClick={closeModal} aria-label={cfg.ui.chrome.close}>
                 ×
               </button>
             </div>
             <div className="modal-body">
               <p>
-                Danke, <strong>{emailModal.name}</strong>. Wir haben dir einen
-                Bestätigungslink geschickt an:
+                {fillText(cfg.ui.emailModal.sent, { name: emailModal.name })}
               </p>
               <div className="email-pill">{emailModal.email}</div>
 
-              <p>
-                Erst nach dem Klick auf den Link in dieser E-Mail wird deine
-                Unterschrift gezählt und öffentlich gelistet.
-              </p>
-              <p className="hint">
-                Keine E-Mail erhalten? Schau in den Spam-Ordner.
-              </p>
-              <p className="hint">
-                E-Mails können manchmal ein paar Minuten auf sich warten lassen.
-              </p>
+              <p>{cfg.ui.emailModal.explain}</p>
+              <p className="hint">{cfg.ui.emailModal.spamHint}</p>
+              <p className="hint">{cfg.ui.emailModal.delayHint}</p>
               {resendError && <p className="hint hint--error">{resendError}</p>}
               <button
                 className="resend-btn"
@@ -1552,13 +1557,17 @@ export default function App({ boot = null }) {
                 disabled={resendCooldown > 0}
               >
                 {resendSent && resendCooldown > 0
-                  ? `E-Mail gesendet ✓ nochmal in ${resendCooldown}s`
+                  ? fillText(cfg.ui.emailModal.resendSent, {
+                      seconds: resendCooldown,
+                    })
                   : resendCooldown > 0
-                    ? `Erneut senden in ${resendCooldown}s`
-                    : "Link erneut anfordern"}
+                    ? fillText(cfg.ui.emailModal.resendWait, {
+                        seconds: resendCooldown,
+                      })
+                    : cfg.ui.emailModal.resend}
               </button>
               <button className="confirm-btn" onClick={closeModal}>
-                Verstanden
+                {cfg.ui.emailModal.ok}
               </button>
             </div>
           </div>
@@ -1580,8 +1589,8 @@ export default function App({ boot = null }) {
             ref={successTrapRef}
           >
             <div className="modal-head">
-              <h3 id="success-modal-title">Unterschrift gezählt</h3>
-              <button onClick={closeSuccess} aria-label="Schließen">
+              <h3 id="success-modal-title">{cfg.ui.successModal.title}</h3>
+              <button onClick={closeSuccess} aria-label={cfg.ui.chrome.close}>
                 ×
               </button>
             </div>
@@ -1599,11 +1608,11 @@ export default function App({ boot = null }) {
                   <polyline points="20 6 9 17 4 12"></polyline>
                 </svg>
               </div>
-              <p className="success-title">Solidarisch dabei.</p>
+              <p className="success-title">{cfg.ui.successModal.heading}</p>
               <p>
-                Deine Unterschrift ist jetzt Teil des offenen Briefes. Teile ihn
-                mit deinem Kreisverband - wir wollen vor dem nächsten Parteitag
-                bei {ZIEL} stehen.
+                {fillText(cfg.ui.successModal.body, {
+                  goal: ZIEL.toLocaleString(locale),
+                })}
               </p>
               {ownInviteCode && <InviteShare code={ownInviteCode} />}
               <button
@@ -1613,7 +1622,7 @@ export default function App({ boot = null }) {
                   scrollTo("liste");
                 }}
               >
-                Mich in der Liste zeigen <span aria-hidden="true">→</span>
+                {cfg.ui.successModal.showMe} <span aria-hidden="true">→</span>
               </button>
             </div>
           </div>
@@ -1649,10 +1658,10 @@ export default function App({ boot = null }) {
             ref={deletedTrapRef}
           >
             <div className="modal-head">
-              <h3 id="deleted-modal-title">Daten gelöscht</h3>
+              <h3 id="deleted-modal-title">{cfg.ui.deletedModal.title}</h3>
               <button
                 onClick={() => setShowDeleted(false)}
-                aria-label="Schließen"
+                aria-label={cfg.ui.chrome.close}
               >
                 ×
               </button>
@@ -1671,16 +1680,13 @@ export default function App({ boot = null }) {
                   <polyline points="20 6 9 17 4 12"></polyline>
                 </svg>
               </div>
-              <p className="success-title">Erledigt.</p>
-              <p>
-                Deine Unterschrift und alle damit verbundenen Daten wurden
-                unwiderruflich gelöscht.
-              </p>
+              <p className="success-title">{cfg.ui.deletedModal.heading}</p>
+              <p>{cfg.ui.deletedModal.body}</p>
               <button
                 className="confirm-btn"
                 onClick={() => setShowDeleted(false)}
               >
-                Schließen
+                {cfg.ui.chrome.close}
               </button>
             </div>
           </div>
@@ -1710,10 +1716,10 @@ const SignerRow = memo(function SignerRow({
       <div className="info">
         <div className="name">{name}</div>
         <div className="kv">
-          {kreisverband ? region.rowPrefix + kreisverband : region.none}
+          {kreisverband ? region().rowPrefix + kreisverband : region().none}
         </div>
       </div>
-      <div className="time">vor {relTime(createdAt)}</div>
+      <div className="time">{relTime(createdAt)}</div>
     </div>
   );
 });
@@ -1763,15 +1769,17 @@ const SignForm = memo(function SignForm({
     cfg.features.occupationField && cfg.sign.fields.occupation.label,
   ].filter(Boolean);
   const visibilityExtra = visibilityFields.length
-    ? ` (und ggf. ${visibilityFields.join("/")})`
+    ? fillText(cfg.ui.signForm.publicFieldsExtra, {
+        fields: visibilityFields.join("/"),
+      })
     : "";
 
   function validate() {
     const e = {};
     if (name.trim().length < 2)
-      e.name = "Bitte gib deinen vollständigen Namen an.";
+      e.name = cfg.ui.signForm.errName;
     if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email))
-      e.email = "Bitte gib eine gültige E-Mail-Adresse an.";
+      e.email = cfg.ui.signForm.errEmail;
     setErrors(e);
     if (e.name) nameRef.current?.focus();
     else if (e.email) emailRef.current?.focus();
@@ -1805,10 +1813,10 @@ const SignForm = memo(function SignForm({
 
   return (
     <form className="form-card" onSubmit={submit} noValidate>
-      <span className="badge">Mitzeichnen</span>
-      <h3>Unterschreiben in 30 Sekunden</h3>
+      <span className="badge">{cfg.ui.signForm.badge}</span>
+      <h3>{cfg.sign.formTitle || "Unterschreiben in 30 Sekunden"}</h3>
       <div className="sub2">
-        Felder ausfüllen, bestätigen per E-Mail. Fertig.
+        {cfg.sign.formSubtitle || "Felder ausfüllen, bestätigen per E-Mail. Fertig."}
       </div>
 
       {serverError && (
@@ -1819,7 +1827,8 @@ const SignForm = memo(function SignForm({
 
       <div className="field">
         <label htmlFor="sign-name">
-          Name <span className="opt"> wird öffentlich gezeigt</span>
+          {cfg.ui.signForm.nameLabel}{" "}
+          <span className="opt"> {cfg.ui.signForm.nameHint}</span>
         </label>
         <input
           id="sign-name"
@@ -1827,7 +1836,7 @@ const SignForm = memo(function SignForm({
           type="text"
           value={name}
           onChange={(e) => setName(e.target.value)}
-          placeholder="z. B. Anna Berger"
+          placeholder={cfg.ui.signForm.namePlaceholder}
           className={errors.name ? "invalid" : ""}
           aria-invalid={!!errors.name}
           aria-describedby={errors.name ? "err-name" : undefined}
@@ -1842,8 +1851,8 @@ const SignForm = memo(function SignForm({
 
       <div className="field">
         <label htmlFor="sign-email">
-          E-Mail{" "}
-          <span className="opt"> nur zur Verifizierung, nicht öffentlich</span>
+          {cfg.ui.signForm.emailLabel}{" "}
+          <span className="opt"> {cfg.ui.signForm.emailHint}</span>
         </label>
         <input
           id="sign-email"
@@ -1851,7 +1860,7 @@ const SignForm = memo(function SignForm({
           type="email"
           value={email}
           onChange={(e) => setEmail(e.target.value)}
-          placeholder="anna@example.org"
+          placeholder={cfg.ui.signForm.emailPlaceholder}
           className={errors.email ? "invalid" : ""}
           aria-invalid={!!errors.email}
           aria-describedby={errors.email ? "err-email" : undefined}
@@ -1872,14 +1881,14 @@ const SignForm = memo(function SignForm({
               {cfg.sign.fields.kreisverband.optionalLabel}
             </span>
           </label>
-          {region.options ? (
+          {region().options ? (
             <select
               id="sign-kv"
               value={kv}
               onChange={(e) => setKv(e.target.value)}
             >
-              <option value="">{region.selectPlaceholder}</option>
-              {region.options.map((o) => (
+              <option value="">{region().selectPlaceholder}</option>
+              {region().options.map((o) => (
                 <option key={o} value={o}>
                   {o}
                 </option>
@@ -1936,7 +1945,7 @@ const SignForm = memo(function SignForm({
               }
             />
           )}
-          {!region.options && showSuggest && kv && kvMatches.length > 0 && (
+          {!region().options && showSuggest && kv && kvMatches.length > 0 && (
             <div
               id="kv-listbox"
               role="listbox"
@@ -2062,9 +2071,8 @@ const SignForm = memo(function SignForm({
             onChange={(e) => setAgree(e.target.checked)}
           />
           <span>
-            Mein <strong>Name{visibilityExtra}</strong> darf öffentlich auf
-            dieser Seite angezeigt werden.{" "}
-            <span className="opt">(optional)</span>
+            {fillText(cfg.ui.signForm.publicLabel, { fields: visibilityExtra })}{" "}
+            <span className="opt">{cfg.ui.signForm.optional}</span>
           </span>
         </label>
         <label className="check">
@@ -2073,10 +2081,7 @@ const SignForm = memo(function SignForm({
             checked={newsletter}
             onChange={(e) => setNewsletter(e.target.checked)}
           />
-          <span>
-            Haltet mich zur Initiative auf dem Laufenden (gelegentliche E-Mails,
-            jederzeit abbestellbar).
-          </span>
+          <span>{cfg.ui.signForm.newsletterLabel}</span>
         </label>
         {INVITES && (
           <label className="check">
@@ -2086,21 +2091,21 @@ const SignForm = memo(function SignForm({
               onChange={(e) => setInviteShowName(e.target.checked)}
             />
             <span>
-              {inviteOptInLabel} <span className="opt">(optional)</span>
+              {inviteOptInLabel()}{" "}
+              <span className="opt">{cfg.ui.signForm.optional}</span>
             </span>
           </label>
         )}
       </div>
 
       <button type="submit" className="submit" disabled={submitting}>
-        {submitting ? "Wird gesendet…" : cfg.hero.ctaPrimary}{" "}
+        {submitting ? cfg.ui.signForm.submitting : cfg.hero.ctaPrimary}{" "}
         <span className="arrow" aria-hidden="true">
           →
         </span>
       </button>
       <p className="form-legal">
-        Mit Klick auf „Mitzeichnen" schicken wir dir einen Bestätigungslink an
-        deine E-Mail. Erst danach zählt deine Unterschrift.
+        {cfg.ui.signForm.legal}
       </p>
     </form>
   );
@@ -2346,7 +2351,10 @@ function KreisverbandMap({ kvGroups }) {
                       e.stopPropagation();
                       handleClusterClick(chip, e.currentTarget);
                     }}
-                    aria-label={`${chip.name}: ${chip.count} Unterschriften, Details anzeigen`}
+                    aria-label={fillText(cfg.ui.list.mapChipAria, {
+                      name: chip.name,
+                      count: chip.count,
+                    })}
                     aria-expanded={popup ? popup.id === chip.id : false}
                   >
                     <span className="occupation-name">{chip.name}</span>
@@ -2364,14 +2372,17 @@ function KreisverbandMap({ kvGroups }) {
               style={{ "--popup-x": popup.x, "--popup-y": popup.y }}
               onClick={(e) => e.stopPropagation()}
               role="dialog"
-              aria-label={`${popup.label}: ${popup.total} Unterschriften`}
+              aria-label={fillText(cfg.ui.list.mapPopupAria, {
+                name: popup.label,
+                count: popup.total,
+              })}
             >
               <div className="kv-map-popup-head">
                 <span>{popup.label}</span>
                 <button
                   ref={popupCloseRef}
                   onClick={() => setPopup(null)}
-                  aria-label="Schließen"
+                  aria-label={cfg.ui.chrome.close}
                 >
                   ×
                 </button>
@@ -2411,7 +2422,7 @@ function KreisverbandMap({ kvGroups }) {
           ))}
           {mapData.ohneCount > 0 && (
             <div className="occupation-chip">
-              <span className="occupation-name">{region.none}</span>
+              <span className="occupation-name">{region().none}</span>
               <span className="occupation-count">{mapData.ohneCount}</span>
             </div>
           )}
@@ -2434,8 +2445,8 @@ function ImpressumModal({ onClose }) {
         ref={trapRef}
       >
         <div className="modal-head">
-          <h3 id="impressum-title">Impressum</h3>
-          <button onClick={onClose} aria-label="Schließen">
+          <h3 id="impressum-title">{cfg.ui.chrome.impressum}</h3>
+          <button onClick={onClose} aria-label={cfg.ui.chrome.close}>
             ×
           </button>
         </div>
@@ -2528,7 +2539,7 @@ function DatenschutzModal({ onClose }) {
       >
         <div className="modal-head">
           <h3 id="datenschutz-title">Datenschutzerklärung</h3>
-          <button onClick={onClose} aria-label="Schließen">
+          <button onClick={onClose} aria-label={cfg.ui.chrome.close}>
             ×
           </button>
         </div>
@@ -2569,10 +2580,10 @@ function DatenschutzModal({ onClose }) {
             <br />
             Beim Mitzeichnen werden Name und E-Mail-Adresse
             {[
-              cfg.features.kreisverbandField && kvName,
+              cfg.features.kreisverbandField && region().name,
               cfg.features.occupationField && "Beruf",
             ].filter(Boolean).length > 0 &&
-              ` sowie optional ${[cfg.features.kreisverbandField && kvName, cfg.features.occupationField && "Beruf"].filter(Boolean).join(" und ")}`}{" "}
+              ` sowie optional ${[cfg.features.kreisverbandField && region().name, cfg.features.occupationField && "Beruf"].filter(Boolean).join(" und ")}`}{" "}
             gespeichert. Rechtsgrundlage ist deine ausdrückliche Einwilligung
             (Art. 6 Abs. 1 lit. a DS-GVO). Die Daten werden{" "}
             <strong>ausschließlich für diese Petition verwendet</strong> und –
@@ -2589,7 +2600,7 @@ function DatenschutzModal({ onClose }) {
           <p>
             Wenn du zustimmst, dass dein Name öffentlich angezeigt wird,
             erscheinen dein Name
-            {cfg.features.kreisverbandField && `, dein ${kvName}`}
+            {cfg.features.kreisverbandField && `, dein ${region().name}`}
             {cfg.features.stateResolution &&
               " und das daraus ermittelte Bundesland"}{" "}
             sowie das Datum der Unterzeichnung in der Liste auf dieser Website.

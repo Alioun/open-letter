@@ -1219,6 +1219,43 @@ export async function setZoomSettings(partial) {
   }
 }
 
+// ---- editable texts & mode (admin "Texte & Modus", config/editable.js) -----
+// One app_settings row per overridden config path: key `copy:<path>`, value
+// JSON. Paths without a row use the deployed config.
+
+export async function getCopyOverrides() {
+  return cached("copy-overrides", async () => {
+    const rows = await db
+      .query(`SELECT key, value FROM app_settings WHERE key LIKE 'copy:%'`)
+      .all();
+    const out = {};
+    for (const row of rows) {
+      try {
+        out[row.key.slice(5)] = JSON.parse(row.value);
+      } catch {
+        // A corrupt row falls back to the config value.
+      }
+    }
+    return out;
+  });
+}
+
+// changes: { path: value | null }; null removes the override.
+export async function setCopyOverrides(changes) {
+  for (const [path, value] of Object.entries(changes)) {
+    if (value === null) {
+      await db.query(`DELETE FROM app_settings WHERE key = ?`).run(`copy:${path}`);
+    } else {
+      await db
+        .query(
+          `INSERT INTO app_settings (key, value, updated_at) VALUES (?, ?, ?)
+           ON CONFLICT (key) DO UPDATE SET value = excluded.value, updated_at = excluded.updated_at`,
+        )
+        .run(`copy:${path}`, JSON.stringify(value), nowIso());
+    }
+  }
+}
+
 // ---- milestones (admin-editable goal thresholds) ---------------------------
 // Stored as a JSON array under app_settings.milestones; seeded from the active
 // letter config (cfg.hero.milestones) when unset.

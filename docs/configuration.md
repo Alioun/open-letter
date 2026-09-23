@@ -17,6 +17,7 @@ Everything specific to a campaign lives in `config/letters/<name>/`: `index.js` 
 | `email` | `from`, `signoff`, `provider` (`resend`/`smtp`) + `smtp` connection details, `providerRetentionDays` (how long the provider keeps sent mail; quoted in the privacy policy), `pacing` (rate-limit delays), and the `templates` map (seeded into the DB, admin-editable) |
 | `pages` | copy for the server-rendered pages behind mail links (confirm, delete, Treffen); defaults in `server/pages.js` |
 | `features` | `kreisverbandField`, `occupationField`, `germanyMap`, `stateResolution`, `zoomEvent`, `inviteLinks` — toggle the optional modules |
+| `ui` | interface texts that have no section of their own (buttons, modals, list, sign form, email settings page, user-facing errors); defaults in `config/ui.js`, override any key per letter |
 | `invite` | invite-link texts and how exact the private stats are: `statsMode` (`"ranges"` default, `"threshold"`, `"exact"`), `statsRanges`, `statsThreshold` (only read when `features.inviteLinks`); omitted keys use the defaults in `config/invite.js`. Placeholders: `{firstName}`, `{title}`, `{url}` |
 | `zoom` | event label/date/duration (only read when `features.zoomEvent`) |
 
@@ -106,3 +107,9 @@ a route tries to send mail.
 for `resend`, or `SMTP_HOST` (plus `SMTP_USER`/`SMTP_PASS` for authenticated
 relays) for `smtp`. The app fails closed at startup if they're missing.
 
+
+## Editing texts at runtime
+
+The admin panel's **Texte & Modus** tab edits texts and two presentation switches without a redeploy: success mode, the collapsed sections, hero/success/sign/list/footer/Treffen texts, navigation labels, the link pages, invite texts and every `ui` key. Which paths are editable is listed in `config/editable.js`. Overrides are stored per path in `app_settings` (`copy:<path>`) and apply from the next page load. "Standard wiederherstellen" removes an override, so the value from the letter config applies again.
+
+Stays config-only: features that add routes or workers, retention periods, email transport, head/meta and social preview, theme, letter body and FAQ, invite stats precision, and the privacy notice text.

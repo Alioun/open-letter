@@ -8,6 +8,16 @@ import { regionLabels } from "../config/region.js";
 import { resolvePrivacy, retentionCutoff } from "../config/privacy.js";
 import { resolveInvite, statsDisplay } from "../config/invite.js";
 import {
+  editableFields,
+  applyOverrides,
+  cleanValue,
+  GROUPS as EDITABLE_GROUPS,
+} from "../config/editable.js";
+
+// The config as deployed, before admin overrides ("Texte & Modus") are applied
+// onto `cfg` below. Taken first, so it never contains an override.
+const PRISTINE_CFG = structuredClone(cfg);
+import {
   renderIndexHtml,
   renderUnsubscribeHtml,
   analyticsOrigin,
@@ -40,6 +50,8 @@ import {
   confirmSigner,
   getPendingSignerByToken,
   getInviteByCode,
+  getCopyOverrides,
+  setCopyOverrides,
   inviteDisplayName,
   getInviteStats,
   isInviteCode,
@@ -649,7 +661,7 @@ async function denyPublic(req, bucket, max, windowMs) {
   const ip = getClientIp(req);
   const { allowed, retryAfter } = checkRateLimit(ip, bucket, max, windowMs);
   if (!allowed) {
-    return json({ error: "Zu viele Anfragen." }, 429, {
+    return json({ error: cfg.ui.errors.tooMany }, 429, {
       "Retry-After": String(retryAfter),
     });
   }
@@ -667,7 +679,7 @@ function denyRate(req, bucket, max, windowMs) {
     windowMs,
   );
   if (!allowed) {
-    return json({ error: "Zu viele Anfragen." }, 429, {
+    return json({ error: cfg.ui.errors.tooMany }, 429, {
       "Retry-After": String(retryAfter),
     });
   }
@@ -1113,7 +1125,36 @@ async function sendZoomReminderMails(cfg) {
 }
 
 // Copy for the server-rendered link pages (letter config `pages`).
-const pages = pageCopy(cfg);
+let pages = pageCopy(cfg);
+
+// Admin-editable texts and presentation mode (config/editable.js). Overrides
+// are written onto `cfg` itself, so every read at request time sees them;
+// `pages` is rebuilt from it.
+const EDITABLE = editableFields(PRISTINE_CFG, pageCopy(PRISTINE_CFG));
+const EDITABLE_BY_PATH = new Map(EDITABLE.map((f) => [f.path, f]));
+
+// Only overrides for paths this letter still offers (a stale row for a
+// removed field is ignored).
+async function currentOverrides() {
+  const all = await getCopyOverrides();
+  return Object.fromEntries(
+    Object.entries(all).filter(([path]) => EDITABLE_BY_PATH.has(path)),
+  );
+}
+
+async function refreshCopy() {
+  const overrides = await currentOverrides();
+  applyOverrides(cfg, EDITABLE, overrides);
+  pages = pageCopy(cfg);
+  return overrides;
+}
+
+try {
+  await refreshCopy();
+} catch (err) {
+  // A database without app_settings yet (fresh setup) runs on the config.
+  console.error("[copy] overrides not applied:", err.message);
+}
 
 function htmlPage(inner, status = 200) {
   return new Response(simplePage(inner, cfg), {
@@ -1486,11 +1527,18 @@ const server = Bun.serve({
         const blocked = denyRate(req, "public-read", 120, 60 * 1000);
         if (blocked) return blocked;
         try {
-          const [stats, zoom] = await Promise.all([
+          const [stats, zoom, copy] = await Promise.all([
             statsPayload(),
             cfg.features.zoomEvent ? zoomPayload() : null,
+            currentOverrides(),
           ]);
-          return json({ stats, zoom }, 200, { "Cache-Control": "no-store" });
+          // Link pages are rendered on the server; the browser needs the rest.
+          for (const path of Object.keys(copy)) {
+            if (path.startsWith("pages.")) delete copy[path];
+          }
+          return json({ stats, zoom, copy }, 200, {
+            "Cache-Control": "no-store",
+          });
         } catch (err) {
           console.error("GET /api/boot error:", err);
           return json({ error: "Internal server error" }, 500);
@@ -1511,7 +1559,7 @@ const server = Bun.serve({
           15 * 60 * 1000,
         );
         if (!allowed) {
-          return json({ error: "Zu viele Anfragen." }, 429, {
+          return json({ error: cfg.ui.errors.tooMany }, 429, {
             "Retry-After": String(retryAfter),
           });
         }
@@ -1660,7 +1708,7 @@ const server = Bun.serve({
           );
           if (!allowed) {
             return json(
-              { error: "Zu viele Anfragen. Bitte versuche es später erneut." },
+              { error: cfg.ui.errors.tooMany },
               429,
               { "Retry-After": String(retryAfter) },
             );
@@ -1684,14 +1732,11 @@ const server = Bun.serve({
           const inviteShowName = INVITES_ENABLED && body.inviteShowName === true;
 
           if (name.length < 2) {
-            return json(
-              { error: "Name muss mindestens 2 Zeichen lang sein." },
-              400,
-            );
+            return json({ error: cfg.ui.errors.nameTooShort }, 400);
           }
           if (!isValidEmail(email)) {
             return json(
-              { error: "Bitte gib eine gültige E-Mail-Adresse an." },
+              { error: cfg.ui.errors.invalidEmail },
               400,
             );
           }
@@ -1749,7 +1794,7 @@ const server = Bun.serve({
           );
           if (!allowed) {
             return json(
-              { error: "Zu viele Anfragen. Bitte versuche es später erneut." },
+              { error: cfg.ui.errors.tooMany },
               429,
               { "Retry-After": String(retryAfter) },
             );
@@ -1768,14 +1813,11 @@ const server = Bun.serve({
             zoomCfg.showDelegierter && Boolean(body.delegierter);
 
           if (name.length < 2) {
-            return json(
-              { error: "Name muss mindestens 2 Zeichen lang sein." },
-              400,
-            );
+            return json({ error: cfg.ui.errors.nameTooShort }, 400);
           }
           if (!isValidEmail(email)) {
             return json(
-              { error: "Bitte gib eine gültige E-Mail-Adresse an." },
+              { error: cfg.ui.errors.invalidEmail },
               400,
             );
           }
@@ -1861,7 +1903,7 @@ const server = Bun.serve({
           );
           if (!allowed) {
             return json(
-              { error: "Zu viele Anfragen. Bitte versuche es später erneut." },
+              { error: cfg.ui.errors.tooMany },
               429,
               { "Retry-After": String(retryAfter) },
             );
@@ -2169,7 +2211,7 @@ const server = Bun.serve({
           );
           if (!allowed) {
             return json(
-              { error: "Zu viele Anfragen. Bitte versuche es später erneut." },
+              { error: cfg.ui.errors.tooMany },
               429,
               { "Retry-After": String(retryAfter) },
             );
@@ -2196,10 +2238,7 @@ const server = Bun.serve({
             (await getShowDelegierter()) && Boolean(body.delegierter);
 
           if (name.length < 2) {
-            return json(
-              { error: "Name muss mindestens 2 Zeichen lang sein." },
-              400,
-            );
+            return json({ error: cfg.ui.errors.nameTooShort }, 400);
           }
 
           await updateSignerByEmail(email, {
@@ -2656,6 +2695,7 @@ const server = Bun.serve({
             location: cfg.location,
             eventLabelFallback: cfg.eventLabelFallback,
             navLabel: cfg.navLabel,
+            durationMin: cfg.durationMin,
             mailings: await listZoomMailings(),
           });
         });
@@ -2681,6 +2721,11 @@ const server = Bun.serve({
             reminderOffsetHours < 0
           ) {
             return json({ error: "Ungültige Timing-Werte" }, 400);
+          }
+          const durationMin =
+            body.durationMin == null ? null : parseInt(body.durationMin, 10);
+          if (durationMin != null && !(durationMin >= 5 && durationMin <= 1440)) {
+            return json({ error: "Dauer muss zwischen 5 und 1440 Minuten liegen" }, 400);
           }
 
           const prev = await getZoomConfig();
@@ -2712,6 +2757,8 @@ const server = Bun.serve({
             zoom_location_maps_url: String(body.locationMapsUrl ?? "").trim(),
             zoom_event_label: String(body.eventLabel ?? "").trim(),
             zoom_nav_label: String(body.navLabel ?? "").trim(),
+            // null (older admin page) keeps the stored value.
+            zoom_duration_min: durationMin,
           });
           if (eventChanged) await resetZoomMailings();
 
@@ -2728,7 +2775,50 @@ const server = Bun.serve({
             location: cfg.location,
             eventLabelFallback: cfg.eventLabelFallback,
             navLabel: cfg.navLabel,
+            durationMin: cfg.durationMin,
           });
+        });
+      },
+    },
+
+    // "Texte & Modus": every editable field with its default and override.
+    "/api/admin/copy": {
+      async GET(req) {
+        return adminJson(req, async () => {
+          const overrides = await currentOverrides();
+          return json({
+            groups: EDITABLE_GROUPS,
+            fields: EDITABLE.map((f) => ({
+              ...f,
+              overridden: Object.prototype.hasOwnProperty.call(overrides, f.path),
+              value: overrides[f.path] ?? f.default,
+            })),
+          });
+        });
+      },
+      // { changes: { path: value | null } }; null restores the default.
+      async POST(req) {
+        return adminJson(req, async () => {
+          if (bodyTooLarge(req))
+            return json({ error: "Payload too large" }, 413);
+          const body = await parseJsonBody(req);
+          const changes = body?.changes;
+          if (!changes || typeof changes !== "object" || Array.isArray(changes)) {
+            return json({ error: "changes fehlt" }, 400);
+          }
+          const clean = {};
+          try {
+            for (const [path, value] of Object.entries(changes)) {
+              const field = EDITABLE_BY_PATH.get(path);
+              if (!field) throw new Error(`${path}: nicht editierbar`);
+              clean[path] = value === null ? null : cleanValue(field, value);
+            }
+          } catch (e) {
+            return json({ error: e.message }, 400);
+          }
+          await setCopyOverrides(clean);
+          await refreshCopy();
+          return json({ ok: true });
         });
       },
     },
@@ -2766,7 +2856,7 @@ const server = Bun.serve({
           const to = String(body.to || "").trim();
           const kind = body.kind;
           if (!to || !isValidEmail(to)) {
-            return json({ error: "Ungültige E-Mail-Adresse" }, 400);
+            return json({ error: cfg.ui.errors.invalidEmail }, 400);
           }
           if (!["confirmation", "link", "reminder"].includes(kind)) {
             return json({ error: "Unbekannter Mail-Typ" }, 400);
@@ -2832,7 +2922,7 @@ const server = Bun.serve({
           const to = String(body.to || "").trim();
           const templateId = parseInt(body.template_id, 10);
           if (!to || !isValidEmail(to)) {
-            return json({ error: "Ungültige E-Mail-Adresse" }, 400);
+            return json({ error: cfg.ui.errors.invalidEmail }, 400);
           }
           if (!templateId) {
             return json({ error: "Keine Vorlage ausgewählt" }, 400);

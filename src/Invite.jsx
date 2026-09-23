@@ -9,7 +9,8 @@ import { useState, useEffect, useRef } from "react";
 import cfg from "../config/letter.config.js";
 import { resolveInvite, fillInvite } from "../config/invite.js";
 
-const T = resolveInvite(cfg);
+// Resolved on use, so admin text overrides applied after load count.
+const T = () => resolveInvite(cfg);
 const CODE_RE = /^\/i\/([0-9a-hjkmnp-tv-z]{8})\/?$/;
 const REF_KEY = "invite-ref";
 
@@ -50,11 +51,11 @@ export function forgetInviteRef() {
   } catch {}
 }
 
-export const inviteOptInLabel = T.optInLabel;
+export const inviteOptInLabel = () => T().optInLabel;
 
 export function InviteShare({ code }) {
   const url = inviteUrl(code);
-  const message = fillInvite(T.shareMessage, { title: T.title, url });
+  const message = fillInvite(T().shareMessage, { title: T().title, url });
   const [copied, setCopied] = useState(false);
   const canShare = typeof navigator !== "undefined" && !!navigator.share;
 
@@ -71,24 +72,24 @@ export function InviteShare({ code }) {
     [
       "Telegram",
       `https://t.me/share/url?url=${encodeURIComponent(url)}&text=${encodeURIComponent(
-        fillInvite(T.shareMessage, { title: T.title, url: "" }).trim(),
+        fillInvite(T().shareMessage, { title: T().title, url: "" }).trim(),
       )}`,
     ],
-    ["E-Mail", `mailto:?subject=${encodeURIComponent(T.title)}&body=${encodeURIComponent(message)}`],
+    ["E-Mail", `mailto:?subject=${encodeURIComponent(T().title)}&body=${encodeURIComponent(message)}`],
   ];
 
   return (
     <div className="invite-share">
-      <p className="invite-share__heading">{T.successHeading}</p>
+      <p className="invite-share__heading">{T().successHeading}</p>
       <div className="invite-share__link">
         <input
           readOnly
           value={url}
-          aria-label={T.successHeading}
+          aria-label={T().successHeading}
           onFocus={(e) => e.target.select()}
         />
         <button type="button" onClick={copy}>
-          {copied ? T.copiedLabel : T.copyLabel}
+          {copied ? T().copiedLabel : T().copyLabel}
         </button>
       </div>
       <div className="invite-share__buttons">
@@ -106,14 +107,14 @@ export function InviteShare({ code }) {
           <button
             type="button"
             onClick={() =>
-              navigator.share({ title: T.title, text: message }).catch(() => {})
+              navigator.share({ title: T().title, text: message }).catch(() => {})
             }
           >
-            {T.moreLabel}
+            {T().moreLabel}
           </button>
         )}
       </div>
-      <p className="invite-share__note">{T.successNote}</p>
+      <p className="invite-share__note">{T().successNote}</p>
     </div>
   );
 }
@@ -150,13 +151,13 @@ function InviteDialog({ title, onClose, children }) {
 
 export function InviteModal({ firstName, onClose }) {
   const text = firstName
-    ? fillInvite(T.modalText, { firstName, title: T.title })
-    : fillInvite(T.modalTextAnonymous, { title: T.title });
+    ? fillInvite(T().modalText, { firstName, title: T().title })
+    : fillInvite(T().modalTextAnonymous, { title: T().title });
   return (
-    <InviteDialog title={T.title} onClose={onClose}>
+    <InviteDialog title={T().title} onClose={onClose}>
       <p className="success-title">{text}</p>
       <button className="confirm-btn confirm-btn--accent" onClick={onClose}>
-        {T.modalButton} <span aria-hidden="true">→</span>
+        {T().modalButton} <span aria-hidden="true">→</span>
       </button>
     </InviteDialog>
   );
@@ -165,16 +166,16 @@ export function InviteModal({ firstName, onClose }) {
 // result: { count } | { below } | { min, max } | { min } | { invalid: true }
 export function InviteStatsModal({ result, onClose }) {
   let text;
-  if (result.invalid) text = T.statsInvalid;
+  if (result.invalid) text = T().statsInvalid;
   else if (result.below != null)
-    text = fillInvite(T.statsBelow, { threshold: result.below });
+    text = fillInvite(T().statsBelow, { threshold: result.below });
   else if (result.max != null)
-    text = fillInvite(T.statsRange, { min: result.min, max: result.max });
+    text = fillInvite(T().statsRange, { min: result.min, max: result.max });
   else if (result.min != null)
-    text = fillInvite(T.statsAtLeast, { min: result.min });
-  else text = fillInvite(T.statsCount, { count: result.count });
+    text = fillInvite(T().statsAtLeast, { min: result.min });
+  else text = fillInvite(T().statsCount, { count: result.count });
   return (
-    <InviteDialog title={T.statsHeading} onClose={onClose}>
+    <InviteDialog title={T().statsHeading} onClose={onClose}>
       <p className="success-title">{text}</p>
     </InviteDialog>
   );

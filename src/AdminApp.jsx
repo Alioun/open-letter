@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useState } from "react";
 import cfg from "../config/letter.config.js";
+import AdminCopy from "./AdminCopy.jsx";
 import { regionLabels } from "../config/region.js";
 import { DayPicker } from "react-day-picker";
 import { format, parse, isValid } from "date-fns";
@@ -487,6 +488,7 @@ export default function AdminApp() {
   const [zoomLocationMapsUrl, setZoomLocationMapsUrl] = useState("");
   const [zoomEventLabel, setZoomEventLabel] = useState("");
   const [zoomNavLabel, setZoomNavLabel] = useState("");
+  const [zoomDurationMin, setZoomDurationMin] = useState(90);
   const [zoomSettingsStatus, setZoomSettingsStatus] = useState(null);
   const [milestonesInput, setMilestonesInput] = useState("");
   const [milestonesStatus, setMilestonesStatus] = useState(null);
@@ -728,6 +730,7 @@ export default function AdminApp() {
         setZoomLocationMapsUrl(data.location?.mapsUrl || "");
         setZoomEventLabel(data.eventLabelFallback || "");
         setZoomNavLabel(data.navLabel || "");
+        if (data.durationMin) setZoomDurationMin(data.durationMin);
       }
     });
   }, [api, tab, token]);
@@ -995,6 +998,7 @@ export default function AdminApp() {
         locationMapsUrl: zoomLocationMapsUrl,
         eventLabel: zoomEventLabel,
         navLabel: zoomNavLabel,
+        durationMin: Number(zoomDurationMin),
       }),
     });
     if (res.ok) {
@@ -1153,6 +1157,13 @@ export default function AdminApp() {
             onClick={() => setTab("zoom")}
           >
             Zoom
+          </button>
+          <button
+            className={tab === "copy" ? "active" : ""}
+            aria-current={tab === "copy" ? "page" : undefined}
+            onClick={() => setTab("copy")}
+          >
+            Texte & Modus
           </button>
           <button
             className={tab === "settings" ? "active" : ""}
@@ -1836,6 +1847,16 @@ export default function AdminApp() {
                     placeholder="z. B. Auswertungstreffen"
                   />
                 </div>
+                <div className="field">
+                  <label>Dauer (Minuten, für Kalendereintrag)</label>
+                  <input
+                    type="number"
+                    min={5}
+                    max={1440}
+                    value={zoomDurationMin}
+                    onChange={(e) => setZoomDurationMin(e.target.value)}
+                  />
+                </div>
               </div>
               <label className="check admin-check">
                 <input
@@ -2044,6 +2065,8 @@ export default function AdminApp() {
           </div>
         </section>
       )}
+
+      {tab === "copy" && <AdminCopy api={api} />}
 
       {tab === "settings" && (
         <section className="section">

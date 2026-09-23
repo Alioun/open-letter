@@ -1,8 +1,10 @@
 import { useEffect, useMemo, useState } from "react";
 import cfg from "../config/letter.config.js";
+import { fillText } from "../config/ui.js";
 import { regionLabels } from "../config/region.js";
 
-const { options: kvOptions, name: kvName } = regionLabels(cfg);
+// Read while rendering, so admin text overrides applied after load count.
+const region = () => regionLabels(cfg);
 import { resolvePrivacy } from "../config/privacy.js";
 
 const { settingsLinkDays } = resolvePrivacy(cfg);
@@ -61,7 +63,7 @@ export default function UnsubscribeApp() {
           loading: false,
           data: null,
           error:
-            "Du bist offline. Bitte prüfe deine Verbindung und lade die Seite neu.",
+            cfg.ui.settings.offline,
         });
         return;
       }
@@ -74,7 +76,7 @@ export default function UnsubscribeApp() {
           setState({
             loading: false,
             data: null,
-            error: "Dieser Link ist nicht mehr gültig.",
+            error: cfg.ui.settings.invalidLink,
           });
           return;
         }
@@ -86,7 +88,7 @@ export default function UnsubscribeApp() {
         setState({
           loading: false,
           data: null,
-          error: "Die Verbindung ist fehlgeschlagen.",
+          error: cfg.ui.settings.connectionFailed,
         });
       }
     }
@@ -97,13 +99,13 @@ export default function UnsubscribeApp() {
   function validateForm(values) {
     const errors = {};
     if (values.name.length > 100) {
-      errors.name = "Bitte kürze den Namen auf maximal 100 Zeichen.";
+      errors.name = cfg.ui.settings.errNameLong;
     }
     if (values.kv.length > 80) {
-      errors.kv = `Bitte kürze den ${kvName} auf maximal 80 Zeichen.`;
+      errors.kv = fillText(cfg.ui.settings.errKvLong, { region: region().name });
     }
     if (values.occupation.length > 80) {
-      errors.occupation = "Bitte kürze den Beruf auf maximal 80 Zeichen.";
+      errors.occupation = cfg.ui.settings.errOccupationLong;
     }
     return errors;
   }
@@ -113,12 +115,12 @@ export default function UnsubscribeApp() {
     const errors = validateForm(form);
     setFieldErrors(errors);
     if (Object.keys(errors).length > 0) {
-      setSaveError("Bitte korrigiere die markierten Felder.");
+      setSaveError(cfg.ui.settings.errFields);
       return;
     }
 
     if (!navigator.onLine) {
-      setSaveError("Du bist offline. Bitte prüfe deine Verbindung.");
+      setSaveError(cfg.ui.settings.offlineShort);
       return;
     }
 
@@ -136,7 +138,7 @@ export default function UnsubscribeApp() {
       );
       const payload = await res.json().catch(() => ({}));
       if (!res.ok) {
-        setSaveError(payload.error || "Speichern fehlgeschlagen.");
+        setSaveError(payload.error || cfg.ui.settings.saveFailed);
         return;
       }
       setSaved(true);
@@ -146,7 +148,7 @@ export default function UnsubscribeApp() {
       }));
       setForm(formFromData(payload));
     } catch {
-      setSaveError("Die Verbindung ist fehlgeschlagen.");
+      setSaveError(cfg.ui.settings.connectionFailed);
     } finally {
       setSaving(false);
     }
@@ -156,7 +158,7 @@ export default function UnsubscribeApp() {
     setBusy(action);
     setResult("");
     if (!navigator.onLine) {
-      setResult("Du bist offline. Bitte prüfe deine Verbindung.");
+      setResult(cfg.ui.settings.offlineShort);
       setBusy("");
       return;
     }
@@ -168,24 +170,24 @@ export default function UnsubscribeApp() {
         const payload = await res.json().catch(() => ({}));
         setResult(
           payload.error ||
-            "Die Aktion konnte nicht abgeschlossen werden. Bitte versuche es später erneut.",
+            cfg.ui.settings.actionFailed,
         );
         return;
       }
       const messages = {
         "newsletter-opt-out":
-          "Du erhältst keine Newsletter-Updates mehr. Deine Unterschrift bleibt bestehen.",
+          cfg.ui.settings.doneNewsletter,
         "zoom-opt-out":
-          "Du erhältst keine Zoom-Mails mehr. Deine Anmeldung wurde entfernt.",
-        all: "Du bist von allem abgemeldet.",
+          cfg.ui.settings.doneZoom,
+        all: cfg.ui.settings.doneAll,
         delete:
-          "Deine Unterschrift und die damit verbundenen Daten wurden gelöscht.",
+          cfg.ui.settings.doneDelete,
       };
-      setResult(messages[action] || "Erledigt.");
+      setResult(messages[action] || cfg.ui.settings.done);
       setState((current) => ({ ...current, data: null }));
     } catch {
       setResult(
-        "Die Aktion konnte nicht abgeschlossen werden. Bitte prüfe deine Verbindung.",
+        cfg.ui.settings.actionFailedConnection,
       );
     } finally {
       setBusy("");
@@ -201,11 +203,11 @@ export default function UnsubscribeApp() {
       <section className="section">
         <div className="section-inner unsubscribe-inner">
           <article className="form-card">
-            <h1>E-Mail-Einstellungen</h1>
+            <h1>{cfg.ui.settings.title}</h1>
 
             {state.loading && (
               <p role="status" aria-live="polite">
-                Link wird geprüft …
+                {cfg.ui.settings.checking}
               </p>
             )}
 
@@ -214,7 +216,7 @@ export default function UnsubscribeApp() {
                 <p className="lead" role="alert">
                   {state.error}
                 </p>
-                <p>Bitte nutze den neuesten Link aus einer unserer E-Mails.</p>
+                <p>{cfg.ui.settings.useNewestLink}</p>
                 <button
                   type="button"
                   className="cta cta--outline"
@@ -223,7 +225,7 @@ export default function UnsubscribeApp() {
                     setReloadCount((n) => n + 1);
                   }}
                 >
-                  Erneut versuchen
+                  {cfg.ui.settings.retry}
                 </button>
               </>
             )}
@@ -233,7 +235,7 @@ export default function UnsubscribeApp() {
                 <p className="lead" role="status" aria-live="polite">
                   {result}
                 </p>
-                <p>Danke für deine Rückmeldung.</p>
+                <p>{cfg.ui.settings.thanks}</p>
               </>
             )}
 
@@ -243,19 +245,17 @@ export default function UnsubscribeApp() {
 
                 {d.editable === false && (
                   <p className="sub2">
-                    Wir haben dir seit mehr als {settingsLinkDays} Tagen keine
-                    E-Mail mit diesem Link geschickt. Abmelden kannst du dich
-                    weiterhin. Um deine Angaben zu ändern oder deine
-                    Unterschrift zu löschen, nutze den Link aus einer neueren
-                    E-Mail oder das Löschformular in der Datenschutzerklärung.
+                    {fillText(cfg.ui.settings.oldLink, {
+                      days: settingsLinkDays,
+                    })}
                   </p>
                 )}
 
                 {d.editable !== false && (d.hasSigner || d.hasZoom) && (
                   <form onSubmit={save} noValidate>
-                    <h2>Deine Angaben</h2>
+                    <h2>{cfg.ui.settings.detailsHeading}</h2>
                     <p className="sub2">
-                      Hier kannst du deine Daten jederzeit anpassen.
+                      {cfg.ui.settings.detailsIntro}
                     </p>
 
                     {saveError && (
@@ -265,12 +265,12 @@ export default function UnsubscribeApp() {
                     )}
                     {saved && !saveError && (
                       <p className="status-message" role="status">
-                        Deine Angaben wurden aktualisiert.
+                        {cfg.ui.settings.saved}
                       </p>
                     )}
 
                     <div className="field">
-                      <label htmlFor="edit-name">Name</label>
+                      <label htmlFor="edit-name">{cfg.ui.settings.nameLabel}</label>
                       <input
                         id="edit-name"
                         type="text"
@@ -294,9 +294,10 @@ export default function UnsubscribeApp() {
 
                     <div className="field">
                       <label htmlFor="edit-kv">
-                        {kvName} <span className="opt"> optional</span>
+                        {region().name}{" "}
+                        <span className="opt"> {cfg.ui.settings.optional}</span>
                       </label>
-                      {kvOptions ? (
+                      {region().options ? (
                         <select
                           id="edit-kv"
                           value={form.kv}
@@ -307,10 +308,10 @@ export default function UnsubscribeApp() {
                           <option value="">–</option>
                           {/* A region stored before the options existed
                               stays visible and selectable. */}
-                          {form.kv && !kvOptions.includes(form.kv) && (
+                          {form.kv && !region().options.includes(form.kv) && (
                             <option value={form.kv}>{form.kv}</option>
                           )}
-                          {kvOptions.map((o) => (
+                          {region().options.map((o) => (
                             <option key={o} value={o}>
                               {o}
                             </option>
@@ -340,7 +341,8 @@ export default function UnsubscribeApp() {
 
                     <div className="field">
                       <label htmlFor="edit-occupation">
-                        Beruf <span className="opt"> optional</span>
+                        {cfg.ui.settings.occupationLabel}{" "}
+                        <span className="opt"> {cfg.ui.settings.optional}</span>
                       </label>
                       <input
                         id="edit-occupation"
@@ -376,7 +378,7 @@ export default function UnsubscribeApp() {
                                 }))
                               }
                             />
-                            <span>Meinen Namen öffentlich anzeigen</span>
+                            <span>{cfg.ui.settings.showPublicly}</span>
                           </label>
                           {cfg.features.inviteLinks && d.hasInviteCode && (
                             <label className="check">
@@ -391,7 +393,7 @@ export default function UnsubscribeApp() {
                                 }
                               />
                               <span>
-                                Meinen Vornamen auf meinem Einladungslink zeigen
+                                {cfg.ui.settings.inviteShowName}
                               </span>
                             </label>
                           )}
@@ -406,7 +408,7 @@ export default function UnsubscribeApp() {
                                 }))
                               }
                             />
-                            <span>Newsletter-Updates erhalten</span>
+                            <span>{cfg.ui.settings.newsletter}</span>
                           </label>
                         </>
                       )}
@@ -423,21 +425,21 @@ export default function UnsubscribeApp() {
                             }
                           />
                           <span>
-                            Ich bin <strong>Delegierte*r zum Parteitag.</strong>
+                            {cfg.ui.settings.delegierter}
                           </span>
                         </label>
                       )}
                     </div>
 
                     <button type="submit" className="cta" disabled={saving}>
-                      {saving ? "Wird gespeichert …" : "Angaben speichern"}
+                      {saving ? cfg.ui.settings.saving : cfg.ui.settings.save}
                     </button>
                   </form>
                 )}
 
                 <div className="divider" />
 
-                <p>Wähle, wovon du dich abmelden möchtest:</p>
+                <p>{cfg.ui.settings.chooseUnsubscribe}</p>
 
                 <div className="button-group">
                   {hasBoth && (
@@ -448,8 +450,8 @@ export default function UnsubscribeApp() {
                       onClick={() => submit("all")}
                     >
                       {busy === "all"
-                        ? "Wird abgemeldet …"
-                        : "Von allem abmelden"}
+                        ? cfg.ui.settings.unsubscribingAll
+                        : cfg.ui.settings.unsubscribeAll}
                     </button>
                   )}
 
@@ -466,8 +468,8 @@ export default function UnsubscribeApp() {
                       onClick={() => submit("newsletter-opt-out")}
                     >
                       {busy === "newsletter-opt-out"
-                        ? "Wird abbestellt …"
-                        : "Keine Newsletter-Updates mehr"}
+                        ? cfg.ui.settings.unsubscribingNewsletter
+                        : cfg.ui.settings.unsubscribeNewsletter}
                     </button>
                   )}
 
@@ -482,15 +484,14 @@ export default function UnsubscribeApp() {
                       onClick={() => submit("zoom-opt-out")}
                     >
                       {busy === "zoom-opt-out"
-                        ? "Wird abgemeldet …"
-                        : "Keine Zoom-Mails mehr"}
+                        ? cfg.ui.settings.unsubscribingZoom
+                        : cfg.ui.settings.unsubscribeZoom}
                     </button>
                   )}
 
                   {!hasOptions && d.hasSigner && (
                     <p>
-                      Du bist bereits von allen E-Mails abgemeldet. Deine
-                      Unterschrift ist weiterhin sichtbar.
+                      {cfg.ui.settings.alreadyUnsubscribed}
                     </p>
                   )}
                 </div>
@@ -498,8 +499,7 @@ export default function UnsubscribeApp() {
                 {d.canDeleteSigner && (
                   <div className="form-card-footer">
                     <p className="sub2">
-                      Du kannst auch deine Unterschrift und alle damit
-                      verbundenen Daten unwiderruflich löschen:
+                      {cfg.ui.settings.deleteIntro}
                     </p>
                     <button
                       type="button"
@@ -508,8 +508,8 @@ export default function UnsubscribeApp() {
                       onClick={() => submit("delete")}
                     >
                       {busy === "delete"
-                        ? "Wird gelöscht …"
-                        : "Unterschrift vollständig löschen"}
+                        ? cfg.ui.settings.deleting
+                        : cfg.ui.settings.delete}
                     </button>
                   </div>
                 )}
