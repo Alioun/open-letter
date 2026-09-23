@@ -4,6 +4,7 @@ import { readFileSync, writeFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { SignJWT, jwtVerify } from "jose";
 import cfg, { LETTER_NAME } from "../config/letter.config.js";
+import { regionLabels } from "../config/region.js";
 import { resolvePrivacy, retentionCutoff } from "../config/privacy.js";
 import {
   renderIndexHtml,
@@ -83,6 +84,7 @@ import {
   issueUnsubscribeToken,
   getUnsubscribeState,
   getUnifiedUnsubscribeState,
+  getSignerKreisverband,
   getShowDelegierter,
   resolveEmailFromToken,
   optOutNewsletter,
@@ -505,14 +507,18 @@ function bodyTooLarge(req) {
 // off, its endpoints 404 and its optional fields are neither stored nor served.
 const ZOOM_ENABLED = Boolean(cfg.features.zoomEvent);
 const KV_ENABLED = Boolean(cfg.features.kreisverbandField);
-const KV_OPTIONS = cfg.sign?.fields?.kreisverband?.options ?? null;
+// Same reading as the frontend (an empty list means free text).
+const KV_OPTIONS = regionLabels(cfg).options;
 
 // Clean a submitted region. With fixed options (e.g. Berlin Bezirke) anything
-// not on the list is dropped rather than stored as free text.
-function normalizeKv(raw) {
+// not on the list is dropped rather than stored as free text, except the
+// signer's current value (`keep`), so a self-edit never erases a region stored
+// before the options were introduced.
+function normalizeKv(raw, keep = "") {
   const kv = sanitize(raw || "").replace(/^KV\s*/i, "");
   if (!KV_OPTIONS || !kv) return kv;
-  return KV_OPTIONS.find((o) => o.toLowerCase() === kv.toLowerCase()) ?? "";
+  const same = (a) => a.toLowerCase() === kv.toLowerCase();
+  return KV_OPTIONS.find(same) ?? (keep && same(keep) ? keep : "");
 }
 const OCCUPATION_ENABLED = Boolean(cfg.features.occupationField);
 
@@ -2081,7 +2087,9 @@ const server = Bun.serve({
 
           const body = await parseJsonBody(req);
           const name = sanitize(body.name || "");
-          const kv = KV_ENABLED ? normalizeKv(body.kv) : "";
+          const kv = KV_ENABLED
+            ? normalizeKv(body.kv, await getSignerKreisverband(email))
+            : "";
           const occupation = OCCUPATION_ENABLED
             ? sanitize(body.occupation || "")
             : "";

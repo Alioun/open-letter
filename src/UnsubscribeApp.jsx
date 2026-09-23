@@ -303,6 +303,11 @@ export default function UnsubscribeApp() {
                           }
                         >
                           <option value="">–</option>
+                          {/* A region stored before the options existed
+                              stays visible and selectable. */}
+                          {form.kv && !kvOptions.includes(form.kv) && (
+                            <option value={form.kv}>{form.kv}</option>
+                          )}
                           {kvOptions.map((o) => (
                             <option key={o} value={o}>
                               {o}

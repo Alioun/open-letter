@@ -1591,6 +1591,14 @@ async function resolveTokenAccess(token, source) {
   return null;
 }
 
+// The signer's stored region, used to keep a legacy value on self-edit.
+export async function getSignerKreisverband(email) {
+  const row = await db
+    .query(`SELECT kreisverband FROM signers WHERE email = ?`)
+    .get(email);
+  return row?.kreisverband ?? "";
+}
+
 export async function getUnifiedUnsubscribeState(token, source) {
   const access = await resolveTokenAccess(token, source);
   if (!access) return null;
