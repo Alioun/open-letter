@@ -6,7 +6,7 @@
 //
 // Safety:
 //   * Verifies the backup opens with the backup key and passes integrity_check.
-//   * Never overwrites a live DB silently — any existing DATABASE_PATH is moved
+//   * Never overwrites a live DB silently: any existing DATABASE_PATH is moved
 //     aside to <path>.pre-restore-<timestamp> first.
 //   * Rebuilds DATABASE_PATH via sqlcipher_export so the restored DB is always
 //     re-keyed to DATABASE_ENCRYPTION_KEY (handles a distinct backup key).
@@ -50,7 +50,7 @@ async function counts(db) {
     try {
       out[t] = (await db.query(`SELECT COUNT(*) AS c FROM ${t}`).get()).c;
     } catch {
-      out[t] = "—";
+      out[t] = "-";
     }
   }
   return out;
@@ -59,7 +59,7 @@ async function counts(db) {
 async function resolveBackupFile(arg) {
   if (arg && arg !== "--latest") return arg;
   const files = (await readdir(BACKUP_DIR))
-    // Finished backups only — never a `.sqlite.tmp` from an interrupted run.
+    // Finished backups only, never a `.sqlite.tmp` from an interrupted run.
     .filter((f) => /^backup-.+\.sqlite(\.gz)?$/.test(f))
     .sort()
     .reverse();
@@ -147,11 +147,11 @@ async function main() {
   if (mismatch.length) {
     throw new Error(`Row-count mismatch after restore: ${mismatch.join(", ")}`);
   }
-  console.log("[restore] OK — all table counts match.");
+  console.log("[restore] OK: all table counts match.");
 
   if (erasures === null) {
     console.error(
-      "[restore] WARNING: could not read the erasure log of the replaced database — " +
+      "[restore] WARNING: could not read the erasure log of the replaced database; " +
         "erasures and opt-outs made after this backup are NOT re-applied. Re-apply them " +
         "by hand (e.g. from the pre-restore copy) before starting the app.",
     );

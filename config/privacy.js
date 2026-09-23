@@ -1,5 +1,5 @@
 // Retention periods and link lifetimes, per letter (`cfg.privacy`). Read by the
-// server, which enforces them, and by the privacy policy, which states them —
+// server, which enforces them, and by the privacy policy, which states them,
 // so the text can't drift from what the code does.
 //
 // Every value falls back to the default below, so a letter only lists what it
@@ -19,7 +19,7 @@ export const PRIVACY_DEFAULTS = {
   // Treffen registrations are deleted this many days after the event.
   treffenRetentionDays: 14,
   // Longest any signature or Treffen registration is kept, counted from when
-  // it was made — even if the campaign is still running.
+  // it was made, even if the campaign is still running.
   signerRetentionYears: 3,
   // Hourly backups are kept this many hours (BACKUP_KEEP overrides it per
   // deployment, with a startup warning, since the policy quotes this value).

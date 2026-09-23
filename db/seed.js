@@ -59,7 +59,7 @@ for (const s of batch) {
 }
 
 console.log(`Seeded ${INITIAL_COUNT} signers.`);
-console.log(`Trickling new signers every ${TRICKLE_INTERVAL_MS / 1000}s — press Ctrl+C to stop.\n`);
+console.log(`Trickling new signers every ${TRICKLE_INTERVAL_MS / 1000}s. Press Ctrl+C to stop.\n`);
 
 setInterval(async () => {
   const s = makeSigner(0);

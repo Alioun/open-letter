@@ -30,7 +30,7 @@
   --shadow-md: 10px;
   --shadow-ml: 12px;
   --shadow-lg: 14px;
-  /* Themeable tokens — overridden per letter from config (see config/theme-css.js). */
+  /* Themeable tokens, overridden per letter from config (see config/theme-css.js). */
   --font-display: "Work Sans", Arial, sans-serif;
   --font-body: "Inter", system-ui, sans-serif;
   --shadow-offset: var(--shadow-offset);
@@ -66,7 +66,7 @@ body {
 html,
 body {
   /* clip (not hidden) so horizontal overflow is contained without turning <body>
-     into a scroll container — which would break position: sticky on .topbar */
+     into a scroll container, which would break position: sticky on .topbar */
   overflow-x: clip;
 }
 a {
@@ -194,7 +194,7 @@ button {
   background: var(--rot);
 }
 
-/* Hamburger button — hidden on desktop */
+/* Hamburger button: hidden on desktop */
 .hamburger {
   display: none;
   flex-direction: column;
@@ -232,7 +232,7 @@ button {
   transform: translateY(-7px) rotate(-45deg);
 }
 
-/* Mobile nav panel — hidden on desktop */
+/* Mobile nav panel: hidden on desktop */
 .mobile-nav {
   display: none;
 }
@@ -3080,7 +3080,7 @@ footer {
   padding-block: 6px;
 }
 
-/* Day button base — explicit overrides beat library defaults */
+/* Day button base: explicit overrides beat library defaults */
 .rdp-root .rdp-day_button {
   border-radius: var(--radius);
   border: 1.5px solid transparent;
@@ -3600,7 +3600,7 @@ footer {
 }
 
 /* Number shown as the active hero's signature counter card (dark maroon, white
-   text, red offset shadow) — sized to content instead of filling a grid column. */
+   text, red offset shadow), sized to content instead of filling a grid column. */
 .hero-success-card {
   width: fit-content;
   max-width: 100%;
@@ -3663,7 +3663,7 @@ footer {
 }
 
 /* Collapsed content sections (config-driven) merge into one contiguous block:
-   the group owns the outer border, and stacked items share a single divider —
+   the group owns the outer border, and stacked items share a single divider:
    the same "one bordered list" look as the FAQ's own items. */
 .section-collapse-group {
   border: 1.5px solid var(--akzent);

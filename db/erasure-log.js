@@ -5,8 +5,8 @@
 //
 // Entries hold an HMAC of the email address (keyed from
 // DATABASE_ENCRYPTION_KEY), never the address itself, plus what happened and
-// when. They are kept for privacy.erasureLogDays — longer than backups are kept,
-// so every backup that could still be restored is covered — then deleted.
+// when. They are kept for privacy.erasureLogDays (longer than backups are kept,
+// so every backup that could still be restored is covered), then deleted.
 //
 // Every function takes the connection explicitly: the restore script works on
 // connections of its own.

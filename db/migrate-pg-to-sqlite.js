@@ -74,7 +74,7 @@ async function main() {
 
   for (const table of TABLES) {
     if (!(await tableExists(sql, table))) {
-      console.warn(`[migrate] source table ${table} missing — skipped`);
+      console.warn(`[migrate] source table ${table} missing, skipped`);
       continue;
     }
 
@@ -108,9 +108,9 @@ async function main() {
 
   console.log("[migrate] summary:", JSON.stringify(report));
   if (failed) {
-    throw new Error("Row-count mismatch — migration incomplete, DO NOT cut over.");
+    throw new Error("Row-count mismatch: migration incomplete, DO NOT cut over.");
   }
-  console.log("[migrate] OK — all tables migrated with matching counts.");
+  console.log("[migrate] OK: all tables migrated with matching counts.");
 }
 
 main().catch((err) => {

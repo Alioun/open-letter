@@ -31,7 +31,7 @@ describe("signers: insert / confirm / delete", () => {
     expect(r1.ok).toBe(true);
     expect(r1.alreadyVerified).toBe(false);
 
-    // Same email while the first link is still valid: nothing changes — a
+    // Same email while the first link is still valid: nothing changes; a
     // second request can't rewrite what the real person is about to confirm.
     const attempt = {
       name: "Second",

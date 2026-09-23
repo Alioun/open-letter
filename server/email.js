@@ -50,12 +50,12 @@ if (process.env.NODE_ENV === "production") {
   // The published privacy policy names the email processor from the letter
   // config (src/App.jsx reads cfg.email.provider), so an EMAIL_PROVIDER that
   // disagrees would send every address through a processor the policy doesn't
-  // name — or name one that isn't used. Fail closed instead.
+  // name, or name one that isn't used. Fail closed instead.
   const published = String(cfg.email.provider || "").toLowerCase();
   if (published !== provider) {
     throw new Error(
       `EMAIL_PROVIDER=${provider} does not match email.provider="${published}" in the letter config. ` +
-        "The privacy policy names the processor from the config — change the config (and redeploy) instead of overriding it.",
+        "The privacy policy names the processor from the config; change the config (and redeploy) instead of overriding it.",
     );
   }
   if (provider === "resend" && !resendApiKey) {
@@ -349,14 +349,14 @@ async function sendBatchViaResend(emails, idempotencyKey, onDelivered) {
 
     // Callers derive the key from the chunk's recipients, so a key Resend has
     // already processed (with a body that differs, e.g. a fresh token) means
-    // this exact set of recipients was sent to before — typically a lost
+    // this exact set of recipients was sent to before, typically a lost
     // response. Record it as delivered rather than failing every retry.
     if (
       response.status === 409 &&
       result?.name === "invalid_idempotent_request"
     ) {
       console.log(
-        `[email] batch key=${idempotencyKey} already processed by Resend — treating ${emails.length} emails as delivered`,
+        `[email] batch key=${idempotencyKey} already processed by Resend; treating ${emails.length} emails as delivered`,
       );
       await onDelivered(emails);
       return result;
@@ -365,7 +365,7 @@ async function sendBatchViaResend(emails, idempotencyKey, onDelivered) {
     const retryable =
       response.status === 429 ||
       response.status >= 500 ||
-      // Another request with this key is still in flight — safe to retry.
+      // Another request with this key is still in flight, so it is safe to retry.
       result?.name === "concurrent_idempotent_requests";
     if (retryable && attempt < maxRetries) {
       const delay = Math.pow(2, attempt) * 1000;
@@ -381,7 +381,7 @@ async function sendBatchViaResend(emails, idempotencyKey, onDelivered) {
   }
 }
 
-// SMTP has no batch endpoint — send each message individually. The
+// SMTP has no batch endpoint, so send each message individually. The
 // idempotencyKey is logged for traceability but has no SMTP equivalent. Each
 // accepted message is reported via onDelivered right away, and one rejected
 // address doesn't stop the rest of the chunk; the chunk throws at the end if
@@ -410,7 +410,7 @@ async function sendBatchViaSmtp(emails, idempotencyKey, onDelivered) {
   );
   if (failures.length) {
     throw new Error(
-      `SMTP batch: ${failures.length}/${emails.length} failed — first: ${failures[0].message}`,
+      `SMTP batch: ${failures.length}/${emails.length} failed; first: ${failures[0].message}`,
     );
   }
   return { data: ids.map((id) => ({ id })) };

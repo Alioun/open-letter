@@ -1,4 +1,4 @@
-Resend Email Setup — gehaltsdeckel.jetzt
+Resend Email Setup | gehaltsdeckel.jetzt
 ========================================
 
 GOAL: Send transactional emails FROM noreply@gehaltsdeckel.jetzt through
@@ -11,7 +11,7 @@ RESEND API
   Sender:   "Gehaltsdeckel Initiative" <noreply@gehaltsdeckel.jetzt>
 
 
-STEP 1 — Verify the domain in Resend
+STEP 1: Verify the domain in Resend
 ------------------------------------
 In the Resend dashboard, add and verify:
 
@@ -28,7 +28,7 @@ Routing already added an SPF record, MERGE Resend's include into it (e.g.
 than adding a second SPF record.
 
 
-STEP 1b — Publish a DMARC record
+STEP 1b: Publish a DMARC record
 --------------------------------
 SPF + DKIM alone don't tell receivers what to do with spoofed mail. Add a
 DMARC TXT record so mailbox providers can act on failures and so you get
@@ -40,11 +40,11 @@ reports. Start in monitor-only mode, then tighten once DKIM/SPF pass cleanly:
 
 After a week or two of clean aggregate reports, tighten the policy to
 "p=quarantine" and eventually "p=reject" for anti-spoofing protection.
-(Requires DKIM/SPF to be aligned with the From: domain — Resend handles this
+(Requires DKIM/SPF to be aligned with the From: domain; Resend handles this
 once the domain is verified.)
 
 
-STEP 2 — Create an API key
+STEP 2: Create an API key
 --------------------------
 Create a Resend API key with send access and add it to the server environment:
 
@@ -54,7 +54,7 @@ Create a Resend API key with send access and add it to the server environment:
 RESEND_FROM is optional. If it is not set, the app uses the value above.
 
 
-STEP 3 — Deploy
+STEP 3: Deploy
 ---------------
 On the server:
 
@@ -64,7 +64,7 @@ The app sends directly to Resend's HTTP API. SMTP, mailbox.org, and Haraka are
 not part of the production mail path.
 
 
-STEP 4 — Verify
+STEP 4: Verify
 ---------------
 Watch app logs:
 

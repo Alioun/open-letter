@@ -6,17 +6,17 @@ under `/api/admin/*` behind the admin login and is not listed here.
 
 | Method | Path                              | Description                                              |
 | ------ | --------------------------------- | -------------------------------------------------------- |
-| `GET`  | `/api/health`                     | Health check — `{ok, db}`, returns 503 if DB unreachable |
-| `GET`  | `/api/version`                    | Build info — `{commit, letter, env, runtime, startedAt}` (no-store) |
-| `GET`  | `/api/session`                    | Issue a short-lived (30 min) public session token — `{token, expiresIn}` |
+| `GET`  | `/api/health`                     | Health check: `{ok, db}`, returns 503 if DB unreachable |
+| `GET`  | `/api/version`                    | Build info: `{commit, letter, env, runtime, startedAt}` (no-store) |
+| `GET`  | `/api/session`                    | Issue a short-lived (30 min) public session token: `{token, expiresIn}` |
 | `GET`  | `/api/stats`                      | Signature totals + milestones/goal (token-gated read)   |
 | `GET`  | `/api/signers`                    | Verified signers list (paginated, filterable)            |
 | `GET`  | `/api/occupations`                | Occupation aggregates (token-gated read)                |
 | `GET`  | `/api/kreisverband-stats`         | Per-Kreisverband counts (token-gated read)              |
 | `GET`  | `/api/state-stats`                | Per-German-state counts (token-gated read)              |
-| `POST` | `/api/sign`                       | Submit a signature — triggers verification email         |
+| `POST` | `/api/sign`                       | Submit a signature; triggers verification email         |
 | `POST` | `/api/resend-verification`        | Re-send the verification email for a pending signature   |
-| `GET`  | `/api/confirm/:token`             | Email confirmation link — verifies + redirects           |
+| `GET`  | `/api/confirm/:token`             | Email confirmation link; verifies + redirects           |
 | `GET`  | `/i/:code`                        | Invite page (no analytics); `#s=<token>` shows private stats |
 | `GET`  | `/api/invite/:code`               | `{firstName\|null}` for an invite link; 30/15 min per IP  |
 | `POST` | `/api/invite-stats`               | `{code, token}` → `{count}`, `{below}`, `{min, max}` or `{min}` per `invite.statsMode`; 20/15 min per IP |
@@ -60,7 +60,7 @@ under `/api/admin/*` behind the admin login and is not listed here.
 | Param    | Default | Description                                          |
 | -------- | ------- | ---------------------------------------------------- |
 | `filter` | `alle`  | `alle`, `heute` (last 24h), `kv` (with Kreisverband) |
-| `search` | —       | Search by name or Kreisverband                       |
+| `search` | -       | Search by name or Kreisverband                       |
 | `limit`  | `18`    | Results per page (max 100)                           |
 | `offset` | `0`     | Pagination offset                                    |
 

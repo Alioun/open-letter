@@ -1,4 +1,4 @@
-// Example open letter — a minimal, generic campaign that demonstrates the
+// Example open letter: a minimal, generic campaign that demonstrates the
 // template with the German/Die-Linke-specific features turned OFF (no
 // Kreisverband/Beruf fields, no Germany map, no Zoom). Use it as a starting
 // point for a new letter: `LETTER_CONFIG=example bun run dev`.
@@ -38,7 +38,7 @@ export default {
   },
 
   meta: {
-    title: "Open Letter — sign now",
+    title: "Open Letter | sign now",
     description: "An open letter. Add your name.",
     ogDescription: "An open letter. Add your name.",
     canonicalUrl: "http://localhost:3000/",
@@ -141,7 +141,7 @@ export default {
     signoff: "Kind regards<br>The Open Letter team",
     // Transport: "resend" (Resend HTTP API) or "smtp" (any SMTP server).
     // Overridable per-deployment via EMAIL_PROVIDER. Secrets (Resend API key,
-    // SMTP password) always come from env — never put them here.
+    // SMTP password) always come from env; never put them here.
     provider: "resend",
     // How long the provider keeps sent mail (content, metadata, delivery
     // events, logs). Quoted in the privacy policy. Resend: 30 days on all
@@ -163,7 +163,7 @@ export default {
     templates: {
       verification: {
         name: "Confirm your signature",
-        subject: "Please confirm your signature — Open Letter",
+        subject: "Please confirm your signature | Open Letter",
         htmlBody: `
       <p>Hello {{name}},</p>
       <p>Thanks for signing the open letter.</p>
@@ -174,7 +174,7 @@ export default {
       },
       already_signed: {
         name: "Already signed",
-        subject: "You have already signed — Open Letter",
+        subject: "You have already signed | Open Letter",
         htmlBody: `
       <p>Hello {{name}},</p>
       <p>your signature is already confirmed and counted. Thank you!</p>
@@ -184,10 +184,10 @@ export default {
       },
       invite: {
         name: "Invite link after confirming",
-        subject: "Thank you! Your personal invite link — Open Letter",
+        subject: "Thank you! Your personal invite link | Open Letter",
         htmlBody: `
       <p>Hello {{firstName}},</p>
-      <p>your signature is confirmed — thank you!</p>
+      <p>your signature is confirmed, thank you!</p>
       <p>Here is your personal invite link. Share it with people who might sign too:<br><a href="{{inviteUrl}}">{{inviteUrl}}</a></p>
       <p>Your private stats link shows how many people signed through your invite. Don't share it:<br><a href="{{statsUrl}}">See my invites</a></p>
       <p>We don't keep who signed through your link: once a signature is confirmed, only the count remains.</p>
@@ -196,7 +196,7 @@ export default {
       },
       deletion: {
         name: "Delete your signature",
-        subject: "Delete your signature — Open Letter",
+        subject: "Delete your signature | Open Letter",
         htmlBody: `
       <p>Hello,</p>
       <p>you requested deletion of your signature and all stored data.</p>
@@ -207,7 +207,7 @@ export default {
       },
       "open-letter-update": {
         name: "Open Letter Update",
-        subject: "Update: Open Letter — {{signerCount}} signatories",
+        subject: "Update: Open Letter | {{signerCount}} signatories",
         htmlBody: `
       <div class="email-shell">
         <h1>An open letter</h1>
@@ -243,7 +243,7 @@ export default {
       yes: "yes",
       no: "no",
       button: "Confirm signature",
-      note: "Something wrong? Then don't confirm — unconfirmed entries are deleted automatically.",
+      note: "Something wrong? Then don't confirm: unconfirmed entries are deleted automatically.",
     },
     deleteData: {
       heading: "Delete your data",

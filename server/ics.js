@@ -1,4 +1,4 @@
-// Minimal RFC 5545 iCalendar (VEVENT) builder — no dependencies.
+// Minimal RFC 5545 iCalendar (VEVENT) builder with no dependencies.
 
 function pad(n) {
   return String(n).padStart(2, "0");

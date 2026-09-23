@@ -1,18 +1,18 @@
 # Open Letter
 
-A self-hosted platform for open letters and petitions. People sign, confirm by email, and appear on a public list with a live goal counter. One deployment serves one letter, and everything about a campaign — text, branding, theme, emails, features — is config.
+A self-hosted platform for open letters and petitions. People sign, confirm by email, and appear on a public list with a live goal counter. One deployment serves one letter, and everything about a campaign (text, branding, theme, emails, features) is config.
 
 ![Landing page with live signature counter](docs/screenshots/hero.png)
 
 ## Features
 
-- **Email-verified signatures** — double opt-in, public signer list with search, milestone/goal counter
-- **Admin dashboard** — edit email templates, schedule newsletter campaigns, set milestones at runtime
+- **Email-verified signatures**: double opt-in, public signer list with search, milestone/goal counter
+- **Admin dashboard**: edit email templates, schedule newsletter campaigns, set milestones at runtime
 - **Email via Resend or any SMTP server**, with durable, resumable send queues
-- **Encrypted at rest** — SQLite with SQLCipher, plus encrypted hourly backups
-- **GDPR-minded** — retention periods set in config, enforced by the server and quoted in the privacy policy
-- **Optional modules** — German-state map, Kreisverband/occupation fields, Zoom or in-person event sign-up
-- **Cheap to run** — a 0.5 vCPU / 512 MB VPS serves 100,000 signers ([numbers](docs/hardware.md))
+- **Encrypted at rest**: SQLite with SQLCipher, plus encrypted hourly backups
+- **GDPR-minded**: retention periods set in config, enforced by the server and quoted in the privacy policy
+- **Optional modules**: German-state map, Kreisverband/occupation fields, Zoom or in-person event sign-up
+- **Cheap to run**: a 0.5 vCPU / 512 MB VPS serves 100,000 signers ([numbers](docs/hardware.md))
 
 <table>
 <tr><td width="33%"><a href="docs/screenshots/sign.png"><img src="docs/screenshots/sign.png" alt="Sign form"></a><br><sub>Sign form</sub></td><td width="33%"><a href="docs/screenshots/confirm.png"><img src="docs/screenshots/confirm.png" alt="Email confirmation"></a><br><sub>Email confirmation</sub></td><td width="33%"><a href="docs/screenshots/self-service.png"><img src="docs/screenshots/self-service.png" alt="Signer self-service"></a><br><sub>Signer self-service</sub></td></tr>
@@ -76,8 +76,8 @@ The compose file sets `NODE_ENV=production`. The admin dashboard is at `/<ADMIN_
 
 ## Docs
 
-- [Configuration](docs/configuration.md) — letter config, env vars, email
-- [Operations](docs/operations.md) — deployment, scripts, backups, retention, jobs
+- [Configuration](docs/configuration.md): letter config, env vars, email
+- [Operations](docs/operations.md): deployment, scripts, backups, retention, jobs
 - [HTTP API](docs/api.md)
 - [Security](docs/security.md)
 - [Hardware requirements](docs/hardware.md)

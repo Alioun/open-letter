@@ -11,7 +11,7 @@
 
 ## Database encryption
 
-SQLite, encrypted at rest with SQLCipher via `@journeyapps/sqlcipher` — a
+SQLite, encrypted at rest with SQLCipher via `@journeyapps/sqlcipher`, a
 node-sqlite3 build that bundles the SQLCipher amalgamation and loads over N-API.
 (`bun:sqlite` can't be used for this: its `Database.setCustomSQLite()` is a
 silent no-op on Bun's Linux builds, so `PRAGMA key` would be ignored and the
@@ -28,5 +28,5 @@ plus `email_templates`, `campaigns` (with `audience` + JSON `recipient_ids`),
 KV/state-resolution caches.
 
 Conventions: timestamps are ISO-8601 UTC `TEXT`; booleans are `0/1`. Schema
-creation is idempotent (`IF NOT EXISTS`) — safe to run on every container start.
+creation is idempotent (`IF NOT EXISTS`), so it is safe to run on every container start.
 

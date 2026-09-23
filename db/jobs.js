@@ -2,7 +2,7 @@
 //
 // Honker is a SQLite loadable extension exposing `honker_*` SQL functions for
 // durable at-least-once queues + a cron scheduler. We load it into the app's
-// existing SQLCipher-keyed connection and drive it via SQL — so job rows live in
+// existing SQLCipher-keyed connection and drive it via SQL, so job rows live in
 // the same encrypted database (encrypted at rest), enqueue is consistent with
 // business writes, and we avoid honker-bun's own `setCustomSQLite`/unkeyed
 // connections (which are incompatible with SQLCipher).
@@ -74,7 +74,7 @@ export async function purgeDeadJobs(queue, olderThanS) {
 }
 
 // Remove pending and dead jobs of `queue` whose JSON payload has `field` equal
-// to `value` — used when the person a job is about gets erased.
+// to `value`. Used when the person a job is about gets erased.
 export async function deleteJobsByPayload(queue, field, value) {
   return ignoreMissingTables(async () => {
     let removed = 0;
@@ -112,7 +112,7 @@ export async function registerSchedule(name, queue, expr, payload = {}, { priori
 //
 // `isolated` queues get a poll loop of their own. The main loop awaits each
 // handler before moving to the next queue, so a long handler (a campaign send
-// runs for many minutes) would otherwise hold up every queue after it —
+// runs for many minutes) would otherwise hold up every queue after it,
 // including the verification mail of someone signing up during the send.
 export function startWorker(handlers, {
   queues = Object.keys(handlers),

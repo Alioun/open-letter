@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # Build the Honker SQLite loadable extension for local development.
 #
-# The extension (durable job queue + scheduler) is NOT committed to git — it is
+# The extension (durable job queue + scheduler) is NOT committed to git; it is
 # a compiled binary. Run this once after cloning to produce
 # vendor/libhonker_ext.dylib (macOS) or vendor/libhonker_ext.so (Linux), which
 # db/jobs.js loads via HONKER_EXTENSION_PATH. The production Docker image builds

@@ -43,9 +43,9 @@ function zoomMailingStatus(mailings, kind) {
     return `gesendet${count}${when}`;
   }
   if (m.status === "sending") return "läuft …";
-  if (m.status === "failed") return "fehlgeschlagen — wird erneut versucht";
+  if (m.status === "failed") return "fehlgeschlagen, wird erneut versucht";
   if (m.status === "aborted")
-    return "abgebrochen nach wiederholten Fehlern — Server-Log prüfen";
+    return "abgebrochen nach wiederholten Fehlern. Server-Log prüfen";
   return m.status;
 }
 const GERMAN_STATES = [
@@ -331,7 +331,7 @@ function TemplateEditor({ token, template, onSaved, onDeleted }) {
             title="Trennlinie"
             onClick={() => editor?.chain().focus().setHorizontalRule().run()}
           >
-            —
+            -
           </ToolbarButton>
           <ToolbarButton
             title="Rückgängig"
@@ -751,7 +751,7 @@ export default function AdminApp() {
     localStorage.setItem(TOKEN_KEY, newToken);
     setToken(newToken);
     setPassword("");
-    // Bootstrap data immediately with the fresh token — don't wait for the hook chain
+    // Bootstrap data immediately with the fresh token; don't wait for the hook chain
     const h = {
       "Content-Type": "application/json",
       Authorization: `Bearer ${newToken}`,
@@ -1384,13 +1384,13 @@ export default function AdminApp() {
                   <StatusBadge status={campaign.status} />
                   {campaign.status === "failed" && (
                     <small style={{ color: "#b45309" }}>
-                      {campaign.sent_offset} erreicht — wird fortgesetzt
+                      {campaign.sent_offset} erreicht, wird fortgesetzt
                     </small>
                   )}
                   {campaign.status === "aborted" && (
                     <>
                       <small style={{ color: "#b45309" }}>
-                        {campaign.sent_offset} erreicht — nach{" "}
+                        {campaign.sent_offset} erreicht, nach{" "}
                         {campaign.attempts} Versuchen abgebrochen
                       </small>
                       <button
@@ -1560,9 +1560,9 @@ export default function AdminApp() {
                           </td>
                           <td>{r.name}</td>
                           <td>{r.email}</td>
-                          <td>{r.kreisverband || "—"}</td>
-                          {STATES_ON && <td>{r.state || "—"}</td>}
-                          {OCCUPATION_ON && <td>{r.occupation || "—"}</td>}
+                          <td>{r.kreisverband || "-"}</td>
+                          {STATES_ON && <td>{r.state || "-"}</td>}
+                          {OCCUPATION_ON && <td>{r.occupation || "-"}</td>}
                           <td>
                             {new Date(r.created_at).toLocaleDateString("de-DE")}
                           </td>
@@ -2042,9 +2042,9 @@ export default function AdminApp() {
                     {zoomRegs.map((r) => (
                       <tr key={r.email}>
                         <td>{r.name}</td>
-                        <td>{r.kreisverband || "—"}</td>
+                        <td>{r.kreisverband || "-"}</td>
                         {zoomShowDelegierter && (
-                          <td>{r.delegierter ? "Ja" : "—"}</td>
+                          <td>{r.delegierter ? "Ja" : "-"}</td>
                         )}
                         <td>{r.email}</td>
                         <td>

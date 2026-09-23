@@ -50,7 +50,7 @@ export async function exportEncrypted(destPath) {
   // Fail closed: never emit a plaintext backup (ATTACH … KEY '' = unencrypted).
   if (!BACKUP_KEY) {
     throw new Error(
-      "No backup encryption key (set BACKUP_ENCRYPTION_KEY or DATABASE_ENCRYPTION_KEY) — refusing to write an unencrypted backup.",
+      "No backup encryption key (set BACKUP_ENCRYPTION_KEY or DATABASE_ENCRYPTION_KEY); refusing to write an unencrypted backup.",
     );
   }
   const db = await openEncrypted(DB_PATH);
@@ -79,7 +79,7 @@ export async function runBackup() {
     // Make room before writing, not only after: drop to one below the limit so
     // the new file lands in the slot the oldest one leaves. Steady-state disk
     // use is unchanged, but on a full disk this frees roughly one backup's
-    // worth of space — without it every attempt failed, nothing was ever
+    // worth of space. Without it every attempt failed, nothing was ever
     // pruned, and backups never recovered on their own.
     await pruneToCount(Math.max(1, BACKUP_KEEP - 1));
     await exportEncrypted(tmp);
@@ -149,11 +149,11 @@ async function pruneToCount(keep) {
   }
 }
 
-// Delete backups older than BACKUP_KEEP hours — except the newest one. While
+// Delete backups older than BACKUP_KEEP hours, except the newest one. While
 // backups are succeeding that exception never applies (the newest is at most
 // an hour old). If they keep failing, the last good backup is kept so there is
 // still something to restore from, and this logs an error every run so the
-// failure — and the fact that this copy is past the promised retention — gets
+// failure (and the fact that this copy is past the promised retention) gets
 // noticed rather than silently resolved by deleting it.
 async function pruneExpired() {
   let files;
@@ -173,14 +173,14 @@ async function pruneExpired() {
   const newestAt = newest ? nameTime(newest.slice("backup-".length)) : NaN;
   if (!Number.isNaN(newestAt) && newestAt < cutoff) {
     console.error(
-      `[backup] newest backup ${newest} is older than ${BACKUP_KEEP}h — backups are failing; kept as the only restore point, past the stated retention`,
+      `[backup] newest backup ${newest} is older than ${BACKUP_KEEP}h: backups are failing; kept as the only restore point, past the stated retention`,
     );
   }
 }
 
 // A `.sqlite.tmp` is only ever the in-flight export of one run. If the process
 // dies mid-export (deploy, OOM) the run's own catch never cleans it up, and
-// BACKUP_FILE_RE keeps it out of the pruning above — so drop any tmp whose
+// BACKUP_FILE_RE keeps it out of the pruning above, so drop any tmp whose
 // timestamp is over an hour old, well past any run that could still own it.
 async function pruneStaleTmp() {
   let names;
@@ -202,7 +202,7 @@ async function pruneStaleTmp() {
 // db/restore-backup.js moves the replaced database aside as
 // `<DATABASE_PATH>.pre-restore-<timestamp>[-wal|-shm]`. Those are full copies
 // of personal data, so they follow the same retention as the backups
-// themselves (BACKUP_KEEP hours, which the privacy policy states as 48) —
+// themselves (BACKUP_KEEP hours, which the privacy policy states as 48):
 // long enough to check a restore, not kept indefinitely.
 async function prunePreRestore() {
   const dir = dirname(DB_PATH);
@@ -227,7 +227,7 @@ async function prunePreRestore() {
 // drives backups in production (db/jobs.js). Safe to run either way.
 export function startBackupSchedule() {
   if (!BACKUP_KEY) {
-    console.warn("[backup] no encryption key — backups disabled");
+    console.warn("[backup] no encryption key, backups disabled");
     return;
   }
 
@@ -240,6 +240,6 @@ export function startBackupSchedule() {
   interval.unref?.();
 
   console.log(
-    `[backup] hourly backup scheduled — dir: ${BACKUP_DIR}, keep: ${BACKUP_KEEP}`,
+    `[backup] hourly backup scheduled, dir: ${BACKUP_DIR}, keep: ${BACKUP_KEEP}`,
   );
 }

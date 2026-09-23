@@ -1,6 +1,6 @@
 ---
 name: gehaltsdeckel.jetzt
-description: Campaign design system for the Diätendeckel open letter — political-poster brutalism for a grassroots left movement.
+description: Campaign design system for the Diätendeckel open letter: political-poster brutalism for a grassroots left movement.
 colors:
   signal-red: "#ff0000"
   signal-red-text: "#cc0000"
@@ -99,7 +99,7 @@ components:
 
 This is a campaign printed in two colors on cheap paper, folded in thirds, and stuffed into letterboxes. Every surface assumes that the reader is already half-convinced; the job of the interface is to remove friction between conviction and signature, not to persuade through decoration. Typography dominates. Color is reserved for signal, not atmosphere. White space is earned, not given.
 
-The system is anchored by Work Sans 900 at sizes that would be legible from across a union hall. Deep Wine (#6f003c) sets the dominant tone: authoritative, politically serious, not corporate. Signal Red (#ff0000) appears only where action is required — CTAs, emphasis, live indicators. Parchment (#f4f1ec) provides the section-background warmth of aged newsprint without slipping into nostalgia. Flat offset shadows (8–14px, no blur) replace elevation with graphic weight: every shadow reads as a deliberate stamp, not a soft glow.
+The system is anchored by Work Sans 900 at sizes that would be legible from across a union hall. Deep Wine (#6f003c) sets the dominant tone: authoritative, politically serious, not corporate. Signal Red (#ff0000) appears only where action is required: CTAs, emphasis, live indicators. Parchment (#f4f1ec) provides the section-background warmth of aged newsprint without slipping into nostalgia. Flat offset shadows (8–14px, no blur) replace elevation with graphic weight: every shadow reads as a deliberate stamp, not a soft glow.
 
 This system explicitly rejects: corporate SaaS softness, rounded corners, gradient accents, modal-first thinking, and anything that could be described as "institutional." If a component could appear on a party's official government website, it has no place here. The source of the design authority is the street, not the party office.
 
@@ -120,7 +120,7 @@ A two-color printer's discipline: Deep Wine and Signal Red do all the work; Parc
 ### Primary
 
 - **Signal Red** (`#ff0000`): The action color. Appears on primary CTAs, focus rings, live pulse indicators, counter-card goal bars, and any element that demands immediate attention. Never used decoratively. On body text, the contrast-safe variant Signal Red Text (`#cc0000`) replaces it.
-- **Signal Red Text** (`#cc0000`): Body-safe red. Used for inline emphasis, section numbers (`01 —`), and the `h1` `.rot` span. Never on buttons or interactive elements.
+- **Signal Red Text** (`#cc0000`): Body-safe red. Used for inline emphasis, section numbers (e.g. `01`), and the `h1` `.rot` span. Never on buttons or interactive elements.
 
 ### Secondary
 
@@ -146,11 +146,11 @@ A two-color printer's discipline: Deep Wine and Signal Red do all the work; Parc
 
 ## 3. Typography: Two Weights, One Family
 
-**Display / Headlines / CTAs:** Work Sans (weights 300, 400, 700, 900) — `"Work Sans", "Inter", sans-serif`
-**Body / UI / Data:** Inter (weights 400, 500, 700) — `"Inter", system-ui, sans-serif`
+**Display / Headlines / CTAs:** Work Sans (weights 300, 400, 700, 900): `"Work Sans", "Inter", sans-serif`
+**Body / UI / Data:** Inter (weights 400, 500, 700): `"Inter", system-ui, sans-serif`
 **Mono (inline):** `ui-monospace, "SFMono-Regular", Menlo, monospace` (email addresses, code snippets only)
 
-**Character:** Work Sans 900 is the voice of the campaign — compressed, confrontational, poster-ready. Inter is the accountant sitting next to the activist: precise, legible, emotionally neutral. The pairing avoids elegance; it reads like something that had to be done fast and correctly.
+**Character:** Work Sans 900 is the voice of the campaign: compressed, confrontational, poster-ready. Inter is the accountant sitting next to the activist: precise, legible, emotionally neutral. The pairing avoids elegance; it reads like something that had to be done fast and correctly.
 
 ### Hierarchy
 
@@ -159,12 +159,12 @@ A two-color printer's discipline: Deep Wine and Signal Red do all the work; Parc
 - **Title** (900, `clamp(28px, 3vw, 40px)`, line-height 1.02, tracking −0.02em): Sub-headers within sections (brief paper h2, sign section h2). Also used for the counter card number at `clamp(48px, 13vw, 72px)`.
 - **Sub / Lead** (Work Sans 300, `clamp(20px, 2.2vw, 28px)`, line-height 1.25): Hero sub-headline. The light weight against the 900 display creates the broadsheet two-weight contrast.
 - **Body** (Inter 400/500, 16.5px, line-height 1.65, tracking −0.01em): Open-letter body copy, section prose. Max line length 65ch; enforced via `max-width` on text containers.
-- **Label** (Work Sans 700, 11–13px, tracking 0.12em, uppercase): Form field labels, section number prefixes (`01 —`), demand card metadata. Capslock tracking at 0.12em is the system's only decorative typography move.
+- **Label** (Work Sans 700, 11–13px, tracking 0.12em, uppercase): Form field labels, section number prefixes (e.g. `01`), demand card metadata. Capslock tracking at 0.12em is the system's only decorative typography move.
 - **Small** (Inter 400/500, 12–14px): Timestamps, helper text, form legal, filter chip counts.
 
 ### Named Rules
 
-**The Weight Cliff Rule.** Weight contrast in headings is Work Sans 900 versus Work Sans 300 — no intermediate stops. Using 700 as a "large heading" weight collapses the visual hierarchy. Reserve 700 for labels and UI chrome only.
+**The Weight Cliff Rule.** Weight contrast in headings is Work Sans 900 versus Work Sans 300, with no intermediate stops. Using 700 as a "large heading" weight collapses the visual hierarchy. Reserve 700 for labels and UI chrome only.
 
 ## 4. Elevation
 
@@ -173,7 +173,7 @@ This system does not use blurred shadows. Depth is conveyed exclusively through 
 ### Shadow Vocabulary
 
 - **Shadow SM** (`8px 8px 0 [color]`): Störer (event sticker), success check mark. Used for elements that should feel stamped onto the surface.
-- **Shadow MD** (`10px 10px 0 var(--rot)`): Sub-headline box, counter card. The hero-level signal shadow — offset in Signal Red.
+- **Shadow MD** (`10px 10px 0 var(--rot)`): Sub-headline box, counter card. The hero-level signal shadow, offset in Signal Red.
 - **Shadow ML** (`12px 12px 0 var(--akzent)`): Brief paper (the open letter). Deep Wine shadow marks the letter as the content anchor of the page.
 - **Shadow LG** (`14px 14px 0 var(--rot)`): Form card. The largest shadow in the system is on the primary conversion surface.
 - **Modal** (`16px 16px 0 var(--akzent)`): Modals only. Heaviest shadow = highest interrupt priority.
@@ -191,7 +191,7 @@ Components in this system feel **confrontational but precise**: sharp corners, d
 ### Buttons
 
 - **Shape:** No border-radius. Hard corners throughout.
-- **Primary (`.submit`, `.topbar .cta`):** Deep Wine fill, white text, Work Sans 900. Padding 18px vertical / 24px horizontal. On hover: Signal Red fill, translate(−2px, −2px), flat red/wine shadow — the button visibly "stamps" toward the reader.
+- **Primary (`.submit`, `.topbar .cta`):** Deep Wine fill, white text, Work Sans 900. Padding 18px vertical / 24px horizontal. On hover: Signal Red fill, translate(−2px, −2px), flat red/wine shadow; the button visibly "stamps" toward the reader.
 - **Ghost (`.scrollcta`, `.resend-btn`, `.signers-foot button`):** Transparent fill, Deep Wine border 1.5px, Deep Wine text. On hover: fills Deep Wine, text flips white.
 - **Disabled state:** 0.5 opacity, `cursor: not-allowed`. No style changes beyond opacity.
 - **Focus:** `outline: 2px solid var(--rot)` at 2px offset.
@@ -214,14 +214,14 @@ Components in this system feel **confrontational but precise**: sharp corners, d
 - **Brief Paper:** Parchment fill, Deep Wine border 1px, Shadow ML (`12px 12px 0 var(--akzent)`). Red 6px top-stripe via `::before`. Padding 56px/64px desktop → 36px/28px mobile.
 - **Form Card:** Parchment fill, Deep Wine border 1px, Shadow LG (`14px 14px 0 var(--rot)`). Position-absolute badge floats above the top edge.
 - **Counter Card:** Deep Wine fill, white text, Shadow MD in Signal Red. The only dark-filled card in the system.
-- **Internal Padding:** `spacing.md` (28px) to `spacing.lg` (48px) — varies deliberately for rhythm.
+- **Internal Padding:** `spacing.md` (28px) to `spacing.lg` (48px), varied deliberately for rhythm.
 
 ### Inputs / Fields
 
 - **Style:** White fill, Deep Wine border 1.5px, no radius. Inter 400 at 15px. Padding 14px.
-- **Focus:** `box-shadow: 4px 4px 0 var(--rot)` — the input "stamps" into its shadow on focus.
+- **Focus:** `box-shadow: 4px 4px 0 var(--rot)`: the input "stamps" into its shadow on focus.
 - **Error:** Deep Wine border replaced by Error Red, background tinted via `color-mix(in srgb, #b00020 7%, white)`.
-- **Checkbox:** 20×20px, Deep Wine border 1.5px. Checked: Signal Red fill, white checkmark. Focus: compound ring — Parchment ring at 3px, Signal Red at 5px.
+- **Checkbox:** 20×20px, Deep Wine border 1.5px. Checked: Signal Red fill, white checkmark. Focus: compound ring (Parchment ring at 3px, Signal Red at 5px).
 - **Labels:** Work Sans 700, 12px, tracking 0.12em, uppercase.
 
 ### Navigation (Topbar)
@@ -242,15 +242,15 @@ Components in this system feel **confrontational but precise**: sharp corners, d
 
 ### Demand Grid (`.demands-grid`) / Stats Row (`.stats-row`)
 
-- Dark burgundy strip. Items share a 1px Deep Wine grid gap as a visible structural rule. No individual card borders — the gap IS the border.
+- Dark burgundy strip. Items share a 1px Deep Wine grid gap as a visible structural rule. No individual card borders: the gap IS the border.
 
 ## 6. Do's and Don'ts
 
-**Do** use `clip-path: polygon(...)` wedge shapes (`.keil`) as the primary large-scale decorative element — it is the system's signature spatial motif.
+**Do** use `clip-path: polygon(...)` wedge shapes (`.keil`) as the primary large-scale decorative element; it is the system's signature spatial motif.
 
 **Do** keep the offset shadow color alternation deliberate: Signal Red shadows on conversion surfaces, Deep Wine shadows on content containers.
 
-**Do** use `clamp()` for all heading `font-size` values. Fluid typography is structural, not a nicety — the display headline loses coherence if it falls below 56px or exceeds 144px.
+**Do** use `clamp()` for all heading `font-size` values. Fluid typography is structural, not a nicety: the display headline loses coherence if it falls below 56px or exceeds 144px.
 
 **Do** keep red elements at the right density. Signal Red should occupy no more than 10–15% of any given screen surface. Its scarcity is the signal.
 

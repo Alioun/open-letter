@@ -1,5 +1,5 @@
 
-## visitors — open tabs
+## visitors | open tabs
 
 | signers | CPU | RAM | max OK | tested up to | p95 @ max OK | peak CPU | peak RSS | notes |
 | --- | --- | --- | --- | --- | --- | --- | --- | --- |
@@ -11,12 +11,12 @@
 | 10,000 | 1 | 1g | 1000 | 4000 | 11 ms | 104% | 113 MiB |  |
 | 10,000 | 2 | 2g | 1000 | 4000 | 11 ms | 110% | 114 MiB |  |
 | 10,000 | 4 | 4g | 1000 | 4000 | 13 ms | 108% | 110 MiB |  |
-| 100,000 | 0.5 | 512m | — | 50 | — | 51% | 44 MiB | failed at lowest step |
-| 100,000 | 1 | 1g | — | 50 | — | 101% | 45 MiB | failed at lowest step |
-| 100,000 | 2 | 2g | — | 50 | — | 102% | 52 MiB | failed at lowest step |
-| 100,000 | 4 | 4g | — | 50 | — | 103% | 47 MiB | failed at lowest step |
+| 100,000 | 0.5 | 512m | - | 50 | - | 51% | 44 MiB | failed at lowest step |
+| 100,000 | 1 | 1g | - | 50 | - | 101% | 45 MiB | failed at lowest step |
+| 100,000 | 2 | 2g | - | 50 | - | 102% | 52 MiB | failed at lowest step |
+| 100,000 | 4 | 4g | - | 50 | - | 103% | 47 MiB | failed at lowest step |
 
-## signup — sign-ups/s
+## signup | sign-ups/s
 
 | signers | CPU | RAM | max OK | tested up to | p95 @ max OK | peak CPU | peak RSS | notes |
 | --- | --- | --- | --- | --- | --- | --- | --- | --- |

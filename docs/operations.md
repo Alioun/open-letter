@@ -2,7 +2,7 @@
 
 ## Deployment (Docker / Dokploy)
 
-The database is a single encrypted SQLite file on a persistent volume — there is
+The database is a single encrypted SQLite file on a persistent volume; there is
 no separate database service.
 
 ### Production
@@ -13,12 +13,12 @@ docker compose up --build
 
 Set in Dokploy UI or `.env`:
 
-- `DATABASE_ENCRYPTION_KEY` — SQLCipher key (required). Generate: `openssl rand -hex 32`
-- `BACKUP_ENCRYPTION_KEY` — distinct key for backups (required in production)
+- `DATABASE_ENCRYPTION_KEY`: SQLCipher key (required). Generate: `openssl rand -hex 32`
+- `BACKUP_ENCRYPTION_KEY`: distinct key for backups (required in production)
 - `ADMIN_PATH`, `ADMIN_PASSWORD` (≥ 16 chars), `ADMIN_JWT_SECRET` (≥ 32 chars), `API_TOKEN_SECRET`
-- `BASE_URL` — public URL (e.g. `https://diaetendeckel.example.de`)
-- `RESEND_API_KEY` — Resend API key with send access (when `provider=resend`)
-- `RESEND_FROM` / `EMAIL_FROM` — optional verified sender override
+- `BASE_URL`: public URL (e.g. `https://diaetendeckel.example.de`)
+- `RESEND_API_KEY`: Resend API key with send access (when `provider=resend`)
+- `RESEND_FROM` / `EMAIL_FROM`: optional verified sender override
 - For SMTP instead: set `EMAIL_PROVIDER=smtp` + `SMTP_HOST`, `SMTP_PORT`,
   `SMTP_SECURE`, `SMTP_USER`, `SMTP_PASS`
 
@@ -59,13 +59,13 @@ ATTACHed keyed file, then gzipped (`.sqlite.gz`). Because the snapshot is itself
 SQLCipher-encrypted, backups are encrypted at rest with no extra step.
 
 Backups use `BACKUP_ENCRYPTION_KEY`, which is required in production; in
-development it falls back to `DATABASE_ENCRYPTION_KEY`. **Store the key securely and separately from the backups** —
+development it falls back to `DATABASE_ENCRYPTION_KEY`. **Store the key securely and separately from the backups**:
 without it, a backup cannot be opened.
 
 ### Restoring a backup
 
 ```bash
-# Restore the most recent backup (app stopped) — moves any existing DB aside
+# Restore the most recent backup (app stopped). Moves any existing DB aside
 # to <path>.pre-restore-<timestamp> first, then verifies row counts. The
 # aside copy is pruned with the backups after BACKUP_KEEP hours.
 DATABASE_PATH=/app/data/diaetendeckel.db DATABASE_ENCRYPTION_KEY=… \
@@ -84,9 +84,9 @@ happened, and when; kept `privacy.erasureLogDays`) and afterwards re-applies it
 to the restored data: erased addresses are deleted again, newsletter and Treffen
 opt-outs and names taken off the public list are applied again. Rows created
 after the logged event are left alone.
-If the old database can't be read, the restore says so loudly — then re-apply
+If the old database can't be read, the restore says so loudly; then re-apply
 those requests by hand before starting the app. Other edits on the settings page
-(name, Kreisverband, occupation) are not logged and are lost with a restore —
+(name, Kreisverband, occupation) are not logged and are lost with a restore:
 the log holds no personal data to restore them from.
 
 ## Data retention
@@ -109,9 +109,9 @@ policy quotes the same values, so change them there, not in code.
 ### Ending a campaign
 
 The privacy policy promises complete deletion when the campaign ends. Nothing
-does that automatically — when the campaign is over:
+does that automatically. When the campaign is over:
 
-1. Export anything that must be kept (aggregate numbers only — no personal data).
+1. Export anything that must be kept (aggregate numbers only, no personal data).
 2. Stop the app and delete the database file (`DATABASE_PATH` plus `-wal`/`-shm`)
    and any `*.pre-restore-*` copies next to it.
 3. Delete every file in `BACKUP_DIR`, and any off-site copies of it.
@@ -125,8 +125,8 @@ does that automatically — when the campaign is over:
 
 ## Durable jobs (Honker)
 
-Background work — scheduled **campaign sends**, **zoom event mailings**, and
-**hourly backups** — runs on durable [Honker](https://honker.dev) queues instead
+Background work (scheduled **campaign sends**, **zoom event mailings**, and
+**hourly backups**) runs on durable [Honker](https://honker.dev) queues instead
 of in-memory timers. The Honker SQLite extension is loaded into the app's
 SQLCipher-keyed connection and driven via its `honker_*` SQL functions, so job
 rows live inside the **same encrypted database** (encrypted at rest) and survive

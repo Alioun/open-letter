@@ -1,11 +1,11 @@
 
-## visitors — open tabs
+## visitors: open tabs
 
 | signers | CPU | RAM | max OK | tested up to | p95 @ max OK | peak CPU | peak RSS | notes |
 | --- | --- | --- | --- | --- | --- | --- | --- | --- |
 | 100,000 | 0.5 | 512m | 8000 | 8000 | 21 ms | 64% | 79 MiB | no ceiling found |
 
-## mixed — open tabs (+ sign-ups & searches)
+## mixed: open tabs (+ sign-ups & searches)
 
 | signers | CPU | RAM | max OK | tested up to | p95 @ max OK | peak CPU | peak RSS | notes |
 | --- | --- | --- | --- | --- | --- | --- | --- | --- |
@@ -17,7 +17,7 @@
 | 10,000 | 2 | 2g | 4000 | 8000 | 11 ms | 237% | 128 MiB |  |
 | 100,000 | 0.5 | 512m | 8000 | 8000 | 1 ms | 48% | 113 MiB | no ceiling found |
 
-## signup — sign-ups/s
+## signup: sign-ups/s
 
 | signers | CPU | RAM | max OK | tested up to | p95 @ max OK | peak CPU | peak RSS | notes |
 | --- | --- | --- | --- | --- | --- | --- | --- | --- |

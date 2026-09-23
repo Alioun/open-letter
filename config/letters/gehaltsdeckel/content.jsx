@@ -153,7 +153,7 @@ export function FaqContent() {
                     <p>
                       Der Deckel bezieht sich auf das arithmetische Mittel des
                       Bruttodurchschnittslohns aller Vollzeitbeschäftigten in
-                      Deutschland — das sind derzeit 5.370 Euro brutto monatlich
+                      Deutschland; das sind derzeit 5.370 Euro brutto monatlich
                       (64.441 Euro jährlich, Stand 2025).¹ Netto bleiben den
                       Abgeordneten mindestens etwa 3.250 Euro pro Monat, je nach
                       Steuerklasse und persönlicher/familiärer Situation kann
@@ -183,7 +183,7 @@ export function FaqContent() {
                       es eine Ausnahmeregelung.
                     </p>
                     <p>
-                      Das abgeführte Geld soll in einen Sozialfonds fließen —
+                      Das abgeführte Geld soll in einen Sozialfonds fließen:
                       für Sozialsprechstunden, Unterstützung von Menschen in Not
                       und politische Arbeit vor Ort. Aktuell unterstützt der
                       Landesvorstand in Baden-Württemberg den Antrag des
@@ -433,7 +433,7 @@ export function FaqContent() {
                         <strong>Kranken- und Pflegeversicherung:</strong> Der
                         Bund übernimmt die Hälfte der Beiträge. Zusätzlich
                         besteht die Möglichkeit, sich über die Beihilferegelung
-                        nach Beamtenrecht zu versichern — günstiger als jede
+                        nach Beamtenrecht zu versichern, günstiger als jede
                         gesetzliche Krankenversicherung (GKV). Da die Beiträge
                         an der Beitragsbemessungsgrenze gedeckelt sind, zahlen
                         Abgeordnete auf den größten Teil ihrer Diät ohnehin

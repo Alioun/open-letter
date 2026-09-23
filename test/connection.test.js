@@ -16,7 +16,7 @@ describe("SQLCipher connection", () => {
     expect(row?.cipher_version).toBeTruthy();
   });
 
-  test("data is encrypted at rest — plaintext not present in the file", async () => {
+  test("data is encrypted at rest: plaintext not present in the file", async () => {
     const marker = "ZEBRA_MARKER_" + Date.now();
     await addVerifiedSigner({ name: marker });
     // Flush WAL into the main DB file so we inspect the persisted bytes.

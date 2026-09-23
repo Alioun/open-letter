@@ -1,7 +1,7 @@
 # Load-test stack: the production image under VPS-like CPU/RAM limits, a Mailpit
 # SMTP sink so sign-ups exercise the real email path without sending anything,
 # and k6. Uses throwaway secrets from .env.loadtest (see gen-env.sh) and its own
-# volumes — never your real .env or data.
+# volumes, never your real .env or data.
 #
 #   ./loadtest/gen-env.sh
 #   APP_CPUS=1 APP_MEM=1g docker compose -f loadtest/docker-compose.yml up -d app mailpit

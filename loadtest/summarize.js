@@ -59,7 +59,7 @@ for (const f of readdirSync(raw).filter((f) => f.endsWith(".json")).sort()) {
   // Steps with no traffic (the run aborted before reaching them) prove nothing.
   for (const [k, s] of [...steps] ) if (!s.reqs) steps.delete(k);
   // A run that never produced a labelled step (killed before its first hold)
-  // has nothing to report — skip it rather than printing an empty row.
+  // has nothing to report; skip it rather than printing an empty row.
   if (steps.size === 0) continue;
   const ok = [...steps.entries()]
     .filter(([, s]) => s.p95 < P95_OK[id.scenario] && (s.failRate ?? 0) < 0.01)
@@ -74,13 +74,13 @@ for (const f of readdirSync(raw).filter((f) => f.endsWith(".json")).sort()) {
   });
 }
 
-const fmt = (v, d = 0) => (v === undefined ? "—" : v.toFixed(d));
+const fmt = (v, d = 0) => (v === undefined ? "-" : v.toFixed(d));
 const byScenario = (sc) => runs.filter((r) => r.scenario === sc);
 
 for (const [sc, unit] of [["visitors", "open tabs"], ["mixed", "open tabs (+ sign-ups & searches)"], ["signup", "sign-ups/s"]]) {
   const rs = byScenario(sc);
   if (!rs.length) continue;
-  console.log(`\n## ${sc} — ${unit}\n`);
+  console.log(`\n## ${sc}: ${unit}\n`);
   console.log("| signers | CPU | RAM | max OK | tested up to | p95 @ max OK | peak CPU | peak RSS | notes |");
   console.log("| --- | --- | --- | --- | --- | --- | --- | --- | --- |");
   for (const r of rs.sort((a, b) => a.n - b.n || parseFloat(a.cpus) - parseFloat(b.cpus))) {
@@ -92,8 +92,8 @@ for (const [sc, unit] of [["visitors", "open tabs"], ["mixed", "open tabs (+ sig
       r.maxOk === r.reached ? "no ceiling found" : null,
     ].filter(Boolean).join(", ");
     console.log(
-      `| ${r.n.toLocaleString("en-US")} | ${r.cpus} | ${r.mem} | ${r.maxOk || "—"} | ${r.reached} | ` +
-      `${at ? fmt(at.p95) + " ms" : "—"} | ${fmt(r.cpuMax)}% | ${fmt(r.memMax)} MiB | ${notes || ""} |`,
+      `| ${r.n.toLocaleString("en-US")} | ${r.cpus} | ${r.mem} | ${r.maxOk || "-"} | ${r.reached} | ` +
+      `${at ? fmt(at.p95) + " ms" : "-"} | ${fmt(r.cpuMax)}% | ${fmt(r.memMax)} MiB | ${notes || ""} |`,
     );
   }
 }

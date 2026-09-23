@@ -3,7 +3,7 @@
 // steps and each step is labelled with its tab count.
 //
 // Each tick is a poll, or (LOAD_SHARE, default 10%) a fresh page load.
-// MIX=1 adds sign-ups (SIGNUP_RATE/s) and searches (SEARCH_RATE/s) on top —
+// MIX=1 adds sign-ups (SIGNUP_RATE/s) and searches (SEARCH_RATE/s) on top:
 // the "letter went viral" case.
 //
 // Env: TABS="50,200,500,1000,2000,4000" HOLD=60 RAMP=10
@@ -67,7 +67,7 @@ export const options = {
 };
 
 // Tab count the load is at or heading to. During a ramp the step label is
-// "ramp", so use the hold it ramps into — otherwise a ramp to 8,000 tabs would
+// "ramp", so use the hold it ramps into; otherwise a ramp to 8,000 tabs would
 // squeeze its traffic onto the first step's handful of IPs and trip the per-IP
 // rate limits, measuring 429s instead of the server.
 function targetTabs() {

@@ -7,7 +7,7 @@ main [README](../README.md).
 
 Nothing external is touched: email goes to a Mailpit sink, the Nominatim
 (Bundesland) worker has nothing to resolve because the seeder pre-fills `state`,
-and the stack uses its own Docker volumes and throwaway secrets — never your real
+and the stack uses its own Docker volumes and throwaway secrets, never your real
 `.env` or data.
 
 ## Requirements
@@ -58,7 +58,7 @@ throttling the whole test to one IP.
 | `DATABASE_JOURNAL_MODE` | `DELETE` | set `WAL` to compare |
 | `APP_CPUS` / `APP_MEM` | `1` / `1g` | limits for a manual run |
 
-A run stops early once p95 latency passes 3 s or the error rate passes 20 % —
+A run stops early once p95 latency passes 3 s or the error rate passes 20 %:
 the tier has found its ceiling and later steps only make it worse.
 
 ## Reading the output

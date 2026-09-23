@@ -16,7 +16,7 @@ export function escapeHtml(str) {
 }
 
 // First word of a stored name, escaped for HTML text. Names pass sanitize() on
-// the way in, but that strips only complete tags — `<svg/onload=…//` survives —
+// the way in, but that strips only complete tags (`<svg/onload=…//` survives),
 // so anything reflected into a page is escaped here, on output.
 export function firstNameHtml(name) {
   return escapeHtml(String(name ?? "").split(/\s/)[0]);

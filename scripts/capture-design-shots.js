@@ -70,7 +70,7 @@ try {
   for (const { sel, name, maxH } of TARGETS) {
     const el = await page.$(sel);
     if (!el) {
-      console.warn(`  ! skipped ${name} — selector not found: ${sel}`);
+      console.warn(`  ! skipped ${name}: selector not found: ${sel}`);
       continue;
     }
     await el.scrollIntoView();

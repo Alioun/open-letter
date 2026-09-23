@@ -35,7 +35,7 @@ export function staircase(rates, holdS, rampS) {
   return { stages, steps };
 }
 
-// Per-step thresholds that never fail — they exist so `--summary-export`
+// Per-step thresholds that never fail; they exist so `--summary-export`
 // includes the tagged sub-metrics. Real pass/fail comes from the caller.
 export function stepThresholds(steps, metrics) {
   const th = {};

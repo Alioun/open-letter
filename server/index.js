@@ -198,7 +198,7 @@ function sanitizeUrl(value) {
 }
 
 // Zoom event defaults come from the active letter config; env overrides win.
-// Empty when no date is set yet (date TBD) — the meeting then counts as "open"
+// Empty when no date is set yet (date TBD); the meeting then counts as "open"
 // so the signup form/CTA still show. A real date is set in the admin.
 const ZOOM_LINK = sanitizeUrl(process.env.ZOOM_LINK || "");
 const ZOOM_EVENT_AT_DEFAULT =
@@ -278,12 +278,12 @@ async function getZoomConfig() {
     // Raw fallback label, exposed to the admin form so it can be edited.
     eventLabelFallback,
     // Date phrase for email copy: " am 12. Juli, 19 Uhr" when a date is set, or
-    // "" when it's still TBD — so templates read cleanly either way.
+    // "" when it's still TBD, so templates read cleanly either way.
     whenPhrase: dateSet ? ` am ${formatZoomLabel(eventAt)}` : "",
     icsUrl: ZOOM_ICS_URL,
     // Nav/CTA label for the Treffen (admin-editable, falls back to config).
     navLabel: s.zoom_nav_label || cfg.zoom?.navLabel || "Treffen",
-    // Delegate field toggle — admin-editable, seeded from the letter config.
+    // Delegate field toggle: admin-editable, seeded from the letter config.
     showDelegierter:
       s.zoom_show_delegierter != null
         ? s.zoom_show_delegierter === "1"
@@ -321,7 +321,7 @@ if (!isDev && ADMIN_PASSWORD.length < 16) {
 }
 if (!isDev && !TRUST_PROXY) {
   console.warn(
-    "[security] TRUST_PROXY is not set — set TRUST_PROXY=true when running behind a reverse proxy for accurate IP rate-limiting.",
+    "[security] TRUST_PROXY is not set; set TRUST_PROXY=true when running behind a reverse proxy for accurate IP rate-limiting.",
   );
 }
 if (!isDev && !API_TOKEN_SECRET) {
@@ -399,7 +399,7 @@ const jwtSecret = new TextEncoder().encode(ADMIN_JWT_SECRET);
 // token from /api/session and sends it on every public API call, so the
 // endpoints reject direct, token-less access from bots/scrapers. This is a
 // deterrent layer (a determined client can still fetch a token), not a hard
-// boundary — the per-IP rate limits on the endpoints are the real throttle.
+// boundary; the per-IP rate limits on the endpoints are the real throttle.
 // Separate secret so public tokens can never be confused with admin tokens;
 // falls back to ADMIN_JWT_SECRET so existing deployments keep booting.
 const apiTokenSecret = new TextEncoder().encode(
@@ -517,7 +517,7 @@ function getClientIp(req) {
       const last = parts[parts.length - 1];
       if (last) return last;
     }
-    // Proxy sent no forwarding headers — fall through to the socket address.
+    // Proxy sent no forwarding headers; fall through to the socket address.
   }
   // Not behind a trusted proxy (or none of the forwarding headers were set):
   // use the real TCP peer address. Forwarding headers are client-controlled,
@@ -727,7 +727,7 @@ function isLinkWindowOpen(zc) {
 }
 
 // The mode-aware {{linkInfo}} block for meeting emails. For online meetings it
-// shows the join link — but only once the link window has opened (before that,
+// shows the join link, but only once the link window has opened (before that,
 // or when `pending`, it says the link follows by email); for in-person meetings
 // it shows the location/address. Always appends the calendar button. `zc` is the
 // getZoomConfig() result.
@@ -816,7 +816,7 @@ async function sendCampaign(campaign) {
   const template = await getEmailTemplate(campaign.template_id);
   if (!template) {
     console.error(
-      `[campaign] ${campaign.id} template ${campaign.template_id} not found — aborting`,
+      `[campaign] ${campaign.id} template ${campaign.template_id} not found, aborting`,
     );
     await markCampaignFailed(campaign.id);
     return;
@@ -853,7 +853,7 @@ async function sendCampaign(campaign) {
   };
 
   console.log(
-    `[campaign] ${campaign.id} starting (attempt ${campaign.attempts}) — ${recipients.length} in audience, ${delivered.size} already reached, remaining=${todo.length}, audience=${audience}`,
+    `[campaign] ${campaign.id} starting (attempt ${campaign.attempts}): ${recipients.length} in audience, ${delivered.size} already reached, remaining=${todo.length}, audience=${audience}`,
   );
 
   // A failing chunk doesn't stop the run: later chunks still go out (a bad
@@ -933,7 +933,7 @@ async function sendCampaign(campaign) {
     const reached = await countDelivered(mailing);
     await setCampaignProgress(campaign.id, reached);
     console.log(
-      `[campaign] ${campaign.id} progress — ${reached} reached, ${todo.length - i - batch.length} remaining`,
+      `[campaign] ${campaign.id} progress: ${reached} reached, ${todo.length - i - batch.length} remaining`,
     );
 
     if (i + 100 < todo.length) await sleep(batchDelayMs);
@@ -942,13 +942,13 @@ async function sendCampaign(campaign) {
   const reached = await countDelivered(mailing);
   if (failures > 0) {
     console.error(
-      `[campaign] ${campaign.id} attempt ${campaign.attempts} finished with ${failures} failure(s) — ${reached} reached, will retry the rest`,
+      `[campaign] ${campaign.id} attempt ${campaign.attempts} finished with ${failures} failure(s): ${reached} reached, will retry the rest`,
     );
     await setCampaignProgress(campaign.id, reached);
     await markCampaignFailed(campaign.id);
     return;
   }
-  console.log(`[campaign] ${campaign.id} done — ${reached} reached`);
+  console.log(`[campaign] ${campaign.id} done: ${reached} reached`);
   await markCampaignSent(campaign.id, reached);
 }
 
@@ -1054,7 +1054,7 @@ async function sendZoomLinkMails(cfg) {
   const todo = recipients.filter((r) => !delivered.has(r.email));
   let failed = 0;
   console.log(
-    `[zoom-mail] link mailing starting — ${recipients.length} recipients, ${delivered.size} already reached`,
+    `[zoom-mail] link mailing starting: ${recipients.length} recipients, ${delivered.size} already reached`,
   );
   for (const recipient of todo) {
     try {
@@ -1071,7 +1071,7 @@ async function sendZoomLinkMails(cfg) {
   }
   const reached = await countDelivered(mailing);
   console.log(
-    `[zoom-mail] link mailing done — ${reached}/${recipients.length} reached`,
+    `[zoom-mail] link mailing done: ${reached}/${recipients.length} reached`,
   );
   if (failed > 0) throw new Error(`${failed} link mail(s) failed`);
   return reached;
@@ -1089,7 +1089,7 @@ async function sendZoomReminderMails(cfg) {
     );
   let failed = 0;
   console.log(
-    `[zoom-mail] reminder starting — ${recipients.length} recipients, ${delivered.size} already reached`,
+    `[zoom-mail] reminder starting: ${recipients.length} recipients, ${delivered.size} already reached`,
   );
   for (let i = 0; i < todo.length; i += 100) {
     const batch = todo.slice(i, i + 100);
@@ -1118,7 +1118,7 @@ async function sendZoomReminderMails(cfg) {
   }
   const reached = await countDelivered(mailing);
   console.log(
-    `[zoom-mail] reminder done — ${reached}/${recipients.length} reached`,
+    `[zoom-mail] reminder done: ${reached}/${recipients.length} reached`,
   );
   if (failed > 0) throw new Error(`${failed} reminder chunk(s) failed`);
   return reached;
@@ -1303,7 +1303,7 @@ async function runZoomMailingWorker() {
   if (!cfg.dateSet) return; // no date yet → nothing to schedule
   const eventMs = cfg.eventAt.getTime();
   if (Number.isNaN(eventMs)) return;
-  // Registrations are only kept until TREFFEN_RETENTION_MS after the event —
+  // Registrations are only kept until TREFFEN_RETENTION_MS after the event:
   // the current one, and a previous one whose date was replaced afterwards.
   try {
     const purged =
@@ -1328,7 +1328,7 @@ async function runZoomMailingWorker() {
     if (now >= eventMs - linkMs && now < eventMs) {
       if (!cfg.link) {
         console.warn(
-          "[zoom-mail] link window open but ZOOM_LINK is not set — skipping (will retry once configured)",
+          "[zoom-mail] link window open but ZOOM_LINK is not set, skipping (will retry once configured)",
         );
       } else if (await claimZoomMailing("link")) {
         try {
@@ -1361,7 +1361,7 @@ async function runZoomMailingWorker() {
 
 // runZoomMailingWorker is invoked by the Honker `maintenance` queue (see boot).
 
-// Build/version info for GET /api/version — lets you confirm which commit is
+// Build/version info for GET /api/version: lets you confirm which commit is
 // actually live after a deploy (staging vs prod). The commit is baked at build
 // time via GIT_COMMIT (see Dockerfile), with common platform env fallbacks, then
 // a local `git` fallback for non-container runs; "unknown" if none resolve.
@@ -3306,7 +3306,7 @@ try {
   });
   // DSGVO: sweep expired, never-confirmed sign-ups. The privacy policy promises
   // deletion once the 24h confirmation link has expired, so this has to run
-  // often — a daily sweep left entries in place for up to ~48h. Re-registering
+  // often; a daily sweep left entries in place for up to ~48h. Re-registering
   // under the same name updates an existing deployment's schedule.
   await registerSchedule("purge-unverified", "maintenance", "@every 300s", {
     task: "purge-unverified",

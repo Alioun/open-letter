@@ -1,4 +1,4 @@
-// Bun test preload — runs once before any test module is imported.
+// Bun test preload: runs once before any test module is imported.
 //
 // Critically, this sets the DB env vars BEFORE db/connection.js is ever loaded
 // (connection.js opens the shared SQLCipher connection eagerly at import). We use

@@ -45,7 +45,7 @@ export default {
       body: '"Inter", system-ui, sans-serif',
     },
     style: {
-      // Flat offset box-shadow (no blur) — the "political-poster brutalism" look.
+      // Flat offset box-shadow (no blur): the "political-poster brutalism" look.
       shadowOffset: "10px 10px 0",
       // Sharp corners throughout.
       radius: "0",
@@ -74,7 +74,7 @@ export default {
     },
     // Optional privacy-friendly analytics (Umami-style). Leave src empty to
     // disable (and to drop the host from the CSP). retentionMonths is quoted in
-    // the privacy policy — the Umami server must actually purge older data.
+    // the privacy policy; the Umami server must actually purge older data.
     analytics: {
       src: "https://stats.gehaltsdeckel.jetzt/script.js",
       websiteId: "05e06fcd-fe90-4a03-a962-318c20e4107b",
@@ -96,7 +96,7 @@ export default {
     ctaPrimary: "Jetzt mitzeichnen",
     ctaSecondary: "Brief lesen",
     // Seed default for the goal milestones. The live value is admin-editable
-    // (stored in app_settings, exposed via /api/stats) — see the admin panel.
+    // (stored in app_settings, exposed via /api/stats); see the admin panel.
     milestones: [1000, 1300, 1600, 2000, 2300, 2500],
   },
 
@@ -195,7 +195,7 @@ export default {
     // events, logs). Quoted in the privacy policy. Resend: 30 days on all
     // non-Enterprise plans (resend.com/docs/knowledge-base/account-quotas-and-limits).
     providerRetentionDays: 30,
-    // Read only when provider === "smtp". Non-secret connection details only —
+    // Read only when provider === "smtp". Non-secret connection details only:
     // credentials come from env (SMTP_USER / SMTP_PASS). Host/port/secure are
     // env-overridable via SMTP_HOST / SMTP_PORT / SMTP_SECURE.
     smtp: {
@@ -214,7 +214,7 @@ export default {
     templates: {
       verification: {
         name: "Bestatigung der Unterschrift",
-        subject: "Bitte bestätige deine Unterschrift — Gehaltsdeckel jetzt",
+        subject: "Bitte bestätige deine Unterschrift | Gehaltsdeckel jetzt",
         htmlBody: `
       <p>Hallo {{name}},</p>
       <p>Danke für deine Unterschrift unter den offenen Brief „Gehaltsdeckel jetzt".</p>
@@ -225,7 +225,7 @@ export default {
       },
       already_signed: {
         name: "Bereits unterschrieben",
-        subject: "Du hast bereits unterschrieben — Gehaltsdeckel jetzt",
+        subject: "Du hast bereits unterschrieben | Gehaltsdeckel jetzt",
         htmlBody: `
       <p>Hallo {{name}},</p>
       <p>deine Unterschrift unter den offenen Brief „Gehaltsdeckel jetzt" ist bereits bestätigt und wird gezählt.</p>
@@ -236,7 +236,7 @@ export default {
       },
       invite: {
         name: "Einladungslink nach Bestätigung",
-        subject: "Danke! Dein persönlicher Einladungslink — Gehaltsdeckel jetzt",
+        subject: "Danke! Dein persönlicher Einladungslink | Gehaltsdeckel jetzt",
         htmlBody: `
       <p>Hallo {{firstName}},</p>
       <p>deine Unterschrift ist bestätigt – danke!</p>
@@ -248,7 +248,7 @@ export default {
       },
       deletion: {
         name: "Loschung der Unterschrift",
-        subject: "Deine Unterschrift löschen — Gehaltsdeckel jetzt",
+        subject: "Deine Unterschrift löschen | Gehaltsdeckel jetzt",
         htmlBody: `
       <p>Hallo,</p>
       <p>du hast die Löschung aller Daten angefordert, die wir zu dieser E-Mail-Adresse gespeichert haben – deine Unterschrift und deine Anmeldung zum Treffen, falls vorhanden.</p>
@@ -260,7 +260,7 @@ export default {
       zoom_verification: {
         name: "Treffen-Anmeldung bestätigen",
         subject:
-          "Bitte bestätige deine Anmeldung zum Auswertungstreffen — Gehaltsdeckel jetzt",
+          "Bitte bestätige deine Anmeldung zum Auswertungstreffen | Gehaltsdeckel jetzt",
         htmlBody: `
       <p>Hallo {{firstName}},</p>
       <p>du möchtest am Auswertungstreffen der Unterzeichner*innen<strong>{{eventWhen}}</strong> teilnehmen.</p>
@@ -271,7 +271,7 @@ export default {
       },
       zoom_already_registered: {
         name: "Treffen: bereits angemeldet",
-        subject: "Du bist bereits angemeldet — Auswertungstreffen{{eventWhen}}",
+        subject: "Du bist bereits angemeldet | Auswertungstreffen{{eventWhen}}",
         htmlBody: `
       <p>Hallo {{firstName}},</p>
       <p>gerade wurde das Anmeldeformular für das Auswertungstreffen<strong>{{eventWhen}}</strong> mit deiner E-Mail-Adresse ausgefüllt. Du bist bereits angemeldet – es hat sich nichts geändert.</p>
@@ -283,7 +283,7 @@ export default {
       zoom_confirmation: {
         name: "Treffen-Anmeldung Bestatigung",
         subject:
-          "Du bist dabei — Auswertungstreffen{{eventWhen}} — Gehaltsdeckel jetzt",
+          "Du bist dabei: Auswertungstreffen{{eventWhen}} | Gehaltsdeckel jetzt",
         htmlBody: `
       <p>Hallo {{firstName}},</p>
       <p>danke für deine Anmeldung zum Auswertungstreffen der Unterzeichner*innen<strong>{{eventWhen}}</strong>.</p>
@@ -297,7 +297,7 @@ export default {
         subject: "Infos zum Auswertungstreffen am {{eventLabel}}",
         htmlBody: `
       <p>Hallo {{firstName}},</p>
-      <p>morgen ist es so weit — unser Auswertungstreffen am <strong>{{eventLabel}}</strong>. Hier sind alle Infos:</p>
+      <p>morgen ist es so weit: unser Auswertungstreffen am <strong>{{eventLabel}}</strong>. Hier sind alle Infos:</p>
       {{linkInfo}}
       <p>Den passenden Kalendereintrag findest du im Anhang (.ics) oder über den Button oben.</p>
       <p>Bis morgen und mit solidarischen Grüßen<br>Initiative Gehaltsdeckel</p>
@@ -305,7 +305,7 @@ export default {
       },
       zoom_reminder: {
         name: "Treffen-Erinnerung (2 Std. vorher)",
-        subject: "Gleich geht's los — Auswertungstreffen in 2 Stunden",
+        subject: "Gleich geht's los: Auswertungstreffen in 2 Stunden",
         htmlBody: `
       <p>Hallo {{firstName}},</p>
       <p>kleine Erinnerung: In rund 2 Stunden startet unser Auswertungstreffen am <strong>{{eventLabel}}</strong>.</p>
@@ -316,11 +316,11 @@ export default {
       zoom_newsletter_invite: {
         name: "Newsletter → Treffen-Einladung",
         subject:
-          "Bist du dabei? Auswertungstreffen{{eventWhen}} — Gehaltsdeckel jetzt",
+          "Bist du dabei? Auswertungstreffen{{eventWhen}} | Gehaltsdeckel jetzt",
         htmlBody: `
       <div class="email-shell">
         <p class="anrede">Hallo {{firstName}},</p>
-        <p>die Aktion war erfolgreich — auf dem Bundesparteitag wurde der Gehaltsdeckel beschlossen. Zeit, gemeinsam auszuwerten: Wir laden dich herzlich zum Auswertungstreffen<strong>{{eventWhen}}</strong> ein.</p>
+        <p>die Aktion war erfolgreich: Auf dem Bundesparteitag wurde der Gehaltsdeckel beschlossen. Zeit, gemeinsam auszuwerten: Wir laden dich herzlich zum Auswertungstreffen<strong>{{eventWhen}}</strong> ein.</p>
         <p>In dem Treffen schauen wir zurück auf die Aktion und den Parteitag, ziehen ein Fazit und besprechen mögliche nächste Schritte.</p>
         <p><strong>Melde dich jetzt mit einem Klick an:</strong></p>
         <p>
@@ -331,7 +331,7 @@ export default {
           <a href="{{zoomJaDelegiertUrl}}" style="display:inline-block;background:#6f003c;color:#ffffff;font-family:'Work Sans',Arial,sans-serif;font-weight:700;font-size:15px;text-decoration:none;padding:13px 22px;border:2px solid #6f003c;">Ja, ich bin dabei und bin Delegierte*r</a>
         </p>
         {{/zoomJaDelegiertUrl}}
-        <p>Deine Angaben (Name, Kreisverband) werden automatisch aus deiner Unterschrift übernommen — du musst nichts weiter ausfüllen.</p>
+        <p>Deine Angaben (Name, Kreisverband) werden automatisch aus deiner Unterschrift übernommen; du musst nichts weiter ausfüllen.</p>
         <p class="gruss">Mit solidarischen Grüßen<br>Initiative Gehaltsdeckel</p>
         <footer>Du erhältst diese E-Mail, weil du Updates abonniert hast. <a href="{{unsubscribeUrl}}">E-Mails abbestellen</a>.</footer>
       </div>
@@ -340,7 +340,7 @@ export default {
       "open-letter-update": {
         name: "Open Letter Update",
         subject:
-          "Update: Gehaltsdeckel jetzt — {{signerCount}} Mitzeichner*innen",
+          "Update: Gehaltsdeckel jetzt | {{signerCount}} Mitzeichner*innen",
         htmlBody: `
       <div class="email-shell">
         <h1>Ein Brief von Genoss*innen</h1>
@@ -440,11 +440,11 @@ export default {
 
   // ---- Treffen / event (only read when features.zoomEvent) -------------------
   // A "Treffen" (meeting) that can be online (video/Zoom link) or in person
-  // (physical location) — see `mode` below. eventAt/link/label are admin-editable
+  // (physical location); see `mode` below. eventAt/link/label are admin-editable
   // at runtime (app_settings); for online meetings the join link is set in the
   // admin. `section`/`form` hold the on-page copy (kept out of src/App.jsx so
   // every letter is fully config-driven). Internally this still uses the
-  // "zoom_*" table/endpoints — only the user-facing wording is "Treffen".
+  // "zoom_*" table/endpoints; only the user-facing wording is "Treffen".
   zoom: {
     eventLabel: "Termin folgt",
     eventAt: null,

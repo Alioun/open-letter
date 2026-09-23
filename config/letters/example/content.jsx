@@ -13,8 +13,8 @@ export function LetterArticle({ total }) {
       </p>
 
       <p>
-        Everything else on this page — the title, colours, hero, sign form,
-        emails and feature flags — is configured in the sibling{" "}
+        Everything else on this page (the title, colours, hero, sign form,
+        emails and feature flags) is configured in the sibling{" "}
         <code>index.js</code> file.
       </p>
 

@@ -13,7 +13,7 @@ export const ZoomForm = memo(function ZoomForm({
   onSubmit,
   serverError,
   kvNames,
-  // Whether the "Ich bin Delegierte*r" field is shown — admin-toggleable at
+  // Whether the "Ich bin Delegierte*r" field is shown: admin-toggleable at
   // runtime (delivered via /api/zoom-count), defaults handled by the caller.
   showDelegierter = false,
 }) {

@@ -101,7 +101,7 @@ describe("cached read endpoints", () => {
     expect((await q.getStats()).total).toBe(1);
     expect((await q.getSigners({})).total).toBe(1);
 
-    // The INSERT drops the cache (mutation hook) — no TTL wait, no stale read.
+    // The INSERT drops the cache (mutation hook): no TTL wait, no stale read.
     await addVerifiedSigner({ name: "Ben Klein", email: "b@example.org" });
     expect((await q.getStats()).total).toBe(2);
 

@@ -57,7 +57,7 @@ export function search(ip, tags) {
 }
 
 // A sign-up: DB upsert, unsubscribe token, template render (incl. a newsletter
-// stats query), CSS inlining and an SMTP round-trip to Mailpit — all inline.
+// stats query), CSS inlining and an SMTP round-trip to Mailpit, all inline.
 const KVS = ["Berlin-Neukölln", "Hamburg", "Köln", "Pankow", "Bremen", "Lichtenberg", ""];
 export function signup(tags) {
   const n = exec.scenario.iterationInTest;

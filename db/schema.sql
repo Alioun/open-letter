@@ -49,7 +49,7 @@ CREATE INDEX IF NOT EXISTS idx_signers_verified
 
 -- Every public read filters on `verified = 1 AND show_publicly = 1` and then
 -- needs one more column. Without that column in the index SQLite walks the
--- index and fetches each matching row from the table for it — at 100k signers
+-- index and fetches each matching row from the table for it. At 100k signers
 -- that per-row fetch, not the aggregation, was the entire cost: the signer
 -- list's COUNT(*) took 632ms, the three GROUP BY endpoints ~710ms each, and
 -- the search scan 664ms. Covering the column each one reads brings them to
@@ -71,7 +71,7 @@ CREATE INDEX IF NOT EXISTS idx_signers_public_kv
 CREATE INDEX IF NOT EXISTS idx_signers_public_occ
   ON signers (verified, show_publicly, occupation);
 
--- /api/signers?search= — the LIKE scan can't use an index to seek, but keeping
+-- /api/signers?search=: the LIKE scan can't use an index to seek, but keeping
 -- name and kreisverband in one makes it an index-only scan instead of 95k
 -- row fetches.
 CREATE INDEX IF NOT EXISTS idx_signers_public_name

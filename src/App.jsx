@@ -113,7 +113,7 @@ function getScrollTarget(id) {
   if (!el) return null;
 
   // Offset by exactly the pinned header's height so the section sits flush beneath
-  // it — any extra would expose a sliver of the previous section's bottom padding.
+  // it; any extra would expose a sliver of the previous section's bottom padding.
   const header = document.querySelector(".topbar");
   const headerHeight = header?.getBoundingClientRect().height ?? 0;
   return Math.max(
@@ -213,7 +213,7 @@ async function apiFetch(path, opts = {}) {
   try {
     token = await getApiToken();
   } catch {
-    return fetch(path, opts); // token unavailable — let the server decide
+    return fetch(path, opts); // token unavailable, let the server decide
   }
   let res = await doFetch(token);
   if (res.status === 401) {
@@ -477,7 +477,7 @@ export default function App({ boot = null }) {
       // by a mail scanner) can't be told apart from an expired one. Instead of
       // "sign again", route the person through the sign form's existing check:
       // an already confirmed address gets the "already signed" mail, an
-      // unconfirmed one its confirmation link again — without the page revealing
+      // unconfirmed one its confirmation link again, without the page revealing
       // which.
       setSubmitError(cfg.ui.errors.tokenExpired);
       window.history.replaceState({}, "", window.location.pathname);
@@ -561,7 +561,7 @@ export default function App({ boot = null }) {
       const id = (window.location.hash || "").slice(1);
       if (!id) return;
       const target = getScrollTarget(id);
-      if (target === null) return; // not mounted yet — a later resize will retry
+      if (target === null) return; // not mounted yet; a later resize will retry
 
       if (!didInitialScroll) {
         // First sighting: animate so the user sees deliberate motion.
@@ -1229,7 +1229,7 @@ export default function App({ boot = null }) {
             </a>
           ))}
           {
-            /* zoom module — toggle via features.zoomEvent */ showZoomNav && (
+            /* zoom module: toggle via features.zoomEvent */ showZoomNav && (
               <a
                 href="#zoom"
                 onClick={(e) => {
@@ -1284,7 +1284,7 @@ export default function App({ boot = null }) {
           </a>
         ))}
         {
-          /* zoom module — toggle via features.zoomEvent */ showZoomNav && (
+          /* zoom module: toggle via features.zoomEvent */ showZoomNav && (
             <a
               href="#zoom"
               onClick={(e) => {
@@ -1435,7 +1435,7 @@ export default function App({ boot = null }) {
                     </div>
 
                     {
-                      /* zoom module — toggle via features.zoomEvent */ zoomEnabled &&
+                      /* zoom module: toggle via features.zoomEvent */ zoomEnabled &&
                         cfg.ui.stoerer.showFrom > 0 &&
                         total >= cfg.ui.stoerer.showFrom &&
                         zoomOpen && (
@@ -1762,7 +1762,7 @@ const SignForm = memo(function SignForm({
     return kvNames.filter((k) => k.toLowerCase().includes(q)).slice(0, 6);
   }, [kv, kvNames]);
 
-  // "(und ggf. <Feld>/<Feld>)" for the public-visibility checkbox — only names
+  // "(und ggf. <Feld>/<Feld>)" for the public-visibility checkbox; only names
   // the optional fields that are actually enabled.
   const visibilityFields = [
     cfg.features.kreisverbandField && cfg.sign.fields.kreisverband.label,
@@ -2474,7 +2474,7 @@ function ImpressumModal({ onClose }) {
   );
 }
 
-// Retention periods and link lifetimes quoted in the privacy policy — the same
+// Retention periods and link lifetimes quoted in the privacy policy: the same
 // values the server enforces (config/privacy.js).
 const privacy = resolvePrivacy(cfg);
 

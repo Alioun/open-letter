@@ -7,7 +7,7 @@ import cfg from "../config/letter.config.js";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 
-// [table, column, declaration] — keep in sync with db/schema.sql.
+// [table, column, declaration]: keep in sync with db/schema.sql.
 const ADDED_COLUMNS = [
   ["campaigns", "attempts", "INTEGER NOT NULL DEFAULT 0"],
   ["campaigns", "heartbeat_at", "TEXT"],

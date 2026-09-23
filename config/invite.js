@@ -21,9 +21,9 @@ const DEFAULTS = {
   statsHeading: "Deine Einladungen",
   // How exact the private stats page is. Every step the inviter can see is a
   // chance to tell that one particular person signed, so coarser is safer:
-  //   "ranges"    — "{min}–{max}" between the statsRanges bounds (default)
-  //   "threshold" — "fewer than {threshold}", then the exact number
-  //   "exact"     — always the exact number
+  //   "ranges"    : "{min}–{max}" between the statsRanges bounds (default)
+  //   "threshold" : "fewer than {threshold}", then the exact number
+  //   "exact"     : always the exact number
   statsMode: "ranges",
   // Lower bounds of the ranges (ascending). Below the first: statsBelow; from
   // the last on: statsAtLeast.

@@ -1,4 +1,4 @@
-// Data access layer — bun:sqlite over a SQLCipher-encrypted database.
+// Data access layer: bun:sqlite over a SQLCipher-encrypted database.
 //
 // Migrated from postgres.js. Key translation rules applied throughout:
 //   * Timestamps are ISO-8601 UTC TEXT. Bind Dates via `iso()`, compare against
@@ -33,13 +33,13 @@ const FUZZY_SCAN_LIMIT = Number(process.env.FUZZY_SCAN_LIMIT || 20000);
 
 // Public reads are cached and de-duplicated while in flight (server/cache.js).
 // Any write drops the cache, so a confirmation or deletion is visible to the
-// very next read — except writes tagged `/* public-neutral */`, which cannot
+// very next read, except writes tagged `/* public-neutral */`, which cannot
 // change a public response and therefore must not throw the cache away.
 //
 // The tagged ones matter: a sign-up writes an *unverified* row plus a couple of
 // token columns, and every public read counts only `verified = 1`. Before this,
 // a burst of sign-ups invalidated everything several times a second and each
-// poll re-ran every aggregate — the load test collapsed at 200 open tabs on a
+// poll re-ran every aggregate; the load test collapsed at 200 open tabs on a
 // workload that now handles thousands.
 onMutation(invalidate);
 
@@ -59,7 +59,7 @@ function boolifyAll(rows, fields) {
   return rows;
 }
 
-// Full Levenshtein edit distance (strings here are short — names / KV labels).
+// Full Levenshtein edit distance (strings here are short: names / KV labels).
 function levenshtein(a, b) {
   if (a === b) return 0;
   const m = a.length;
@@ -207,7 +207,7 @@ async function querySigners({ filter, search, limit, offset, sort }) {
     return { signers, total };
   }
 
-  // Substring hits — the overwhelmingly common case — are found in SQL, which
+  // Substring hits (the overwhelmingly common case) are found in SQL, which
   // scans in C and returns only what it matched. The old code pulled every
   // verified signer into JS and scored each one: at 100k signers that was ~100k
   // objects and a Levenshtein pass per search, which measured at seconds per
@@ -442,8 +442,8 @@ export async function insertSigner({
   inviteShowName = false,
 }) {
   // A pending (unconfirmed) sign-up is only replaced once its link expired.
-  // Before that, a second request for the same address — which proves nothing
-  // about who sent it — must not change the name, public display or newsletter
+  // Before that, a second request for the same address, which proves nothing
+  // about who sent it, must not change the name, public display or newsletter
   // choice the real person is about to confirm; the caller re-sends the
   // original confirmation instead.
   const row = await db
@@ -632,7 +632,7 @@ export async function getInviteStats(code, token) {
   return row ? { count: row.invite_count } : null;
 }
 
-// Start a deletion for an address we hold data for — a signature, a Treffen
+// Start a deletion for an address we hold data for: a signature, a Treffen
 // registration, or both. Returns the request id, or null when the address is
 // unknown (the caller answers the same either way).
 export async function createDeletionRequest(email, token, expiresAt) {
@@ -717,7 +717,7 @@ export async function getSignerIdByEmail(email) {
   return row ? row.id : null;
 }
 
-// Everything a queued transactional mail needs, read when it is sent — so the
+// Everything a queued transactional mail needs, read when it is sent, so the
 // job payload holds only the signer id, and a mail for a row that has since
 // been deleted is simply not sent.
 export async function getSignerForMail(id) {
@@ -842,7 +842,7 @@ export async function deleteZoomRegistrationByUnsubscribeToken(token) {
 // zoom_registrations until the address confirms, so an unauthenticated request
 // can neither register someone else nor change an existing registration.
 // Returns { status: "registered" } when the address is already registered,
-// otherwise { status: "pending", id } — an unexpired pending sign-up is kept as
+// otherwise { status: "pending", id }; an unexpired pending sign-up is kept as
 // it was (its link is simply mailed again), an expired one is replaced.
 export async function insertZoomPending(args, attempt = 0) {
   const { name, email, kv, delegierter, token, expiresAt } = args;
@@ -914,7 +914,7 @@ export async function getZoomPendingByToken(token) {
 }
 
 // The confirmation link was used: move the sign-up into zoom_registrations.
-// Overwriting an existing registration is fine here — the request proved it
+// Overwriting an existing registration is fine here: the request proved it
 // controls the address. Returns the registration, or null for a bad link.
 export async function confirmZoomPending(token) {
   // No transaction: the connection is shared with concurrent requests. The
@@ -1000,7 +1000,7 @@ export async function purgePreviousTreffenRegistrations() {
   return removed;
 }
 
-// A registration made for an earlier Treffen whose date was replaced — it only
+// A registration made for an earlier Treffen whose date was replaced; it only
 // waits for that event's deadline and does not count as registered for the
 // current one, so the person can sign up again (which renews it).
 async function isForPreviousTreffen(createdAt) {
@@ -1092,7 +1092,7 @@ export async function markDelivered(mailing, emails) {
 
 // The delivery log holds addresses, so rows go privacy.deliveryLogDays after
 // sending (the privacy policy quotes it). Only a campaign still running or
-// between retries keeps its rows — that state ends within hours (backoff, then
+// between retries keeps its rows; that state ends within hours (backoff, then
 // 'aborted'). An aborted campaign doesn't hold them: its log ages out like any
 // other, and retryAbortedCampaign refuses once that could have happened.
 const DELIVERY_LOG_MS = resolvePrivacy(cfg).deliveryLogMs;
@@ -1522,7 +1522,7 @@ export async function markCampaignFailed(id) {
 }
 
 // Admin: give an aborted campaign a fresh set of attempts. Already-reached
-// recipients are in the delivery log and are not mailed again — which only
+// recipients are in the delivery log and are not mailed again, which only
 // holds while that log is complete, so the retry is refused once the campaign's
 // oldest delivery could have aged out (see deleteOldDeliveries).
 export async function retryAbortedCampaign(id) {
@@ -1665,7 +1665,7 @@ export async function deleteSignerByUnsubscribeToken(token, source) {
 export async function deleteExpiredUnverifiedSigners() {
   const res = await db
     .query(
-      // Only ever removes unverified rows, which no public read counts — so it
+      // Only ever removes unverified rows, which no public read counts, so it
       // must not drop the read cache every five minutes.
       `DELETE FROM signers /* public-neutral */ WHERE verified = 0 AND token_expires_at < ?`,
     )
@@ -1696,7 +1696,7 @@ export async function deleteExpiredByAge(cutoff) {
 }
 
 // Resolve email from either a signer or zoom unsubscribe token. Signer tokens
-// only count within TOKEN_EDIT_WINDOW unless `optOut` is set — opting out must
+// only count within TOKEN_EDIT_WINDOW unless `optOut` is set; opting out must
 // work with a link from any mail, however old. Treffen tokens have no window;
 // their rows are purged shortly after the event.
 export async function resolveEmailFromToken(token, source, { optOut = false } = {}) {
@@ -1784,14 +1784,14 @@ export async function getUnifiedUnsubscribeState(token, source) {
     zoomName: zoom?.name ?? "",
     zoomKv: zoom?.kreisverband ?? "",
     delegierter: Boolean(zoom?.delegierter ?? false),
-    // Whether the delegate field is currently enabled (admin toggle) — the
+    // Whether the delegate field is currently enabled (admin toggle); the
     // self-service page hides the checkbox when off.
     showDelegierter: await getShowDelegierter(),
   };
 }
 
 // Update an existing signer's editable fields. The unsubscribe token (already
-// resolved to this email) is the authorization — no `verified` guard, since
+// resolved to this email) is the authorization; no `verified` guard, since
 // editing a confirmed signature is the whole point. Resetting `state` to ''
 // when the Kreisverband changes lets the state backfill re-resolve it.
 export async function updateSignerByEmail(

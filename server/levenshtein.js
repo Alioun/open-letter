@@ -51,7 +51,7 @@ function areSimilar(a, b) {
 /**
  * Find groups of similar names using star topology.
  * Each group has a canonical entry (highest count) and outliers
- * that are directly similar to the canonical — no transitive chaining.
+ * that are directly similar to the canonical; no transitive chaining.
  *
  * @param {Array<Object>} items - Objects with a name field and count
  * @param {string} fieldName - Key to read the name from (default: "kreisverband")

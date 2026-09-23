@@ -33,7 +33,7 @@ describe.skipIf(!hasExt)("Honker durable jobs", () => {
     expect(await liveCount()).toBe(0); // acked + removed
   });
 
-  test("throwing handler does not ack — job stays for retry", async () => {
+  test("throwing handler does not ack, job stays for retry", async () => {
     let calls = 0;
     await enqueue("flaky", { n: 1 }, { maxAttempts: 5 });
     startWorker(
