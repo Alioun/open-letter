@@ -28,6 +28,21 @@ describe("server-rendered pages", () => {
     expect(html).toContain('name="referrer" content="no-referrer"');
   });
 
+  test("the card keeps its offset shadow unless the letter turns it off", () => {
+    expect(simplePage("")).toContain("box-shadow:10px 10px 0 #ff0000;");
+    expect(simplePage("", gehaltsdeckel)).toContain(
+      "box-shadow:10px 10px 0 #ff0000;",
+    );
+    const flat = {
+      ...example,
+      theme: {
+        ...example.theme,
+        style: { ...example.theme?.style, shadowOffset: "none" },
+      },
+    };
+    expect(simplePage("", flat)).toContain("box-shadow:none;");
+  });
+
   test("simplePage takes language, title and colours from the letter", () => {
     const html = simplePage("<p>x</p>", example);
     expect(html).toContain('<html lang="en">');

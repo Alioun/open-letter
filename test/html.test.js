@@ -19,6 +19,15 @@ const cfg = {
 const template = "<html lang=\"{{LANG}}\"><head>{{HEAD}}</head></html>";
 
 describe("generated HTML", () => {
+  test("<html> names the active letter so letter styles can scope to it", () => {
+    const html = renderIndexHtml(
+      '<html lang="{{LANG}}" data-letter="{{LETTER}}"><head>{{HEAD}}</head></html>',
+      cfg,
+      "beispiel",
+    );
+    expect(html).toContain('<html lang="de" data-letter="beispiel">');
+  });
+
   test("homepage preloads the initial state", () => {
     const html = renderIndexHtml(template, cfg, "x", { preloadBoot: true });
     expect(html).toContain('<link rel="preload" href="/api/boot" as="fetch" crossorigin />');

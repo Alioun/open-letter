@@ -111,6 +111,7 @@ ${JSON.stringify(jsonLd, null, 6).replace(/^/gm, "      ").trimStart()}
 export function renderIndexHtml(template, cfg, letterName, headOptions) {
   return template
     .replace("{{LANG}}", esc(cfg.brand.lang || "de"))
+    .replace("{{LETTER}}", esc(letterName || ""))
     .replace("{{HEAD}}", renderHead(cfg, letterName, headOptions));
 }
 

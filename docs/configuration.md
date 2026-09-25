@@ -7,7 +7,7 @@ Everything specific to a campaign lives in `config/letters/<name>/`: `index.js` 
 | Key | What it controls |
 | --- | --- |
 | `brand` | `name`, `wordmark`, `lang`, `locale` |
-| `theme` | `colors` (palette → CSS variables), `fonts` (`display`/`body`), `style` (`shadowOffset`, `radius`, `borderWidth`, plus optional `shadow: "soft"` for blurred drop shadows instead of offset blocks, `cardRadius`, `buttonRadius`, `headlineMaxWidth`, `inputRadius`, `checkRadius`, `bannerRadius`, `bannerPadBottom`); optional colours `onAkzent`, `ctaBg`, `ctaFg`, `goalFill`, `ctaHoverBg`, `ctaHoverFg`, `heroBg`, `statBg` recolour the counter card, primary buttons, hero and stats; the theme drives the page, emails, and generated images |
+| `theme` | `colors` (palette → CSS variables), `fonts` (`display`/`body`), `style` (`shadowOffset` (`"none"` also drops the shadow on link pages), `radius`, `borderWidth`, plus optional `shadow: "soft"` for blurred drop shadows instead of offset blocks, `cardRadius`, `buttonRadius`, `headlineMaxWidth`, `inputRadius`, `checkRadius`, `bannerRadius`, `bannerPadBottom`); optional colours `onAkzent`, `ctaBg`, `ctaFg`, `goalFill`, `ctaHoverBg`, `ctaHoverFg`, `heroBg`, `statBg` recolour the counter card, primary buttons, hero and stats; the theme drives the page, emails, and generated images |
 | `meta` | `<head>`: title, description, canonical, OG/Twitter, favicon, JSON-LD `schemaAbout`, optional `analytics` `{src, websiteId, retentionMonths}` |
 | `privacy` | retention periods and link lifetimes, enforced by the server and quoted in the privacy policy; see [Data retention](operations.md#data-retention) |
 | `hero` | headline lines, CTA labels, counter/goal labels, seed `milestones` |
