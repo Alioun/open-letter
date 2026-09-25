@@ -1,6 +1,6 @@
 # Configuration
 
-Everything specific to a campaign lives in `config/letters/<name>/`: `index.js` holds the data and `content.jsx` holds the letter body and FAQ. Secrets and deployment settings come from env.
+Everything specific to a campaign lives in `config/letters/<name>/`: `index.js` holds the data and `content.jsx` holds the letter body and FAQ. An optional `letter.css` next to them is bundled into that letter's pages; scope its rules to `[data-letter="<name>"]` (the attribute sits on `<html>`) so they win over the base styles and never reach another letter. The admin panel does not load it. Secrets and deployment settings come from env.
 
 ## Letter config (`index.js`)
 

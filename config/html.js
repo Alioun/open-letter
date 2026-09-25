@@ -32,6 +32,7 @@ export function renderHead(
     analytics: withAnalytics = true,
     private: isPrivate = false,
     preloadBoot = false,
+    letterCss = false,
   } = {},
 ) {
   const m = cfg.meta;
@@ -105,7 +106,13 @@ export function renderHead(
 
     <script type="application/ld+json">
 ${JSON.stringify(jsonLd, null, 6).replace(/^/gm, "      ").trimStart()}
-    </script>${analytics}`;
+    </script>${analytics}${
+      // The letter's own stylesheet (config/letters/<name>/letter.css), bundled
+      // by Bun's HTML bundler. Its rules scope to <html data-letter="<name>">.
+      letterCss
+        ? `\n    <link rel="stylesheet" href="./config/letters/${esc(letterName)}/letter.css" />`
+        : ""
+    }`;
 }
 
 export function renderIndexHtml(template, cfg, letterName, headOptions) {
@@ -118,8 +125,9 @@ export function renderIndexHtml(template, cfg, letterName, headOptions) {
 // The /abmelden/<token> page. The token alone reads, edits and deletes a
 // signer's data, so this page must never report its URL (or pass it on as a
 // referrer) to analytics.
-export function renderUnsubscribeHtml(template, cfg, letterName) {
+export function renderUnsubscribeHtml(template, cfg, letterName, headOptions) {
   return renderIndexHtml(template, cfg, letterName, {
+    ...headOptions,
     analytics: false,
     private: true,
   });

@@ -1,6 +1,6 @@
 import { timingSafeEqual, createHash } from "node:crypto";
 import { Buffer } from "node:buffer";
-import { readFileSync, writeFileSync } from "node:fs";
+import { existsSync, readFileSync, writeFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { SignJWT, jwtVerify } from "jose";
 import cfg, { LETTER_NAME } from "../config/letter.config.js";
@@ -357,17 +357,24 @@ function writeIfChanged(relPath, content) {
   }
 }
 
+// A letter can bring its own stylesheet: config/letters/<name>/letter.css.
+const letterCss = existsSync(
+  new URL(`../config/letters/${LETTER_NAME}/letter.css`, import.meta.url),
+);
 const indexTemplate = readFileSync(
   new URL("../index.template.html", import.meta.url),
   "utf8",
 );
 writeIfChanged(
   "index.generated.html",
-  renderIndexHtml(indexTemplate, cfg, LETTER_NAME, { preloadBoot: true }),
+  renderIndexHtml(indexTemplate, cfg, LETTER_NAME, {
+    preloadBoot: true,
+    letterCss,
+  }),
 );
 writeIfChanged(
   "unsubscribe.generated.html",
-  renderUnsubscribeHtml(indexTemplate, cfg, LETTER_NAME),
+  renderUnsubscribeHtml(indexTemplate, cfg, LETTER_NAME, { letterCss }),
 );
 // /i/<code>: the normal page, minus analytics. The path carries the invite
 // code (and the stats link's fragment a token), which must not end up in
@@ -377,6 +384,7 @@ writeIfChanged(
   renderIndexHtml(indexTemplate, cfg, LETTER_NAME, {
     analytics: false,
     private: true,
+    letterCss,
   }),
 );
 writeIfChanged(

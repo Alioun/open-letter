@@ -28,6 +28,14 @@ describe("generated HTML", () => {
     expect(html).toContain('<html lang="de" data-letter="beispiel">');
   });
 
+  test("a letter's own stylesheet is linked only when it has one", () => {
+    const withCss = renderIndexHtml(template, cfg, "beispiel", { letterCss: true });
+    expect(withCss).toContain(
+      '<link rel="stylesheet" href="./config/letters/beispiel/letter.css" />',
+    );
+    expect(renderIndexHtml(template, cfg, "beispiel")).not.toContain("letter.css");
+  });
+
   test("homepage preloads the initial state", () => {
     const html = renderIndexHtml(template, cfg, "x", { preloadBoot: true });
     expect(html).toContain('<link rel="preload" href="/api/boot" as="fetch" crossorigin />');
