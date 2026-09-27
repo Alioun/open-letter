@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
-import cfg from "../config/letter.config.js";
+import cfg, { LANG, DEFAULT_LANG } from "../config/letter.config.js";
 import { fillText } from "../config/ui.js";
 import { regionLabels } from "../config/region.js";
 
@@ -9,10 +9,14 @@ import { resolvePrivacy } from "../config/privacy.js";
 
 const { settingsLinkDays } = resolvePrivacy(cfg);
 
+// "/abmelden/<token>", or "/<lang>/abmelden/<token>" off the default language.
 function getToken() {
   const parts = window.location.pathname.split("/").filter(Boolean);
-  return parts[1] || "";
+  return parts[parts.indexOf("abmelden") + 1] || "";
 }
+
+// Off the default language, X-Lang asks for error messages in the page's.
+const langHeaders = LANG === DEFAULT_LANG ? {} : { "X-Lang": LANG };
 
 function getSource() {
   const params = new URLSearchParams(window.location.search);
@@ -132,7 +136,7 @@ export default function UnsubscribeApp() {
         `/api/unsubscribe/${token}/update?from=${source}`,
         {
           method: "POST",
-          headers: { "Content-Type": "application/json" },
+          headers: { "Content-Type": "application/json", ...langHeaders },
           body: JSON.stringify(form),
         },
       );

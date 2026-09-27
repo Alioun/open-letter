@@ -14,13 +14,14 @@ import {
   issueZoomUnsubscribeToken,
   issueInviteStatsToken,
 } from "./db.js";
-import { buildUnsubscribeHeaders } from "./email.js";
+import { buildUnsubscribeHeaders, pageUrl } from "./email.js";
 
 const notExpired = (at) => Boolean(at) && at > new Date().toISOString();
 
 // Unsubscribe link for a mail to `signerId` / `email`: the signer's token when
-// there is a signature, otherwise the Treffen registration's.
-async function unsubscribeArgs(baseUrl, { signerId, email }) {
+// there is a signature, otherwise the Treffen registration's. The settings page
+// opens in the mail's language (`lang`).
+async function unsubscribeArgs(baseUrl, { signerId, email, lang }) {
   let token = null;
   let query = "";
   if (signerId) token = await issueUnsubscribeToken(signerId);
@@ -37,7 +38,7 @@ async function unsubscribeArgs(baseUrl, { signerId, email }) {
     : `${baseUrl}/api/unsubscribe/${token}/opt-out`;
   return {
     headers: buildUnsubscribeHeaders(optOut),
-    unsubscribeUrl: `${baseUrl}/abmelden/${token}${query}`,
+    unsubscribeUrl: pageUrl(baseUrl, `/abmelden/${token}${query}`, lang),
   };
 }
 
@@ -65,9 +66,11 @@ export async function prepareQueuedEmail(payload) {
       to: req.email,
       token: req.token,
       baseUrl,
+      lang: req.lang,
       ...(await unsubscribeArgs(baseUrl, {
         signerId: await getSignerIdByEmail(req.email),
         email: req.email,
+        lang: req.lang,
       })),
     };
   }
@@ -83,6 +86,7 @@ export async function prepareQueuedEmail(payload) {
       name: pending.name,
       token: pending.token,
       baseUrl,
+      lang: pending.lang,
     };
   }
 
@@ -95,10 +99,11 @@ export async function prepareQueuedEmail(payload) {
       to: reg.email,
       name: reg.name,
       baseUrl,
+      lang: reg.lang,
       headers: buildUnsubscribeHeaders(
         `${baseUrl}/api/zoom-abmelden/${token}/opt-out`,
       ),
-      unsubscribeUrl: `${baseUrl}/abmelden/${token}?from=zoom`,
+      unsubscribeUrl: pageUrl(baseUrl, `/abmelden/${token}?from=zoom`, reg.lang),
     };
   }
 
@@ -119,8 +124,12 @@ export async function prepareQueuedEmail(payload) {
     to: signer.email,
     name: signer.name,
     baseUrl,
+    lang: signer.lang,
     ...(kind === "verification" && { token: signer.verification_token }),
     ...(kind === "invite" && (await inviteArgs(signer.id))),
-    ...(await unsubscribeArgs(baseUrl, { signerId: signer.id })),
+    ...(await unsubscribeArgs(baseUrl, {
+      signerId: signer.id,
+      lang: signer.lang,
+    })),
   };
 }

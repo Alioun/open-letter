@@ -66,3 +66,53 @@ export function localizeConfig(letter, lang) {
   );
   return merged;
 }
+
+// Every email template a letter ships, keyed by stored slug: the letter's own
+// (default language) as "<slug>", each further language's
+// `i18n.<lang>.email.templates` as "<slug>.<lang>". Values: { name, subject,
+// html_body }. With the flag off this is exactly `email.templates`.
+export function letterTemplates(cfg) {
+  const out = {};
+  const put = (slug, t) => {
+    out[slug] = { name: t.name, subject: t.subject, html_body: t.htmlBody };
+  };
+  for (const [slug, t] of Object.entries(cfg?.email?.templates || {})) {
+    put(slug, t);
+  }
+  for (const l of letterLanguages(cfg).slice(1)) {
+    const own = cfg?.i18n?.[l]?.email?.templates || {};
+    for (const [slug, t] of Object.entries(own)) {
+      // A partial translation keeps the default's other fields.
+      const base = cfg?.email?.templates?.[slug] || {};
+      put(`${slug}.${l}`, {
+        ...base,
+        ...t,
+        name: t.name || `${base.name || slug} (${l.toUpperCase()})`,
+      });
+    }
+  }
+  return out;
+}
+
+// The stored slug of a template in `lang`: "<slug>" for the default language,
+// "<slug>.<lang>" for a further one.
+export function templateSlug(cfg, slug, lang) {
+  const l = normalizeLang(cfg, lang);
+  return l === defaultLanguage(cfg) ? slug : `${slug}.${l}`;
+}
+
+// `url` with "lang=<l>" added for a further language, unchanged for the
+// default. Mail links carry it so the page behind them can answer in the
+// person's language even once their row is gone.
+export function withLang(cfg, url, lang) {
+  const l = normalizeLang(cfg, lang);
+  if (l === defaultLanguage(cfg)) return url;
+  return `${url}${url.includes("?") ? "&" : "?"}lang=${l}`;
+}
+
+// The language to store for a person: null for the default (so NULL keeps
+// meaning "the default language"), the code for a further one.
+export function storedLang(cfg, lang) {
+  const l = normalizeLang(cfg, lang);
+  return l === defaultLanguage(cfg) ? null : l;
+}

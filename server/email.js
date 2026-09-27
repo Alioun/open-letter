@@ -1,7 +1,19 @@
 import juice from "juice";
 import nodemailer from "nodemailer";
-import { getEmailTemplateBySlug, getNewsletterStats } from "./db.js";
-import cfg from "../config/letter.config.js";
+import {
+  getEmailTemplate,
+  getEmailTemplateBySlug,
+  getNewsletterStats,
+} from "./db.js";
+import cfg, { configFor } from "../config/letter.config.js";
+import {
+  normalizeLang,
+  defaultLanguage,
+  langPrefix,
+  letterTemplates,
+  templateSlug,
+  withLang,
+} from "../config/i18n.js";
 import { fillText } from "../config/ui.js";
 import { escapeHtml } from "./pages.js";
 import { resolvePrivacy } from "../config/privacy.js";
@@ -101,14 +113,35 @@ function getSmtpTransport() {
   return smtpTransport;
 }
 
-// Default templates come from the active letter config. Used as a fallback when
+// Default templates come from the active letter config, in every language it
+// ships ("<slug>" and "<slug>.<lang>", config/i18n.js). Used as a fallback when
 // a template hasn't been seeded/edited in the DB (db/setup.js seeds the same set).
-const fallbackTemplates = Object.fromEntries(
-  Object.entries(cfg.email.templates).map(([slug, t]) => [
-    slug,
-    { subject: t.subject, html_body: t.htmlBody },
-  ]),
-);
+const fallbackTemplates = letterTemplates(cfg);
+
+// ---- Person language ---------------------------------------------------------
+// A mail is written in the language of the person it goes to (their `lang`
+// column; null or unknown means the letter's default). With
+// features.multiLanguage off there is only the default, and every helper here
+// returns exactly what the code did before languages existed.
+
+// The `ui.server` strings of a language, its admin overrides included.
+export function serverStrings(lang) {
+  return configFor(lang).ui.server;
+}
+
+// Locale for numbers and dates in a language's mails and pages. The default
+// language keeps the German formatting it always had.
+export function langLocale(lang) {
+  const l = normalizeLang(cfg, lang);
+  if (l === defaultLanguage(cfg)) return "de-DE";
+  const own = configFor(l).brand?.locale;
+  return own && own !== cfg.brand?.locale ? own : l;
+}
+
+// Link helpers for mails: "?lang=<l>" on API links, "/<l>" before page paths.
+export const langUrl = (url, lang) => withLang(cfg, url, lang);
+export const pageUrl = (baseUrl, path, lang) =>
+  `${baseUrl}${langPrefix(cfg, lang)}${path}`;
 
 // Email colours/fonts come from the active letter theme. Inline styles use
 // single-quoted font names so they survive inside double-quoted style="" attrs.
@@ -117,8 +150,8 @@ const emailDisplay = String(cfg.theme.fonts.display).replace(/"/g, "'");
 const emailBody = String(cfg.theme.fonts.body).replace(/"/g, "'");
 
 // Email-safe calendar button (inline styles, no border-radius); label from ui.server.calendarButton.
-export function zoomCalendarButton(icsUrl) {
-  return `<p><a href="${icsUrl}" style="display:inline-block;background:${ec.rot};color:${ec.weiss};font-family:${emailDisplay};font-weight:700;font-size:15px;text-decoration:none;padding:13px 22px;border:2px solid ${ec.akzent};">${cfg.ui.server.calendarButton}</a></p>`;
+export function zoomCalendarButton(icsUrl, lang) {
+  return `<p><a href="${icsUrl}" style="display:inline-block;background:${ec.rot};color:${ec.weiss};font-family:${emailDisplay};font-weight:700;font-size:15px;text-decoration:none;padding:13px 22px;border:2px solid ${ec.akzent};">${serverStrings(lang).calendarButton}</a></p>`;
 }
 
 const emailCss = `
@@ -167,24 +200,57 @@ export function interpolateTemplate(value, variables = {}) {
   );
 }
 
-export function renderEmailHtml(htmlBody, variables = {}) {
+export function renderEmailHtml(htmlBody, variables = {}, lang) {
   const body = interpolateTemplate(htmlBody, variables);
   const needsFooter = variables.unsubscribeUrl && !/<footer[\s>]/i.test(body);
   const footer = needsFooter
-    ? fillText(cfg.ui.server.unsubscribeFooter, { url: variables.unsubscribeUrl })
+    ? fillText(serverStrings(lang).unsubscribeFooter, {
+        url: variables.unsubscribeUrl,
+      })
     : "";
   const document = `<!doctype html><html><head><meta charset="utf-8"><style>${emailCss}</style></head><body>${body}${footer}</body></html>`;
   return juice(document);
 }
 
-export async function renderTemplateBySlug(slug, variables = {}) {
+// The template for `slug` in `lang`: its translation "<slug>.<lang>" (DB,
+// then config) for a further language, else the default one (DB, then config).
+export async function findTemplate(slug, lang) {
+  const own = templateSlug(cfg, slug, lang);
+  const candidates = own === slug ? [slug] : [own, slug];
+  for (const s of candidates) {
+    const t = (await getEmailTemplateBySlug(s)) || fallbackTemplates[s];
+    if (t) return t;
+  }
+  return null;
+}
+
+// A campaign's version for a recipient in `lang`: `lang` normalised (undefined
+// for the default), the template and the subject. A further language uses the
+// campaign's own template and subject for it (`campaign.i18n`), each falling
+// back to the default's; a subject left empty takes that language's template's.
+export async function campaignVersion(campaign, template, lang) {
+  const l = normalizeLang(cfg, lang);
+  if (l === defaultLanguage(cfg)) {
+    return { lang: undefined, template, subject: campaign.subject };
+  }
+  const own = campaign.i18n?.[l] || {};
+  const ownTemplate = own.templateId
+    ? await getEmailTemplate(own.templateId)
+    : null;
+  return {
+    lang: l,
+    template: ownTemplate || template,
+    subject: own.subject || ownTemplate?.subject || campaign.subject,
+  };
+}
+
+export async function renderTemplateBySlug(slug, variables = {}, lang) {
   const stats = await getNewsletterStats();
-  const template =
-    (await getEmailTemplateBySlug(slug)) || fallbackTemplates[slug] || null;
+  const template = await findTemplate(slug, lang);
   if (!template) return null;
 
   const allVariables = {
-    signerCount: stats.signerCount?.toLocaleString("de-DE") || "0",
+    signerCount: stats.signerCount?.toLocaleString(langLocale(lang)) || "0",
     // How long confirmation/deletion links stay valid (config privacy).
     linkHours: String(resolvePrivacy(cfg).confirmationLinkHours),
     ...variables,
@@ -192,7 +258,7 @@ export async function renderTemplateBySlug(slug, variables = {}) {
 
   return {
     subject: interpolateTemplate(template.subject, allVariables),
-    html: renderEmailHtml(template.html_body, allVariables),
+    html: renderEmailHtml(template.html_body, allVariables, lang),
   };
 }
 
@@ -423,13 +489,15 @@ export async function sendDeletionEmail({
   baseUrl,
   headers,
   unsubscribeUrl,
+  lang,
 }) {
   console.log(`[email] deletion request toDomain=${getEmailDomain(to)}`);
-  const deleteUrl = `${baseUrl}/api/delete/${token}`;
-  const rendered = await renderTemplateBySlug("deletion", {
-    deleteUrl,
-    unsubscribeUrl,
-  });
+  const deleteUrl = langUrl(`${baseUrl}/api/delete/${token}`, lang);
+  const rendered = await renderTemplateBySlug(
+    "deletion",
+    { deleteUrl, unsubscribeUrl },
+    lang,
+  );
 
   await sendRenderedEmail({
     to,
@@ -444,16 +512,17 @@ export async function sendAlreadySignedEmail({
   name,
   headers,
   unsubscribeUrl,
+  lang,
 }) {
   console.log(
     `[email] already-signed notification toDomain=${getEmailDomain(to)}`,
   );
   const firstName = name.split(/\s/)[0];
-  const rendered = await renderTemplateBySlug("already_signed", {
-    name,
-    firstName,
-    unsubscribeUrl,
-  });
+  const rendered = await renderTemplateBySlug(
+    "already_signed",
+    { name, firstName, unsubscribeUrl },
+    lang,
+  );
 
   await sendRenderedEmail({
     to,
@@ -471,17 +540,15 @@ export async function sendZoomConfirmationEmail({
   linkInfo = "",
   unsubscribeUrl,
   headers,
+  lang,
 }) {
   console.log(`[email] zoom confirmation toDomain=${getEmailDomain(to)}`);
   const firstName = name.split(/\s/)[0];
-  const rendered = await renderTemplateBySlug("zoom_confirmation", {
-    name,
-    firstName,
-    eventLabel,
-    eventWhen,
-    linkInfo,
-    unsubscribeUrl,
-  });
+  const rendered = await renderTemplateBySlug(
+    "zoom_confirmation",
+    { name, firstName, eventLabel, eventWhen, linkInfo, unsubscribeUrl },
+    lang,
+  );
 
   await sendRenderedEmail({
     to,
@@ -498,16 +565,16 @@ export async function sendVerificationEmail({
   baseUrl,
   headers,
   unsubscribeUrl,
+  lang,
 }) {
   console.log(`[email] verification toDomain=${getEmailDomain(to)}`);
-  const confirmUrl = `${baseUrl}/api/confirm/${token}`;
+  const confirmUrl = langUrl(`${baseUrl}/api/confirm/${token}`, lang);
   const firstName = name.split(/\s/)[0];
-  const rendered = await renderTemplateBySlug("verification", {
-    name,
-    firstName,
-    confirmUrl,
-    unsubscribeUrl,
-  });
+  const rendered = await renderTemplateBySlug(
+    "verification",
+    { name, firstName, confirmUrl, unsubscribeUrl },
+    lang,
+  );
 
   await sendRenderedEmail({
     to,
@@ -528,9 +595,12 @@ export async function sendInviteEmail({
   baseUrl,
   headers,
   unsubscribeUrl,
+  lang,
 }) {
   console.log(`[email] invite toDomain=${getEmailDomain(to)}`);
-  const inviteUrl = `${baseUrl}/i/${inviteCode}`;
+  // The invite page in the inviter's language; invitees see it in that one
+  // too, and each gets their own language's link after signing.
+  const inviteUrl = pageUrl(baseUrl, `/i/${inviteCode}`, lang);
   const rendered = await renderTemplateBySlug("invite", {
     name,
     firstName: name.split(/\s/)[0],
@@ -539,7 +609,7 @@ export async function sendInviteEmail({
     // server and proxy logs and Referer headers.
     statsUrl: `${inviteUrl}#s=${statsToken}`,
     unsubscribeUrl,
-  });
+  }, lang);
   if (!rendered) throw new Error("invite template missing");
 
   await sendRenderedEmail({
@@ -557,15 +627,20 @@ export async function sendTreffenAlreadyRegisteredEmail({
   unsubscribeUrl,
   eventLabel = "",
   eventWhen = "",
+  lang,
 }) {
   console.log(`[email] treffen already registered toDomain=${getEmailDomain(to)}`);
-  const rendered = await renderTemplateBySlug("zoom_already_registered", {
-    name,
-    firstName: name.split(/\s/)[0],
-    unsubscribeUrl,
-    eventLabel,
-    eventWhen,
-  });
+  const rendered = await renderTemplateBySlug(
+    "zoom_already_registered",
+    {
+      name,
+      firstName: name.split(/\s/)[0],
+      unsubscribeUrl,
+      eventLabel,
+      eventWhen,
+    },
+    lang,
+  );
   if (!rendered) throw new Error("zoom_already_registered template missing");
 
   await sendRenderedEmail({
@@ -583,15 +658,20 @@ export async function sendTreffenVerificationEmail({
   baseUrl,
   eventLabel = "",
   eventWhen = "",
+  lang,
 }) {
   console.log(`[email] treffen verification toDomain=${getEmailDomain(to)}`);
-  const rendered = await renderTemplateBySlug("zoom_verification", {
-    name,
-    firstName: name.split(/\s/)[0],
-    confirmUrl: `${baseUrl}/api/treffen-bestaetigen/${token}`,
-    eventLabel,
-    eventWhen,
-  });
+  const rendered = await renderTemplateBySlug(
+    "zoom_verification",
+    {
+      name,
+      firstName: name.split(/\s/)[0],
+      confirmUrl: langUrl(`${baseUrl}/api/treffen-bestaetigen/${token}`, lang),
+      eventLabel,
+      eventWhen,
+    },
+    lang,
+  );
   if (!rendered) throw new Error("zoom_verification template missing");
 
   await sendRenderedEmail({

@@ -49,6 +49,8 @@ export function buildZoomIcs({
   url = "",
   location = "",
   uid,
+  // Language of the texts, named in PRODID.
+  lang = "de",
 }) {
   const startDate = start instanceof Date ? start : new Date(start);
   const endDate = new Date(startDate.getTime() + durationMin * 60 * 1000);
@@ -56,7 +58,7 @@ export function buildZoomIcs({
   const lines = [
     "BEGIN:VCALENDAR",
     "VERSION:2.0",
-    "PRODID:-//Gehaltsdeckel jetzt//Treffen//DE",
+    `PRODID:-//Gehaltsdeckel jetzt//Treffen//${String(lang).toUpperCase().replace(/[^A-Z-]/g, "")}`,
     "CALSCALE:GREGORIAN",
     "METHOD:PUBLISH",
     "BEGIN:VEVENT",

@@ -66,7 +66,10 @@ function start(view) {
   });
 }
 
+// The settings page: "/abmelden/<token>", or "/<lang>/abmelden/<token>" in a
+// further language.
 const parts = window.location.pathname.split("/").filter(Boolean);
+if (LANG !== DEFAULT_LANG && parts[0] === LANG) parts.shift();
 if (parts[0] === "abmelden" && parts[1]) {
   start(() => <UnsubscribeApp />);
 } else {

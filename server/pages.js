@@ -174,11 +174,13 @@ export function fill(template, vars = {}) {
   );
 }
 
-export function simplePage(inner, cfg) {
+// `pageLang` (a further language of the letter) sets <html lang> and the
+// title's copy; without it the page is in the letter's own language.
+export function simplePage(inner, cfg, pageLang) {
   const c = cfg?.theme?.colors || {};
   const fonts = cfg?.theme?.fonts || {};
-  const lang = escapeHtml(cfg?.brand?.lang || "de");
-  const title = fill(pageCopy(cfg).title, {
+  const lang = escapeHtml(pageLang || cfg?.brand?.lang || "de");
+  const title = fill(pageCopy(cfg, pageLang).title, {
     siteName: escapeHtml(cfg?.meta?.siteName || cfg?.brand?.name || ""),
   });
   // Theme values come from the config; strip anything that could end the

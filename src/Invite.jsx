@@ -6,18 +6,20 @@
 // third-party script loads, and nothing is sent anywhere until someone clicks.
 
 import { useState, useEffect, useRef } from "react";
-import cfg from "../config/letter.config.js";
+import cfg, { LANG, DEFAULT_LANG } from "../config/letter.config.js";
 import { resolveInvite, fillInvite } from "../config/invite.js";
 
 // Resolved on use, so admin text overrides applied after load count.
 const T = () => resolveInvite(cfg);
-const CODE_RE = /^\/i\/([0-9a-hjkmnp-tv-z]{8})\/?$/;
+// "/<lang>" before invite paths off the default language (/en/i/<code>).
+const PREFIX = LANG === DEFAULT_LANG ? "" : `/${LANG}`;
+const CODE_RE = new RegExp(`^${PREFIX}/i/([0-9a-hjkmnp-tv-z]{8})/?$`);
 const REF_KEY = "invite-ref";
 
-export const inviteUrl = (code) => `${window.location.origin}/i/${code}`;
+export const inviteUrl = (code) => `${window.location.origin}${PREFIX}/i/${code}`;
 
 // Read the invite path once on load. The stats token is taken out of the
-// fragment and the address bar is reset to "/", so neither the code nor the
+// fragment and the address bar is reset to "/" (or "/<lang>/"), so neither the code nor the
 // token stays in the history or gets copied along with the page URL.
 export function readInviteLocation() {
   const match = CODE_RE.exec(window.location.pathname);
@@ -26,7 +28,7 @@ export function readInviteLocation() {
   const token = new URLSearchParams(window.location.hash.slice(1)).get("s");
   const confirmed =
     new URLSearchParams(window.location.search).get("confirmed") === "1";
-  window.history.replaceState({}, "", "/");
+  window.history.replaceState({}, "", `${PREFIX}/`);
   return { code, statsToken: token || null, confirmed };
 }
 

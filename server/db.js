@@ -441,6 +441,7 @@ export async function insertSigner({
   expiresAt,
   inviteRef = null,
   inviteShowName = false,
+  lang = null,
 }) {
   // A pending (unconfirmed) sign-up is only replaced once its link expired.
   // Before that, a second request for the same address, which proves nothing
@@ -450,8 +451,8 @@ export async function insertSigner({
   const row = await db
     .query(
       `INSERT INTO signers /* public-neutral */
-         (name, email, kreisverband, occupation, newsletter, show_publicly, verification_token, token_expires_at, pending_ref, invite_show_name)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+         (name, email, kreisverband, occupation, newsletter, show_publicly, verification_token, token_expires_at, pending_ref, invite_show_name, lang)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
        ON CONFLICT (email) DO UPDATE
          SET name = excluded.name,
              kreisverband = excluded.kreisverband,
@@ -462,6 +463,7 @@ export async function insertSigner({
              token_expires_at = excluded.token_expires_at,
              pending_ref = excluded.pending_ref,
              invite_show_name = excluded.invite_show_name,
+             lang = excluded.lang,
              created_at = strftime('%Y-%m-%dT%H:%M:%fZ','now')
          WHERE signers.verified = 0 AND signers.token_expires_at <= ?
        RETURNING id, verified`,
@@ -477,6 +479,7 @@ export async function insertSigner({
       iso(expiresAt),
       inviteRef,
       B(inviteShowName),
+      lang,
       nowIso(),
     );
   if (row) return { ok: true, alreadyVerified: false };
@@ -501,7 +504,7 @@ export async function getPendingSignerByToken(token) {
   return boolify(
     (await db
       .query(
-        `SELECT name, kreisverband, occupation, newsletter, show_publicly, invite_show_name
+        `SELECT name, kreisverband, occupation, newsletter, show_publicly, invite_show_name, lang
          FROM signers
          WHERE verification_token = ? AND verified = 0 AND token_expires_at > ?`,
       )
@@ -572,7 +575,7 @@ export async function confirmSigner(token) {
        SET verified = 1, verification_token = NULL, token_expires_at = NULL,
            invite_code = COALESCE(invite_code, ?), pending_ref = NULL
        WHERE verification_token = ? AND verified = 0 AND token_expires_at > ?
-       RETURNING id, kreisverband, invite_code`,
+       RETURNING id, kreisverband, invite_code, lang`,
     )
     .get(cfg.features.inviteLinks ? generateInviteCode() : null, token, nowIso());
   if (!row) return null;
@@ -589,6 +592,7 @@ export async function confirmSigner(token) {
     id: row.id,
     kreisverband: row.kreisverband,
     inviteCode: row.invite_code,
+    lang: row.lang,
   };
 }
 
@@ -636,7 +640,7 @@ export async function getInviteStats(code, token) {
 // Start a deletion for an address we hold data for: a signature, a Treffen
 // registration, or both. Returns the request id, or null when the address is
 // unknown (the caller answers the same either way).
-export async function createDeletionRequest(email, token, expiresAt) {
+export async function createDeletionRequest(email, token, expiresAt, lang = null) {
   const known = await db
     .query(
       `SELECT 1 FROM signers WHERE email = ?
@@ -646,13 +650,14 @@ export async function createDeletionRequest(email, token, expiresAt) {
   if (!known) return null;
   const row = await db
     .query(
-      `INSERT INTO deletion_requests /* public-neutral */ (email, token, expires_at)
-       VALUES (?, ?, ?)
+      `INSERT INTO deletion_requests /* public-neutral */ (email, token, expires_at, lang)
+       VALUES (?, ?, ?, ?)
        ON CONFLICT (email) DO UPDATE
-         SET token = excluded.token, expires_at = excluded.expires_at
+         SET token = excluded.token, expires_at = excluded.expires_at,
+             lang = excluded.lang
        RETURNING id`,
     )
-    .get(email, token, iso(expiresAt));
+    .get(email, token, iso(expiresAt), lang);
   return row.id;
 }
 
@@ -660,7 +665,7 @@ export async function getDeletionRequestForMail(id) {
   return (
     (await db
       .query(
-        `SELECT id, email, token, expires_at FROM deletion_requests WHERE id = ?`,
+        `SELECT id, email, token, expires_at, lang FROM deletion_requests WHERE id = ?`,
       )
       .get(id)) || null
   );
@@ -691,6 +696,14 @@ export async function eraseEmail(email) {
   if (request) await deleteJobsByPayload("emails", "requestId", request.id);
   if (signer || zoom) await recordErasure(db, email, ERASE);
   return Boolean(signer || zoom);
+}
+
+// The language of a deletion request (for its link page), or null.
+export async function getDeletionRequestLang(token) {
+  const row = await db
+    .query(`SELECT lang FROM deletion_requests WHERE token = ?`)
+    .get(token);
+  return row?.lang ?? null;
 }
 
 export async function deleteByDeletionToken(token) {
@@ -725,7 +738,7 @@ export async function getSignerForMail(id) {
   return (
     (await db
       .query(
-        `SELECT id, name, email, verified, verification_token, token_expires_at, invite_code
+        `SELECT id, name, email, verified, verification_token, token_expires_at, invite_code, lang
          FROM signers WHERE id = ?`,
       )
       .get(id)) || null
@@ -742,20 +755,27 @@ export async function getSignerForZoomInvite(token) {
   return (
     (await db
       .query(
-        `SELECT id, name, email, kreisverband FROM signers
+        `SELECT id, name, email, kreisverband, lang FROM signers
          WHERE unsubscribe_token = ? AND verified = 1`,
       )
       .get(token)) || null
   );
 }
 
-export async function insertZoomRegistration({ name, email, kv, delegierter }) {
+export async function insertZoomRegistration({
+  name,
+  email,
+  kv,
+  delegierter,
+  lang = null,
+}) {
   const row = await db
     .query(
-      `INSERT INTO zoom_registrations (name, email, kreisverband, delegierter)
-       VALUES (?, ?, ?, ?)
+      `INSERT INTO zoom_registrations (name, email, kreisverband, delegierter, lang)
+       VALUES (?, ?, ?, ?, ?)
        ON CONFLICT (email) DO UPDATE
          SET name = excluded.name,
+             lang = excluded.lang,
              kreisverband = excluded.kreisverband,
              delegierter = excluded.delegierter,
              -- Every caller proved the address; a renewed registration counts
@@ -763,7 +783,7 @@ export async function insertZoomRegistration({ name, email, kv, delegierter }) {
              created_at = strftime('%Y-%m-%dT%H:%M:%fZ','now')
        RETURNING id`,
     )
-    .get(name, email, kv || "", B(delegierter));
+    .get(name, email, kv || "", B(delegierter), lang);
   // Registering again reverses an earlier Treffen opt-out.
   await forgetErasure(db, email, TREFFEN_OPT_OUT);
   return { ok: true, id: row.id };
@@ -801,14 +821,14 @@ export async function getZoomRecipients({ delegatesOnly = false } = {}) {
   if (delegatesOnly) {
     return await db
       .query(
-        `SELECT id, name, email, unsubscribe_token FROM zoom_registrations
+        `SELECT id, name, email, unsubscribe_token, lang FROM zoom_registrations
          WHERE delegierter = 1 ORDER BY created_at ASC`,
       )
       .all();
   }
   return await db
     .query(
-      `SELECT id, name, email, unsubscribe_token FROM zoom_registrations
+      `SELECT id, name, email, unsubscribe_token, lang FROM zoom_registrations
        ORDER BY created_at ASC`,
     )
     .all();
@@ -846,16 +866,17 @@ export async function deleteZoomRegistrationByUnsubscribeToken(token) {
 // otherwise { status: "pending", id }; an unexpired pending sign-up is kept as
 // it was (its link is simply mailed again), an expired one is replaced.
 export async function insertZoomPending(args, attempt = 0) {
-  const { name, email, kv, delegierter, token, expiresAt } = args;
+  const { name, email, kv, delegierter, token, expiresAt, lang = null } = args;
   const registered = await getCurrentZoomRegistrationByEmail(email);
   if (registered) return { status: "registered", id: registered.id };
   const row = await db
     .query(
       `INSERT INTO zoom_pending /* public-neutral */
-         (name, email, kreisverband, delegierter, token, expires_at)
-       VALUES (?, ?, ?, ?, ?, ?)
+         (name, email, kreisverband, delegierter, token, expires_at, lang)
+       VALUES (?, ?, ?, ?, ?, ?, ?)
        ON CONFLICT (email) DO UPDATE
          SET name = excluded.name,
+             lang = excluded.lang,
              kreisverband = excluded.kreisverband,
              delegierter = excluded.delegierter,
              token = excluded.token,
@@ -864,7 +885,16 @@ export async function insertZoomPending(args, attempt = 0) {
          WHERE zoom_pending.expires_at <= ?
        RETURNING id`,
     )
-    .get(name, email, kv || "", B(delegierter), token, iso(expiresAt), nowIso());
+    .get(
+      name,
+      email,
+      kv || "",
+      B(delegierter),
+      token,
+      iso(expiresAt),
+      lang,
+      nowIso(),
+    );
   if (row) return { status: "pending", id: row.id };
   // An unexpired sign-up is kept; its link is mailed again with the full
   // validity from now, which the mail states.
@@ -885,7 +915,7 @@ export async function getZoomPendingForMail(id) {
     boolify(
       (await db
         .query(
-          `SELECT id, name, email, kreisverband, delegierter, token, expires_at
+          `SELECT id, name, email, kreisverband, delegierter, token, expires_at, lang
            FROM zoom_pending WHERE id = ?`,
         )
         .get(id)) || null,
@@ -897,7 +927,7 @@ export async function getZoomPendingForMail(id) {
 export async function getZoomRegistrationForMail(id) {
   return (
     (await db
-      .query(`SELECT id, name, email FROM zoom_registrations WHERE id = ?`)
+      .query(`SELECT id, name, email, lang FROM zoom_registrations WHERE id = ?`)
       .get(id)) || null
   );
 }
@@ -906,7 +936,7 @@ export async function getZoomPendingByToken(token) {
   return boolify(
     (await db
       .query(
-        `SELECT id, name, email, kreisverband, delegierter FROM zoom_pending
+        `SELECT id, name, email, kreisverband, delegierter, lang FROM zoom_pending
          WHERE token = ? AND expires_at > ?`,
       )
       .get(token, nowIso())) || null,
@@ -924,7 +954,7 @@ export async function confirmZoomPending(token) {
     .query(
       `DELETE FROM zoom_pending /* public-neutral */
        WHERE token = ? AND expires_at > ?
-       RETURNING name, email, kreisverband, delegierter`,
+       RETURNING name, email, kreisverband, delegierter, lang`,
     )
     .get(token, nowIso());
   if (!pending) return null;
@@ -933,12 +963,14 @@ export async function confirmZoomPending(token) {
     email: pending.email,
     kv: pending.kreisverband,
     delegierter: Boolean(pending.delegierter),
+    lang: pending.lang,
   });
   return {
     id: reg.id,
     name: pending.name,
     email: pending.email,
     delegierter: Boolean(pending.delegierter),
+    lang: pending.lang,
   };
 }
 
@@ -1407,10 +1439,27 @@ export async function deleteEmailTemplate(id) {
 
 // ---- campaigns -------------------------------------------------------------
 
+// Campaign texts in further languages (multiLanguage only), stored as JSON
+// {"en": {"templateId": 7, "subject": "…"}}; a language without an entry gets
+// the default text. Listed only with the flag on, so the admin API answers as
+// before otherwise.
+const CAMPAIGN_I18N = Boolean(cfg.features?.multiLanguage);
+
+function parseCampaignI18n(value) {
+  try {
+    const parsed = JSON.parse(value || "null");
+    return parsed && typeof parsed === "object" && !Array.isArray(parsed)
+      ? parsed
+      : null;
+  } catch {
+    return null;
+  }
+}
+
 export async function listCampaigns() {
-  return await db
+  const rows = await db
     .query(
-      `SELECT c.id, c.template_id, t.name AS template_name, c.subject, c.scheduled_at,
+      `SELECT c.id, c.template_id, t.name AS template_name, c.subject,${CAMPAIGN_I18N ? " c.i18n," : ""} c.scheduled_at,
               c.sent_at, c.status, c.recipient_count, c.sent_offset, c.attempts, c.audience,
               COALESCE(json_array_length(c.recipient_ids), 0) AS selection_count, c.created_at
        FROM campaigns c
@@ -1418,6 +1467,10 @@ export async function listCampaigns() {
        ORDER BY c.scheduled_at DESC, c.created_at DESC`,
     )
     .all();
+  if (CAMPAIGN_I18N) {
+    for (const row of rows) row.i18n = parseCampaignI18n(row.i18n);
+  }
+  return rows;
 }
 
 export async function createCampaign({
@@ -1426,6 +1479,7 @@ export async function createCampaign({
   scheduledAt,
   audience = "newsletter",
   recipientIds = null,
+  i18n = null,
 }) {
   const ids =
     audience === "selection" && Array.isArray(recipientIds)
@@ -1433,11 +1487,19 @@ export async function createCampaign({
       : null;
   const row = await db
     .query(
-      `INSERT INTO campaigns (template_id, subject, scheduled_at, audience, recipient_ids)
-       SELECT id, ?, ?, ?, ? FROM email_templates WHERE id = ?
-       RETURNING id, template_id, subject, scheduled_at, sent_at, status, recipient_count, audience, created_at`,
+      `INSERT INTO campaigns (template_id, subject, scheduled_at, audience, recipient_ids, i18n)
+       SELECT id, ?, ?, ?, ?, ? FROM email_templates WHERE id = ?
+       RETURNING id, template_id, subject,${CAMPAIGN_I18N ? " i18n," : ""} scheduled_at, sent_at, status, recipient_count, audience, created_at`,
     )
-    .get(subject, iso(scheduledAt), audience, ids, templateId);
+    .get(
+      subject,
+      iso(scheduledAt),
+      audience,
+      ids,
+      i18n && Object.keys(i18n).length ? JSON.stringify(i18n) : null,
+      templateId,
+    );
+  if (row && CAMPAIGN_I18N) row.i18n = parseCampaignI18n(row.i18n);
   return row || null;
 }
 
@@ -1479,11 +1541,12 @@ export async function claimCampaignById(id) {
     .query(
       `UPDATE campaigns SET status = 'sending', attempts = attempts + 1, heartbeat_at = ?
        WHERE id = ? AND ${claimable.sql}
-       RETURNING id, template_id, subject, scheduled_at, audience, sent_offset, recipient_ids, attempts`,
+       RETURNING id, template_id, subject, i18n, scheduled_at, audience, sent_offset, recipient_ids, attempts`,
     )
     .get(nowIso(), id, ...claimable.params);
   if (!row) return null;
   row.recipient_ids = parseIds(row.recipient_ids);
+  row.i18n = parseCampaignI18n(row.i18n);
   return row;
 }
 
@@ -1552,7 +1615,7 @@ export async function getNewsletterRecipientByEmail(email) {
   return (
     (await db
       .query(
-        `SELECT id, name, email FROM signers
+        `SELECT id, name, email, lang FROM signers
          WHERE email = ? AND verified = 1 AND newsletter = 1`,
       )
       .get(email)) || null
@@ -1562,7 +1625,7 @@ export async function getNewsletterRecipientByEmail(email) {
 export async function getZoomRecipientByEmail(email) {
   return (
     (await db
-      .query(`SELECT id, name, email FROM zoom_registrations WHERE email = ?`)
+      .query(`SELECT id, name, email, lang FROM zoom_registrations WHERE email = ?`)
       .get(email)) || null
   );
 }
@@ -1570,7 +1633,7 @@ export async function getZoomRecipientByEmail(email) {
 export async function getNewsletterRecipients() {
   return await db
     .query(
-      `SELECT id, name, email, unsubscribe_token FROM signers
+      `SELECT id, name, email, unsubscribe_token, lang FROM signers
        WHERE verified = 1 AND newsletter = 1 ORDER BY created_at ASC`,
     )
     .all();
@@ -1579,7 +1642,7 @@ export async function getNewsletterRecipients() {
 export async function getNewsletterNotZoomRecipients() {
   return await db
     .query(
-      `SELECT id, name, email, unsubscribe_token FROM signers s
+      `SELECT id, name, email, unsubscribe_token, lang FROM signers s
        WHERE s.verified = 1 AND s.newsletter = 1
          AND NOT EXISTS (SELECT 1 FROM zoom_registrations z WHERE z.email = s.email)
        ORDER BY s.created_at ASC`,
@@ -1592,7 +1655,7 @@ export async function getNewsletterRecipientsByIds(ids) {
   const placeholders = ids.map(() => "?").join(", ");
   return await db
     .query(
-      `SELECT id, name, email, unsubscribe_token FROM signers
+      `SELECT id, name, email, unsubscribe_token, lang FROM signers
        WHERE verified = 1 AND newsletter = 1 AND id IN (${placeholders})
        ORDER BY created_at ASC`,
     )

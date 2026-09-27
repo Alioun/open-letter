@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from "react";
-import cfg from "../config/letter.config.js";
+import cfg, { LANGUAGES, DEFAULT_LANG } from "../config/letter.config.js";
 import AdminCopy from "./AdminCopy.jsx";
 import { regionLabels } from "../config/region.js";
 import { DayPicker } from "react-day-picker";
@@ -129,6 +129,70 @@ function isoToLocalInput(iso) {
     `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}` +
     `T${pad(d.getHours())}:${pad(d.getMinutes())}`
   );
+}
+
+// Further languages of the letter (features.multiLanguage); empty otherwise,
+// and then the campaign forms look and send exactly as before.
+const EXTRA_LANGS = LANGUAGES.filter((l) => l !== DEFAULT_LANG);
+
+// The campaign's `i18n` field from the per-language inputs: only languages
+// with a template or subject of their own; the rest get the default text.
+function campaignI18n(texts) {
+  const out = {};
+  for (const l of EXTRA_LANGS) {
+    const t = texts[l] || {};
+    const entry = {};
+    if (t.templateId) entry.templateId = Number(t.templateId);
+    if (t.subject?.trim()) entry.subject = t.subject.trim();
+    if (Object.keys(entry).length) out[l] = entry;
+  }
+  return Object.keys(out).length ? { i18n: out } : {};
+}
+
+// A template and subject per further language. Recipients whose language has
+// neither get the default text above.
+function CampaignLanguages({ templates, value, onChange }) {
+  if (EXTRA_LANGS.length === 0) return null;
+  const set = (l, patch) =>
+    onChange({ ...value, [l]: { ...(value[l] || {}), ...patch } });
+  return EXTRA_LANGS.map((l) => {
+    const code = l.toUpperCase();
+    const t = value[l] || {};
+    return (
+      <div key={l}>
+        <div className="field">
+          <label>Vorlage ({code})</label>
+          <select
+            value={t.templateId || ""}
+            onChange={(e) => {
+              const template = templates.find(
+                (item) => String(item.id) === e.target.value,
+              );
+              set(l, {
+                templateId: e.target.value,
+                ...(template && { subject: template.subject }),
+              });
+            }}
+          >
+            <option value="">wie Standardsprache</option>
+            {templates.map((template) => (
+              <option key={template.id} value={template.id}>
+                {template.name}
+              </option>
+            ))}
+          </select>
+        </div>
+        <div className="field">
+          <label>Betreff ({code})</label>
+          <input
+            value={t.subject || ""}
+            placeholder="wie Standardsprache"
+            onChange={(e) => set(l, { subject: e.target.value })}
+          />
+        </div>
+      </div>
+    );
+  });
 }
 
 function StatusBadge({ status }) {
@@ -453,6 +517,7 @@ export default function AdminApp() {
   const [newName, setNewName] = useState("");
   const [scheduleTemplate, setScheduleTemplate] = useState("");
   const [scheduleSubject, setScheduleSubject] = useState("");
+  const [scheduleTexts, setScheduleTexts] = useState({});
   const [audience, setAudience] = useState("newsletter");
   const [selectedDate, setSelectedDate] = useState(new Date());
   const [selectedTime, setSelectedTime] = useState("10:00");
@@ -512,6 +577,7 @@ export default function AdminApp() {
   const [selectedSignerIds, setSelectedSignerIds] = useState(() => new Set());
   const [selTemplate, setSelTemplate] = useState("");
   const [selSubject, setSelSubject] = useState("");
+  const [selTexts, setSelTexts] = useState({});
   const [selDate, setSelDate] = useState(new Date());
   const [selDateInput, setSelDateInput] = useState(() =>
     format(new Date(), "dd.MM.yyyy"),
@@ -818,6 +884,7 @@ export default function AdminApp() {
         subject: scheduleSubject,
         scheduled_at: scheduledAt.toISOString(),
         audience,
+        ...campaignI18n(scheduleTexts),
       }),
     });
     if (res.ok) reloadCampaigns();
@@ -841,6 +908,7 @@ export default function AdminApp() {
         subject: scheduleSubject,
         scheduled_at: new Date().toISOString(),
         audience,
+        ...campaignI18n(scheduleTexts),
       }),
     });
     if (res.ok) reloadCampaigns();
@@ -927,6 +995,7 @@ export default function AdminApp() {
         scheduled_at: scheduledAt.toISOString(),
         audience: "selection",
         recipient_ids: [...selectedSignerIds],
+        ...campaignI18n(selTexts),
       }),
     });
     if (res.ok) {
@@ -1275,6 +1344,11 @@ export default function AdminApp() {
                   onChange={(e) => setScheduleSubject(e.target.value)}
                 />
               </div>
+              <CampaignLanguages
+                templates={templates}
+                value={scheduleTexts}
+                onChange={setScheduleTexts}
+              />
               <div className="admin-picker-wrapper">
                 <div className="admin-date-row">
                   <div className="field">
@@ -1634,6 +1708,11 @@ export default function AdminApp() {
                     onChange={(e) => setSelSubject(e.target.value)}
                   />
                 </div>
+                <CampaignLanguages
+                  templates={templates}
+                  value={selTexts}
+                  onChange={setSelTexts}
+                />
                 <div className="admin-picker-wrapper">
                   <div className="admin-date-row">
                     <div className="field">

@@ -4,6 +4,7 @@ import { fileURLToPath } from "url";
 import { db } from "./connection.js";
 import { applyDataMigrations } from "./data-migrations.js";
 import cfg from "../config/letter.config.js";
+import { letterTemplates } from "../config/i18n.js";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 
@@ -17,6 +18,12 @@ const ADDED_COLUMNS = [
   ["signers", "invite_show_name", "INTEGER NOT NULL DEFAULT 0"],
   ["signers", "invite_count", "INTEGER NOT NULL DEFAULT 0"],
   ["signers", "pending_ref", "TEXT"],
+  // Person language (features.multiLanguage; NULL = default language).
+  ["signers", "lang", "TEXT"],
+  ["zoom_registrations", "lang", "TEXT"],
+  ["zoom_pending", "lang", "TEXT"],
+  ["deletion_requests", "lang", "TEXT"],
+  ["campaigns", "i18n", "TEXT"],
 ];
 
 // Indexes on ADDED_COLUMNS: created after the columns exist, since schema.sql
@@ -28,13 +35,15 @@ const ADDED_INDEXES = [
      ON signers (invite_stats_hash) WHERE invite_stats_hash IS NOT NULL`,
 ];
 
-// Default transactional templates seeded from the active letter config. Existing
-// rows are left untouched (ON CONFLICT DO NOTHING), so admin edits are preserved.
-const templates = Object.entries(cfg.email.templates).map(([slug, t]) => ({
+// Default transactional templates seeded from the active letter config, plus
+// each further language's own as "<slug>.<lang>" (features.multiLanguage).
+// Existing rows are left untouched (ON CONFLICT DO NOTHING), so admin edits are
+// preserved.
+const templates = Object.entries(letterTemplates(cfg)).map(([slug, t]) => ({
   slug,
   name: t.name,
   subject: t.subject,
-  htmlBody: t.htmlBody,
+  htmlBody: t.html_body,
 }));
 
 

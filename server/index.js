@@ -9,7 +9,13 @@ import cfg, {
   DEFAULT_LANG,
   configFor,
 } from "../config/letter.config.js";
-import { requestLang, langPrefix } from "../config/i18n.js";
+import {
+  requestLang,
+  langPrefix,
+  normalizeLang,
+  storedLang,
+  withLang,
+} from "../config/i18n.js";
 import { regionLabels } from "../config/region.js";
 import { resolvePrivacy, retentionCutoff } from "../config/privacy.js";
 import { resolveInvite, statsDisplay } from "../config/invite.js";
@@ -68,6 +74,7 @@ import {
   getSignerIdByEmail,
   createDeletionRequest,
   deleteByDeletionToken,
+  getDeletionRequestLang,
   deleteExpiredDeletionRequests,
   purgeZoomRegistrationsAfter,
   scheduleTreffenPurge,
@@ -152,6 +159,9 @@ import {
   sendAlreadySignedEmail,
   sendInviteEmail,
   zoomCalendarButton,
+  langLocale,
+  pageUrl,
+  campaignVersion,
   messageDelayMs,
   batchDelayMs,
 } from "./email.js";
@@ -218,39 +228,86 @@ const ZOOM_EVENT_DURATION_MIN_DEFAULT = parseInt(
 );
 const ZOOM_ICS_URL = `${BASE_URL}/api/termin.ics`;
 
-// Human German label for the event date/time, e.g. "9. Juni, 20:00 Uhr".
-function formatZoomLabel(date) {
+// Human label for the event date/time, e.g. "9. Juni, 20:00 Uhr" (in `lang`,
+// the default language without it).
+function formatZoomLabel(date, lang) {
   if (Number.isNaN(date.getTime())) return "";
-  const day = new Intl.DateTimeFormat("de-DE", {
+  const locale = langLocale(lang);
+  const day = new Intl.DateTimeFormat(locale, {
     timeZone: "Europe/Berlin",
     day: "numeric",
     month: "long",
   }).format(date);
-  const time = new Intl.DateTimeFormat("de-DE", {
+  const time = new Intl.DateTimeFormat(locale, {
     timeZone: "Europe/Berlin",
     hour: "2-digit",
     minute: "2-digit",
   }).format(date);
-  return serverText("dateLabel", { day, time });
+  return serverText("dateLabel", { day, time }, lang);
 }
 
 // A public server string from the text table (`ui.server`, admin-editable),
-// with its {placeholders} filled.
-function serverText(key, values) {
-  return fillText(cfg.ui.server[key], values);
+// with its {placeholders} filled, in `lang` (the default language without it).
+function serverText(key, values, lang) {
+  return fillText(configFor(lang).ui.server[key], values);
 }
 
 // Confirmation-mail phrasing derived from the link-mail offset.
-function offsetPhrase(hours) {
+function offsetPhrase(hours, lang) {
   if (hours % 24 === 0) {
     const days = hours / 24;
-    if (days === 1) return serverText("oneDay");
-    const words = String(cfg.ui.server.numberWords || "").split(",");
+    if (days === 1) return serverText("oneDay", {}, lang);
+    const words = String(configFor(lang).ui.server.numberWords || "").split(",");
     const n = (days <= 7 && words[days - 1]?.trim()) || days;
-    return serverText("days", { n });
+    return serverText("days", { n }, lang);
   }
-  if (hours === 1) return serverText("oneHour");
-  return serverText("hours", { n: hours });
+  if (hours === 1) return serverText("oneHour", {}, lang);
+  return serverText("hours", { n: hours }, lang);
+}
+
+// The Treffen config (getZoomConfig()) as seen in `lang`: date label, date
+// phrase and nav label in that language, and `lang` set, so the meeting info
+// block, calendar button and .ics built from it follow. The default language
+// gets `zc` itself, unchanged.
+function zoomIn(zc, lang) {
+  const l = normalizeLang(cfg, lang);
+  if (!zc || l === DEFAULT_LANG || zc.lang === l) return zc;
+  const own = configFor(l);
+  // A label set in the admin is one for all languages; the letter's own
+  // comes in the language asked for.
+  const fallback =
+    zc.eventLabelFallback === (cfg.zoom?.eventLabel || "")
+      ? own.zoom?.eventLabel || ""
+      : zc.eventLabelFallback;
+  const navLabel =
+    zc.navLabel === (cfg.zoom?.navLabel || serverText("meetingFallback"))
+      ? own.zoom?.navLabel || serverText("meetingFallback", {}, l)
+      : zc.navLabel;
+  const dateLabel = zc.dateSet ? formatZoomLabel(zc.eventAt, l) : "";
+  return {
+    ...zc,
+    lang: l,
+    label: zc.dateSet ? dateLabel : fallback,
+    eventLabelFallback: fallback,
+    navLabel,
+    whenPhrase: zc.dateSet ? serverText("when", { label: dateLabel }, l) : "",
+    icsUrl: withLang(cfg, zc.icsUrl, l),
+  };
+}
+
+// A deletion link's language: the request's while it exists (read only with
+// several languages, so a single-language letter makes no extra query).
+async function deletionLang(req) {
+  const own = LANGUAGES.length > 1
+    ? await getDeletionRequestLang(req.params.token)
+    : null;
+  return linkLang(req, own);
+}
+
+// The language of a link page: the person's stored one when the row is still
+// there, else the one the mail link carries (?lang=), else the default.
+function linkLang(req, rowLang) {
+  return normalizeLang(cfg, rowLang ?? reqLang(req));
 }
 
 // Effective Zoom config: DB settings override env defaults.
@@ -410,6 +467,26 @@ writeIfChanged(
     lang: DEFAULT_LANG,
   }),
 );
+// The email settings page and the invite page in each further language, at
+// /<lang>/abmelden/<token> and /<lang>/i/<code>.
+for (const l of EXTRA_LANGS) {
+  writeIfChanged(
+    `unsubscribe.${l}.generated.html`,
+    renderUnsubscribeHtml(indexTemplate, configFor(l), LETTER_NAME, {
+      letterCss,
+      lang: l,
+    }),
+  );
+  writeIfChanged(
+    `invite.${l}.generated.html`,
+    renderIndexHtml(indexTemplate, configFor(l), LETTER_NAME, {
+      analytics: false,
+      private: true,
+      letterCss,
+      lang: l,
+    }),
+  );
+}
 // /i/<code>: the normal page, minus analytics. The path carries the invite
 // code (and the stats link's fragment a token), which must not end up in
 // analytics as a per-person page view.
@@ -434,13 +511,20 @@ const { default: unsubscribePage } =
   await import("../unsubscribe.generated.html");
 const { default: admin } = await import("../admin.generated.html");
 const { default: invitePage } = await import("../invite.generated.html");
-// "/en" and "/en/" for each further language. The invite page (/i/<code>)
-// and the unsubscribe page stay in the default language for now.
+// "/en", "/en/" and "/en/abmelden/<token>" for each further language, and
+// "/en/i/<code>" with invite links on.
 const languageRoutes = {};
+const languageInviteRoutes = {};
 for (const l of EXTRA_LANGS) {
   const { default: page } = await import(`../index.${l}.generated.html`);
   languageRoutes[`/${l}`] = page;
   languageRoutes[`/${l}/`] = page;
+  const { default: unsubscribe } = await import(
+    `../unsubscribe.${l}.generated.html`
+  );
+  languageRoutes[`/${l}/abmelden/:token`] = unsubscribe;
+  const { default: invite } = await import(`../invite.${l}.generated.html`);
+  languageInviteRoutes[`/${l}/i/:code`] = invite;
 }
 
 const adminRoute = `/${ADMIN_PATH}`;
@@ -811,11 +895,13 @@ function isLinkWindowOpen(zc) {
 // or when `pending`, it says the link follows by email); for in-person meetings
 // it shows the location/address. Always appends the calendar button. `zc` is the
 // getZoomConfig() result.
-function buildMeetingInfo(
-  zc,
-  { pending = false, timingText = serverText("shortly") } = {},
-) {
-  const calBtn = zoomCalendarButton(ZOOM_ICS_URL);
+function buildMeetingInfo(zc, { pending = false, timingText } = {}) {
+  // zoomIn() sets `lang`; the default language has none.
+  const lang = zc?.lang;
+  timingText ??= serverText("shortly", {}, lang);
+  const calBtn = lang
+    ? zoomCalendarButton(withLang(cfg, ZOOM_ICS_URL, lang), lang)
+    : zoomCalendarButton(ZOOM_ICS_URL);
   if (zc?.mode === "inperson") {
     const loc = zc.location || {};
     const where = [loc.name, loc.address]
@@ -823,17 +909,17 @@ function buildMeetingInfo(
       .map(escapeHtml)
       .join(", ");
     const wherePart = where
-      ? serverText("meetInPerson", { where })
-      : serverText("placeLater");
+      ? serverText("meetInPerson", { where }, lang)
+      : serverText("placeLater", {}, lang);
     const mapPart = loc.mapsUrl
-      ? `<p><a href="${escapeHtml(loc.mapsUrl)}">${serverText("mapLink")}</a></p>`
+      ? `<p><a href="${escapeHtml(loc.mapsUrl)}">${serverText("mapLink", {}, lang)}</a></p>`
       : "";
     return wherePart + mapPart + calBtn;
   }
   // online
   if (pending) {
     return (
-      serverText("linkPending", { timing: timingText }) +
+      serverText("linkPending", { timing: timingText }, lang) +
       calBtn
     );
   }
@@ -842,44 +928,51 @@ function buildMeetingInfo(
   // invite email (sent well ahead) would leak the link before it's time.
   const linkPart =
     safeLink && isLinkWindowOpen(zc)
-      ? serverText("linkNow", {
-          link: `<a href="${escapeHtml(safeLink)}">${escapeHtml(safeLink)}</a>`,
-        })
-      : serverText("linkLater");
+      ? serverText(
+          "linkNow",
+          {
+            link: `<a href="${escapeHtml(safeLink)}">${escapeHtml(safeLink)}</a>`,
+          },
+          lang,
+        )
+      : serverText("linkLater", {}, lang);
   return linkPart + calBtn;
 }
 
 function buildZoomEventIcs(zc, { includeLink = false } = {}) {
-  const brand = cfg.brand?.name || "Initiative";
-  const summary = serverText("icsSummary", { brand });
+  const lang = zc?.lang;
+  const brand = configFor(lang).brand?.name || "Initiative";
+  const summary = serverText("icsSummary", { brand }, lang);
   if (zc?.mode === "inperson") {
     const loc = zc.location || {};
     const where = [loc.name, loc.address].filter(Boolean).join(", ");
     const desc = where
-      ? serverText("icsPlace", { brand, where })
-      : serverText("icsPlaceLater", { brand });
+      ? serverText("icsPlace", { brand, where }, lang)
+      : serverText("icsPlaceLater", { brand }, lang);
     return buildZoomIcs({
       start: zc.eventAt,
       durationMin: zc.durationMin,
       summary,
       description: desc,
       url: loc.mapsUrl || "",
-      location: where || serverText("icsInPerson"),
+      location: where || serverText("icsInPerson", {}, lang),
       uid: `zoom-${zc.eventAt.getTime()}@gehaltsdeckel.jetzt`,
+      ...(lang && { lang }),
     });
   }
   const link = includeLink ? zc.link : "";
   const desc = link
-    ? serverText("icsOnline", { brand, link })
-    : serverText("icsOnlineLater", { brand });
+    ? serverText("icsOnline", { brand, link }, lang)
+    : serverText("icsOnlineLater", { brand }, lang);
   return buildZoomIcs({
     start: zc.eventAt,
     durationMin: zc.durationMin,
     summary,
     description: desc,
     url: link,
-    location: serverText("icsOnlineLocation"),
+    location: serverText("icsOnlineLocation", {}, lang),
     uid: `zoom-${zc.eventAt.getTime()}@gehaltsdeckel.jetzt`,
+    ...(lang && { lang }),
   });
 }
 
@@ -920,6 +1013,33 @@ async function sendCampaign(campaign) {
   const signerCount = stats.signerCount?.toLocaleString("de-DE") || "0";
   const zoomCfg = await getZoomConfig();
   const zoomLinkInfo = zoomCfg ? buildMeetingInfo(zoomCfg) : "";
+  // What a recipient in another language gets (features.multiLanguage): the
+  // campaign's template and subject for that language, each falling back to
+  // the default's, with dates, links and the meeting block in that language.
+  const inLang = new Map();
+  async function campaignFor(lang) {
+    const l = normalizeLang(cfg, lang);
+    if (l === DEFAULT_LANG) {
+      return {
+        lang: undefined,
+        template,
+        subject: campaign.subject,
+        signerCount,
+        zoomCfg,
+        linkInfo: zoomLinkInfo,
+      };
+    }
+    if (!inLang.has(l)) {
+      const zc = zoomIn(zoomCfg, l);
+      inLang.set(l, {
+        ...(await campaignVersion(campaign, template, l)),
+        signerCount: stats.signerCount?.toLocaleString(langLocale(l)) || "0",
+        zoomCfg: zc,
+        linkInfo: zc ? buildMeetingInfo(zc) : "",
+      });
+    }
+    return inLang.get(l);
+  }
 
   // Resume by who was reached, not by list position: the audience is
   // re-queried on every attempt, and opt-outs or late confirmations in between
@@ -949,40 +1069,46 @@ async function sendCampaign(campaign) {
     for (const recipient of batch) {
       try {
         const firstName = recipient.name.split(/\s/)[0];
+        const text = await campaignFor(recipient.lang);
+        const zc = text.zoomCfg;
         let variables;
         let optOutUrl;
         if (isZoom) {
           const token = await issueZoomUnsubscribeToken(recipient.id);
-          const unsubscribeUrl = `${BASE_URL}/abmelden/${token}?from=zoom`;
+          const unsubscribeUrl = pageUrl(
+            BASE_URL,
+            `/abmelden/${token}?from=zoom`,
+            text.lang,
+          );
           optOutUrl = `${BASE_URL}/api/zoom-abmelden/${token}/opt-out`;
           variables = {
             name: recipient.name,
             firstName,
-            eventLabel: zoomCfg.label,
-            eventWhen: zoomCfg.whenPhrase,
-            zoomLink: zoomCfg.link,
-            linkInfo: zoomLinkInfo,
+            eventLabel: zc.label,
+            eventWhen: zc.whenPhrase,
+            zoomLink: zc.link,
+            linkInfo: text.linkInfo,
             unsubscribeUrl,
           };
         } else {
           const token = await issueUnsubscribeToken(recipient.id);
-          const unsubscribeUrl = `${BASE_URL}/abmelden/${token}`;
+          const unsubscribeUrl = pageUrl(BASE_URL, `/abmelden/${token}`, text.lang);
           optOutUrl = `${BASE_URL}/api/unsubscribe/${token}/opt-out`;
           variables = {
             name: recipient.name,
             firstName,
-            signerCount,
-            eventLabel: zoomCfg?.label || "",
-            eventWhen: zoomCfg?.whenPhrase || "",
-            linkInfo: zoomLinkInfo,
+            signerCount: text.signerCount,
+            eventLabel: zc?.label || "",
+            eventWhen: zc?.whenPhrase || "",
+            linkInfo: text.linkInfo,
             unsubscribeUrl,
-            ...treffenSignupUrls(token, zoomCfg?.showDelegierter),
+            ...treffenSignupUrls(token, zc?.showDelegierter, text.lang),
           };
         }
         payloads.push({
           to: recipient.email,
-          subject: interpolateTemplate(campaign.subject, variables),
-          html: renderEmailHtml(template.html_body, variables),
+          subject: interpolateTemplate(text.subject, variables),
+          html: renderEmailHtml(text.template.html_body, variables, text.lang),
           headers: buildUnsubscribeHeaders(optOutUrl),
         });
       } catch (prepErr) {
@@ -1048,17 +1174,27 @@ async function handleCampaignJob({ campaignId }) {
 // Renders one zoom event mail (kind 'link' | 'reminder') for a recipient using
 // the given unsubscribe token. Shared by the worker and the admin test-send so
 // both exercise the exact same rendering (incl. the .ics attachment for 'link').
-async function buildZoomMailPayload(kind, recipient, token, cfg) {
-  const unsubscribeUrl = `${BASE_URL}/abmelden/${token}?from=zoom`;
+// In the recipient's language (`recipient.lang`).
+async function buildZoomMailPayload(kind, recipient, token, zoomCfg) {
+  const cfg = zoomIn(zoomCfg, recipient.lang);
+  const unsubscribeUrl = pageUrl(
+    BASE_URL,
+    `/abmelden/${token}?from=zoom`,
+    cfg.lang,
+  );
   const optOutUrl = `${BASE_URL}/api/zoom-abmelden/${token}/opt-out`;
   const slug = kind === "link" ? "zoom_link" : "zoom_reminder";
-  const rendered = await renderTemplateBySlug(slug, {
-    name: recipient.name,
-    firstName: recipient.name.split(/\s/)[0],
-    eventLabel: cfg.label,
-    linkInfo: buildMeetingInfo(cfg),
-    unsubscribeUrl,
-  });
+  const rendered = await renderTemplateBySlug(
+    slug,
+    {
+      name: recipient.name,
+      firstName: recipient.name.split(/\s/)[0],
+      eventLabel: cfg.label,
+      linkInfo: buildMeetingInfo(cfg),
+      unsubscribeUrl,
+    },
+    cfg.lang,
+  );
   const payload = {
     to: recipient.email,
     subject: rendered.subject,
@@ -1081,7 +1217,8 @@ async function buildZoomMailPayload(kind, recipient, token, cfg) {
   return payload;
 }
 
-async function sendZoomSignupEmail({ regId, name, email, cfg }) {
+async function sendZoomSignupEmail({ regId, name, email, cfg: zoomCfg, lang }) {
+  const cfg = zoomIn(zoomCfg, lang);
   const mailings = await listZoomMailings();
   const reminderSent = mailings.some(
     (m) => m.kind === "reminder" && m.status === "sent",
@@ -1099,9 +1236,9 @@ async function sendZoomSignupEmail({ regId, name, email, cfg }) {
     const unsubToken = await issueZoomUnsubscribeToken(regId);
     const payload = await buildZoomMailPayload(
       kind,
-      { name, email },
+      { name, email, lang },
       unsubToken,
-      cfg,
+      zoomCfg,
     );
     await sendRenderedEmail(payload);
     // So a resumed run of that mailing doesn't send it to them again.
@@ -1111,7 +1248,11 @@ async function sendZoomSignupEmail({ regId, name, email, cfg }) {
     await sendZoomConfirmationEmail({
       to: email,
       name,
-      unsubscribeUrl: `${BASE_URL}/abmelden/${unsubToken}?from=zoom`,
+      unsubscribeUrl: pageUrl(
+        BASE_URL,
+        `/abmelden/${unsubToken}?from=zoom`,
+        cfg.lang,
+      ),
       headers: buildUnsubscribeHeaders(
         `${BASE_URL}/api/zoom-abmelden/${unsubToken}/opt-out`,
       ),
@@ -1119,8 +1260,9 @@ async function sendZoomSignupEmail({ regId, name, email, cfg }) {
       eventWhen: cfg.whenPhrase,
       linkInfo: buildMeetingInfo(cfg, {
         pending: true,
-        timingText: offsetPhrase(cfg.linkOffsetHours),
+        timingText: offsetPhrase(cfg.linkOffsetHours, cfg.lang),
       }),
+      lang: cfg.lang,
     });
   }
 }
@@ -1255,8 +1397,18 @@ try {
   console.error("[copy] overrides not applied:", err.message);
 }
 
-function htmlPage(inner, status = 200) {
-  return new Response(simplePage(inner, cfg), {
+// Link-page copy in `lang` (that language's admin overrides included); the
+// default language's is `pages`.
+function pagesIn(lang) {
+  const l = normalizeLang(cfg, lang);
+  return l === DEFAULT_LANG ? pages : pageCopy(configFor(l), l);
+}
+
+function htmlPage(inner, status = 200, lang) {
+  const l = normalizeLang(cfg, lang);
+  const page =
+    l === DEFAULT_LANG ? simplePage(inner, cfg) : simplePage(inner, configFor(l), l);
+  return new Response(page, {
     status,
     headers: { "Content-Type": "text/html; charset=utf-8", ...securityHeaders },
   });
@@ -1267,16 +1419,23 @@ const heading = (html) => `<h1>${html}</h1>`;
 const postButton = (label) =>
   `<form method="post"><button type="submit">${label}</button></form>`;
 
-function treffenLinkExpired() {
-  const home = `<a href="${BASE_URL}/#zoom">${escapeHtml(new URL(BASE_URL).host)}</a>`;
+function treffenLinkExpired(lang) {
+  const copy = pagesIn(lang);
+  const home = `<a href="${BASE_URL}${langPrefix(cfg, lang)}/#zoom">${escapeHtml(new URL(BASE_URL).host)}</a>`;
   return htmlPage(
-    heading(pages.expired.heading) + para(fill(pages.expired.text, { home })),
+    heading(copy.expired.heading) + para(fill(copy.expired.text, { home })),
     410,
+    lang,
   );
 }
 
-function treffenLinkError() {
-  return htmlPage(heading(pages.error.heading) + para(pages.error.text), 500);
+function treffenLinkError(lang) {
+  const copy = pagesIn(lang);
+  return htmlPage(
+    heading(copy.error.heading) + para(copy.error.text),
+    500,
+    lang,
+  );
 }
 
 // One-click Treffen registration from a newsletter invite (token = the signer's
@@ -1291,14 +1450,17 @@ async function treffenAnmelden(req, { commit }) {
   if (blocked) return blocked;
   const { token } = req.params;
   const force = req.url.includes("force=1");
+  let lang = linkLang(req);
   try {
-    const zoomCfg = await getZoomConfig();
+    const signer = await getSignerForZoomInvite(token);
+    if (!signer) return treffenLinkExpired(lang);
+    lang = linkLang(req, signer.lang);
+    const pages = pagesIn(lang);
+    const zoomCfg = zoomIn(await getZoomConfig(), lang);
     // When the delegate field is off, ignore any ?delegiert=1 in the link so a
     // stale email button can't register someone as a delegate.
     const delegiert =
       zoomCfg.showDelegierter && req.url.includes("delegiert=1");
-    const signer = await getSignerForZoomInvite(token);
-    if (!signer) return treffenLinkExpired();
 
     // A registration left over from a previous Treffen doesn't count here.
     const existing = await getCurrentZoomRegistrationByEmail(signer.email);
@@ -1318,14 +1480,18 @@ async function treffenAnmelden(req, { commit }) {
           : copy.statusRegular;
       let toggleBlock = "";
       if (zoomCfg.showDelegierter) {
-        const toggleUrl = `${BASE_URL}/api/treffen-anmelden/${encodeURIComponent(token)}?delegiert=${existing.delegierter ? 0 : 1}&force=1`;
+        const toggleUrl = withLang(
+          cfg,
+          `${BASE_URL}/api/treffen-anmelden/${encodeURIComponent(token)}?delegiert=${existing.delegierter ? 0 : 1}&force=1`,
+          lang,
+        );
         toggleBlock = para(
           `<a href="${toggleUrl}">${existing.delegierter ? copy.toRegular : copy.toDelegate}</a>`,
         );
       }
       const unsubLink = existing.unsubscribe_token
         ? para(
-            `<a href="${BASE_URL}/abmelden/${encodeURIComponent(existing.unsubscribe_token)}?from=zoom">${copy.unsubscribe}</a>`,
+            `<a href="${pageUrl(BASE_URL, `/abmelden/${encodeURIComponent(existing.unsubscribe_token)}?from=zoom`, lang)}">${copy.unsubscribe}</a>`,
           )
         : "";
       return htmlPage(
@@ -1333,6 +1499,8 @@ async function treffenAnmelden(req, { commit }) {
           para(fill(copy.text, { ...vars, status })) +
           toggleBlock +
           unsubLink,
+        200,
+        lang,
       );
     }
 
@@ -1349,6 +1517,8 @@ async function treffenAnmelden(req, { commit }) {
         heading(copy.heading) +
           para(fill(ask, vars)) +
           postButton(existing ? copy.buttonChange : copy.buttonNew),
+        200,
+        lang,
       );
     }
 
@@ -1358,6 +1528,7 @@ async function treffenAnmelden(req, { commit }) {
       email: signer.email,
       kv: signer.kreisverband,
       delegierter: delegiert,
+      lang: signer.lang,
     });
 
     if (isNew) {
@@ -1367,6 +1538,7 @@ async function treffenAnmelden(req, { commit }) {
           name: signer.name,
           email: signer.email,
           cfg: zoomCfg,
+          lang: signer.lang,
         });
       } catch (mailErr) {
         console.error("[treffen-anmelden] confirmation email failed:", mailErr);
@@ -1379,11 +1551,16 @@ async function treffenAnmelden(req, { commit }) {
         para(fill(done.text, vars)) +
         (delegiert ? para(done.delegate) : "") +
         (isNew ? "" : para(done.updated)) +
-        buildMeetingInfo(zoomCfg, { pending: true, timingText: serverText("shortly") }),
+        buildMeetingInfo(zoomCfg, {
+          pending: true,
+          timingText: serverText("shortly", {}, zoomCfg.lang),
+        }),
+      200,
+      lang,
     );
   } catch (err) {
     console.error(`${req.method} /api/treffen-anmelden error:`, err);
-    return treffenLinkError();
+    return treffenLinkError(lang);
   }
 }
 
@@ -1491,11 +1668,32 @@ const GIT_COMMIT = resolveCommit();
 // non-delegate); when it's on we keep explicit ?delegiert=0 / =1 so the two
 // buttons register the right status. `zoomJaDelegiertUrl` is "" when off so the
 // {{#zoomJaDelegiertUrl}} section in the template is stripped.
-function treffenSignupUrls(idOrToken, showDelegierter) {
+// A campaign's texts in further languages from the admin form: per language
+// an optional template id and subject; anything else is dropped. null with a
+// single language, so such a campaign is stored as before.
+function campaignI18n(raw) {
+  if (!raw || typeof raw !== "object" || EXTRA_LANGS.length === 0) return null;
+  const out = {};
+  for (const l of EXTRA_LANGS) {
+    const entry = raw[l];
+    if (!entry || typeof entry !== "object") continue;
+    const templateId = parseInt(entry.templateId, 10);
+    const subject = String(entry.subject ?? "").trim().slice(0, 500);
+    const own = {
+      ...(Number.isInteger(templateId) && templateId > 0 && { templateId }),
+      ...(subject && { subject }),
+    };
+    if (Object.keys(own).length) out[l] = own;
+  }
+  return Object.keys(out).length ? out : null;
+}
+
+function treffenSignupUrls(idOrToken, showDelegierter, lang) {
   const base = `${BASE_URL}/api/treffen-anmelden/${idOrToken}`;
+  const url = (u) => withLang(cfg, u, lang);
   return {
-    zoomJaUrl: showDelegierter ? `${base}?delegiert=0` : base,
-    zoomJaDelegiertUrl: showDelegierter ? `${base}?delegiert=1` : "",
+    zoomJaUrl: url(showDelegierter ? `${base}?delegiert=0` : base),
+    zoomJaDelegiertUrl: showDelegierter ? url(`${base}?delegiert=1`) : "",
   };
 }
 
@@ -1508,11 +1706,12 @@ async function statsPayload() {
   return { ...stats, milestones, goal };
 }
 
-async function zoomPayload() {
-  const [countRow, zc] = await Promise.all([
+async function zoomPayload(lang) {
+  const [countRow, zoomCfg] = await Promise.all([
     getZoomRegistrationCount(),
     getZoomConfig(),
   ]);
+  const zc = zoomIn(zoomCfg, lang);
   return {
     ...countRow,
     eventAt: zc.eventAtIso,
@@ -1535,6 +1734,7 @@ const server = Bun.serve({
     ...languageRoutes,
     // Personal invite link: the normal page; the client shows the invite.
     ...(INVITES_ENABLED && { "/i/:code": invitePage }),
+    ...(INVITES_ENABLED && languageInviteRoutes),
 
     "/og.png": {
       async GET() {
@@ -1633,7 +1833,7 @@ const server = Bun.serve({
           const lang = reqLang(req);
           const [stats, zoom, copy] = await Promise.all([
             statsPayload(),
-            cfg.features.zoomEvent ? zoomPayload() : null,
+            cfg.features.zoomEvent ? zoomPayload(lang) : null,
             currentOverrides(lang),
           ]);
           // Link pages are rendered on the server; the browser needs the rest.
@@ -1706,7 +1906,7 @@ const server = Bun.serve({
           const stats = await getInviteStats(body.code, body.token);
           if (!stats) return json({ error: "Not found" }, 404);
           return json(
-            statsDisplay(stats.count, resolveInvite(cfg)),
+            statsDisplay(stats.count, resolveInvite(configFor(reqLang(req)))),
             200,
             { "Cache-Control": "no-store" },
           );
@@ -1859,6 +2059,8 @@ const server = Bun.serve({
             expiresAt,
             inviteRef,
             inviteShowName,
+            // The page's language, for this person's mails and link pages.
+            lang: storedLang(cfg, reqLang(req)),
           });
 
           const signerId = await getSignerIdByEmail(email);
@@ -1936,6 +2138,7 @@ const server = Bun.serve({
             delegierter,
             token: crypto.randomUUID(),
             expiresAt: confirmationExpiry(),
+            lang: storedLang(cfg, reqLang(req)),
           });
           if (pending.status === "pending") {
             await queueEmail("treffen-verification", {
@@ -1965,7 +2168,7 @@ const server = Bun.serve({
         const blocked = await denyPublic(req, "public-read", 120, 60 * 1000);
         if (blocked) return blocked;
         try {
-          return json(await zoomPayload());
+          return json(await zoomPayload(reqLang(req)));
         } catch (err) {
           console.error("GET /api/zoom-count error:", err);
           return json({ error: "Internal server error" }, 500);
@@ -1978,9 +2181,12 @@ const server = Bun.serve({
         if (!ZOOM_ENABLED) return featureOff();
         const blocked = denyRate(req, "ics", 60, 15 * 60 * 1000);
         if (blocked) return blocked;
-        const cfg = await getZoomConfig();
+        const lang = reqLang(req);
+        const cfg = zoomIn(await getZoomConfig(), lang);
         if (!cfg.dateSet) {
-          return new Response(serverText("noDateYet"), { status: 404 });
+          return new Response(serverText("noDateYet", {}, lang), {
+            status: 404,
+          });
         }
         const ics = buildZoomEventIcs(cfg, {
           includeLink: Boolean(cfg.link) && isLinkWindowOpen(cfg),
@@ -2047,20 +2253,22 @@ const server = Bun.serve({
         if (blocked) return blocked;
         try {
           const pending = await getPendingSignerByToken(req.params.token);
+          const lang = linkLang(req, pending?.lang);
           if (!pending) {
             return Response.redirect(
-              `${getBaseUrl(req)}/?error=token-expired`,
+              `${getBaseUrl(req)}${langPrefix(cfg, lang)}/?error=token-expired`,
               302,
             );
           }
-          const copy = pages.confirmSignature;
+          const copy = pagesIn(lang).confirmSignature;
+          const fields = configFor(lang).sign?.fields;
           const yesNo = (v) => (v ? copy.yes : copy.no);
           const rows = [
             `${copy.nameLabel}: ${escapeHtml(pending.name)}`,
             pending.kreisverband &&
-              `${escapeHtml(cfg.sign?.fields?.kreisverband?.label || "Kreisverband")}: ${escapeHtml(pending.kreisverband)}`,
+              `${escapeHtml(fields?.kreisverband?.label || "Kreisverband")}: ${escapeHtml(pending.kreisverband)}`,
             pending.occupation &&
-              `${escapeHtml(cfg.sign?.fields?.occupation?.label || "Beruf")}: ${escapeHtml(pending.occupation)}`,
+              `${escapeHtml(fields?.occupation?.label || "Beruf")}: ${escapeHtml(pending.occupation)}`,
             `${copy.publicLabel}: ${yesNo(pending.show_publicly)}`,
             `${copy.newsletterLabel}: ${yesNo(pending.newsletter)}`,
             INVITES_ENABLED &&
@@ -2076,18 +2284,25 @@ const server = Bun.serve({
               para(rows.join("<br>")) +
               postButton(copy.button) +
               para(copy.note),
+            200,
+            lang,
           );
         } catch (err) {
           console.error("GET /api/confirm error:", err);
-          return Response.redirect(`${BASE_URL}/?error=server-error`, 302);
+          return Response.redirect(
+            `${BASE_URL}${langPrefix(cfg, reqLang(req))}/?error=server-error`,
+            302,
+          );
         }
       },
       async POST(req) {
         const blocked = denyRate(req, "token-link", 120, 15 * 60 * 1000);
         if (blocked) return blocked;
+        let prefix = langPrefix(cfg, reqLang(req));
         try {
           const signer = await confirmSigner(req.params.token);
           if (signer) {
+            prefix = langPrefix(cfg, linkLang(req, signer.lang));
             if (cfg.features.stateResolution && signer.kreisverband) {
               enqueueStateResolution(signer.id, signer.kreisverband);
             }
@@ -2107,19 +2322,22 @@ const server = Bun.serve({
               // invite page is the one without analytics. The stats token only
               // goes out in the mail.
               return Response.redirect(
-                `${getBaseUrl(req)}/i/${signer.inviteCode}?confirmed=1`,
+                `${getBaseUrl(req)}${prefix}/i/${signer.inviteCode}?confirmed=1`,
                 303,
               );
             }
-            return Response.redirect(`${getBaseUrl(req)}/?confirmed=1`, 303);
+            return Response.redirect(
+              `${getBaseUrl(req)}${prefix}/?confirmed=1`,
+              303,
+            );
           }
           return Response.redirect(
-            `${getBaseUrl(req)}/?error=token-expired`,
+            `${getBaseUrl(req)}${prefix}/?error=token-expired`,
             303,
           );
         } catch (err) {
           console.error("POST /api/confirm error:", err);
-          return Response.redirect(`${BASE_URL}/?error=server-error`, 303);
+          return Response.redirect(`${BASE_URL}${prefix}/?error=server-error`, 303);
         }
       },
     },
@@ -2156,6 +2374,7 @@ const server = Bun.serve({
             email,
             token,
             expiresAt,
+            storedLang(cfg, reqLang(req)),
           );
           if (requestId) {
             await queueEmail("deletion", {
@@ -2179,26 +2398,32 @@ const server = Bun.serve({
       async GET(req) {
         const blocked = denyRate(req, "token-link", 120, 15 * 60 * 1000);
         if (blocked) return blocked;
-        const copy = pages.deleteData;
+        const lang = await deletionLang(req);
+        const copy = pagesIn(lang).deleteData;
         return htmlPage(
           heading(copy.heading) +
             para(copy.text) +
             postButton(copy.button) +
             para(copy.note),
+          200,
+          lang,
         );
       },
       async POST(req) {
         const blocked = denyRate(req, "token-link", 120, 15 * 60 * 1000);
         if (blocked) return blocked;
+        let prefix = langPrefix(cfg, reqLang(req));
         try {
+          // Read before the request row goes with the deletion.
+          prefix = langPrefix(cfg, await deletionLang(req));
           const deleted = await deleteByDeletionToken(req.params.token);
           return Response.redirect(
-            `${getBaseUrl(req)}/${deleted ? "?deleted=1" : "?error=delete-token-expired"}`,
+            `${getBaseUrl(req)}${prefix}/${deleted ? "?deleted=1" : "?error=delete-token-expired"}`,
             303,
           );
         } catch (err) {
           console.error("POST /api/delete error:", err);
-          return Response.redirect(`${BASE_URL}/?error=server-error`, 303);
+          return Response.redirect(`${BASE_URL}${prefix}/?error=server-error`, 303);
         }
       },
     },
@@ -2414,15 +2639,18 @@ const server = Bun.serve({
         if (!ZOOM_ENABLED) return featureOff();
         const blocked = denyRate(req, "token-link", 120, 15 * 60 * 1000);
         if (blocked) return blocked;
+        let lang = linkLang(req);
         try {
           const pending = await getZoomPendingByToken(req.params.token);
-          if (!pending) return treffenLinkExpired();
-          const zoomCfg = await getZoomConfig();
-          const copy = pages.treffenConfirm;
+          lang = linkLang(req, pending?.lang);
+          if (!pending) return treffenLinkExpired(lang);
+          const zoomCfg = zoomIn(await getZoomConfig(), lang);
+          const copy = pagesIn(lang).treffenConfirm;
+          const fields = configFor(lang).sign?.fields;
           const details = [
             `${copy.nameLabel}: ${escapeHtml(pending.name)}`,
             pending.kreisverband &&
-              `${escapeHtml(cfg.sign?.fields?.kreisverband?.label || "Kreisverband")}: ${escapeHtml(pending.kreisverband)}`,
+              `${escapeHtml(fields?.kreisverband?.label || "Kreisverband")}: ${escapeHtml(pending.kreisverband)}`,
           ].filter(Boolean);
           return htmlPage(
             heading(copy.heading) +
@@ -2437,26 +2665,32 @@ const server = Bun.serve({
                 ? para(copy.delegate)
                 : "") +
               postButton(copy.button),
+            200,
+            lang,
           );
         } catch (err) {
           console.error("GET /api/treffen-bestaetigen error:", err);
-          return treffenLinkError();
+          return treffenLinkError(lang);
         }
       },
       async POST(req) {
         if (!ZOOM_ENABLED) return featureOff();
         const blocked = denyRate(req, "token-link", 120, 15 * 60 * 1000);
         if (blocked) return blocked;
+        let lang = linkLang(req);
         try {
           const reg = await confirmZoomPending(req.params.token);
-          if (!reg) return treffenLinkExpired();
-          const zoomCfg = await getZoomConfig();
+          if (!reg) return treffenLinkExpired(lang);
+          lang = linkLang(req, reg.lang);
+          const pages = pagesIn(lang);
+          const zoomCfg = zoomIn(await getZoomConfig(), lang);
           try {
             await sendZoomSignupEmail({
               regId: reg.id,
               name: reg.name,
               email: reg.email,
               cfg: zoomCfg,
+              lang: reg.lang,
             });
           } catch (mailErr) {
             console.error(
@@ -2471,11 +2705,16 @@ const server = Bun.serve({
                   firstName: firstNameHtml(reg.name),
                 }),
               ) +
-              buildMeetingInfo(zoomCfg, { pending: true, timingText: serverText("shortly") }),
+              buildMeetingInfo(zoomCfg, {
+                pending: true,
+                timingText: serverText("shortly", {}, zoomCfg.lang),
+              }),
+            200,
+            lang,
           );
         } catch (err) {
           console.error("POST /api/treffen-bestaetigen error:", err);
-          return treffenLinkError();
+          return treffenLinkError(lang);
         }
       },
     },
@@ -2673,6 +2912,7 @@ const server = Bun.serve({
             scheduledAt,
             audience,
             recipientIds,
+            i18n: campaignI18n(body.i18n),
           });
           if (!campaign) return json({ error: "Template not found" }, 404);
           // Durable send job, delivered at the scheduled time.
@@ -3330,7 +3570,7 @@ async function sendQueuedEmail(payload) {
     case "deletion":
       return await sendDeletionEmail(args);
     case "treffen-verification": {
-      const zoomCfg = await getZoomConfig();
+      const zoomCfg = zoomIn(await getZoomConfig(), args.lang);
       return await sendTreffenVerificationEmail({
         ...args,
         eventLabel: zoomCfg.label,
@@ -3338,7 +3578,7 @@ async function sendQueuedEmail(payload) {
       });
     }
     case "treffen-already-registered": {
-      const zoomCfg = await getZoomConfig();
+      const zoomCfg = zoomIn(await getZoomConfig(), args.lang);
       return await sendTreffenAlreadyRegisteredEmail({
         ...args,
         eventLabel: zoomCfg.label,

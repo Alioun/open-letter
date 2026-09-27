@@ -30,6 +30,9 @@ CREATE TABLE IF NOT EXISTS signers (
   deletion_token_expires_at     TEXT,
   unsubscribe_token             TEXT UNIQUE,
   unsubscribe_token_created_at  TEXT,
+  -- Language the person reads mails and link pages in (NULL = the letter's
+  -- default language).
+  lang                          TEXT,
   -- Personal invite link (features.inviteLinks). Set on confirmation, so only
   -- verified signers have one. Only the stats token's SHA-256 is stored; the
   -- token itself exists in the invite mail alone. invite_count is the one
@@ -130,6 +133,9 @@ CREATE TABLE IF NOT EXISTS campaigns (
   -- Refreshed while a send runs. A 'sending' row whose heartbeat went stale
   -- (the process died mid-send) may be claimed again.
   heartbeat_at    TEXT,
+  -- Texts in further languages (features.multiLanguage), JSON
+  -- {"<lang>": {"templateId": …, "subject": "…"}}; NULL = default text only.
+  i18n            TEXT,
   created_at      TEXT DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ','now'))
 );
 
@@ -143,6 +149,7 @@ CREATE TABLE IF NOT EXISTS zoom_registrations (
   kreisverband      TEXT DEFAULT '',
   delegierter       INTEGER NOT NULL DEFAULT 0,
   unsubscribe_token TEXT UNIQUE,
+  lang              TEXT,
   created_at        TEXT DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ','now'))
 );
 
@@ -164,6 +171,7 @@ CREATE TABLE IF NOT EXISTS zoom_pending (
   delegierter   INTEGER NOT NULL DEFAULT 0,
   token         TEXT NOT NULL UNIQUE,
   expires_at    TEXT NOT NULL,
+  lang          TEXT,
   created_at    TEXT DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ','now'))
 );
 
@@ -185,6 +193,7 @@ CREATE TABLE IF NOT EXISTS deletion_requests (
   email       TEXT NOT NULL UNIQUE,
   token       TEXT NOT NULL UNIQUE,
   expires_at  TEXT NOT NULL,
+  lang        TEXT,
   created_at  TEXT DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ','now'))
 );
 
