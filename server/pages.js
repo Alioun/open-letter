@@ -155,11 +155,13 @@ export function defaultPageCopy(lang) {
   return PAGE_COPY[lang] || DEFAULT_PAGE_COPY;
 }
 
-// The letter's page copy, section by section over the defaults.
-export function pageCopy(cfg) {
+// The letter's page copy, section by section over the defaults (German, or
+// those of `lang` when given).
+export function pageCopy(cfg, lang) {
+  const defaults = lang ? defaultPageCopy(lang) : DEFAULT_PAGE_COPY;
   const own = cfg?.pages || {};
-  const out = { ...DEFAULT_PAGE_COPY, ...own };
-  for (const [key, value] of Object.entries(DEFAULT_PAGE_COPY)) {
+  const out = { ...defaults, ...own };
+  for (const [key, value] of Object.entries(defaults)) {
     if (value && typeof value === "object") out[key] = { ...value, ...(own[key] || {}) };
   }
   return out;

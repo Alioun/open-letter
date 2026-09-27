@@ -7,7 +7,11 @@ import {
   memo,
   Fragment,
 } from "react";
-import cfg from "../config/letter.config.js";
+import cfg, {
+  LANG,
+  DEFAULT_LANG,
+  LANGUAGES,
+} from "../config/letter.config.js";
 import { resolvePrivacy } from "../config/privacy.js";
 import { resolveInvite } from "../config/invite.js";
 import { LetterArticle, FaqContent } from "../config/content.jsx";
@@ -203,7 +207,11 @@ function getApiToken() {
 
 // fetch() wrapper that attaches the public API token and retries once on 401
 // (token expired, or the server restarted with a new secret).
+// Off the default language, X-Lang asks for error messages in the page's.
 async function apiFetch(path, opts = {}) {
+  if (LANG !== DEFAULT_LANG) {
+    opts = { ...opts, headers: { ...(opts.headers || {}), "X-Lang": LANG } };
+  }
   const doFetch = (t) =>
     fetch(path, {
       ...opts,
@@ -225,6 +233,45 @@ async function apiFetch(path, opts = {}) {
     }
   }
   return res;
+}
+
+// The section the reader is on, as "#id" (scrolling does not set the hash).
+function currentSectionHash() {
+  const bar = document.querySelector(".topbar")?.offsetHeight || 0;
+  let hash = "";
+  for (const el of document.querySelectorAll("main section[id]")) {
+    if (el.getBoundingClientRect().top <= bar + 1) hash = `#${el.id}`;
+  }
+  return hash;
+}
+
+// DE | EN links, only for letters with features.multiLanguage and more than
+// one language. Switching keeps the section the reader is on.
+function LanguageSwitch() {
+  if (LANGUAGES.length < 2) return null;
+  const t = cfg.ui.chrome;
+  const href = (l) => (l === DEFAULT_LANG ? "/" : `/${l}/`);
+  return (
+    <div className="lang-switch" role="group" aria-label={t.languageNav}>
+      {LANGUAGES.map((l) => (
+        <a
+          key={l}
+          href={href(l)}
+          hrefLang={l}
+          lang={l}
+          aria-label={fillText(t.languageLink, {
+            language: t.languageNames?.[l] || l.toUpperCase(),
+          })}
+          aria-current={l === LANG ? "page" : undefined}
+          onClick={(e) => {
+            e.currentTarget.href = href(l) + currentSectionHash();
+          }}
+        >
+          {l.toUpperCase()}
+        </a>
+      ))}
+    </div>
+  );
 }
 
 // `boot` is the live initial state from /api/boot (loaded in main.jsx before
@@ -1203,7 +1250,13 @@ export default function App({ boot = null }) {
         {total.toLocaleString(locale)} {cfg.hero.counterLabel}
       </div>
 
-      <header className={"topbar" + (showCta ? "" : " topbar--no-cta")}>
+      <header
+        className={
+          "topbar" +
+          (showCta ? "" : " topbar--no-cta") +
+          (LANGUAGES.length > 1 ? " topbar--langs" : "")
+        }
+      >
         <a
           href="#main"
           className="wordmark"
@@ -1242,6 +1295,7 @@ export default function App({ boot = null }) {
             )
           }
         </nav>
+        <LanguageSwitch />
         {showCta && (
           <button
             className="cta topbar-cta"
@@ -1311,6 +1365,7 @@ export default function App({ boot = null }) {
             <span aria-hidden="true">→</span>
           </a>
         )}
+        <LanguageSwitch />
       </nav>
 
       <main id="main">

@@ -300,6 +300,57 @@ button {
   }
 }
 
+/* ---------- Language switch (features.multiLanguage) ---------- */
+/* Sits with nav and CTA on the right; below 480px it moves into the menu. */
+.topbar--langs nav {
+  margin-left: auto;
+}
+.lang-switch {
+  display: flex;
+  gap: 4px;
+  margin: 0 12px 0 20px;
+}
+.lang-switch a {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 44px;
+  min-height: 44px;
+  font-weight: 700;
+  font-size: 14px;
+  text-decoration: none;
+  color: var(--akzent);
+}
+.lang-switch a[aria-current="page"] {
+  text-decoration: underline;
+  text-underline-offset: 5px;
+}
+.mobile-nav .lang-switch {
+  display: none;
+}
+
+@media (max-width: 780px) {
+  .topbar--langs .lang-switch {
+    margin-left: auto;
+  }
+}
+
+@media (max-width: 480px) {
+  .topbar .lang-switch {
+    display: none;
+  }
+  .mobile-nav .lang-switch {
+    display: flex;
+    margin: 4px 16px;
+  }
+  .mobile-nav .lang-switch a {
+    color: var(--weiss);
+    border-bottom: none;
+    padding: 0 8px;
+    min-height: 44px;
+  }
+}
+
 /* ---------- Hero ---------- */
 .hero {
   position: relative;

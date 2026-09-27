@@ -16,13 +16,40 @@ Everything specific to a campaign lives in `config/letters/<name>/`: `index.js` 
 | `footer` / `legal` | footer blurb + contact; Impressum/Datenschutz responsible entity, address, contact, disclaimer |
 | `email` | `from`, `signoff`, `provider` (`resend`/`smtp`) + `smtp` connection details, `providerRetentionDays` (how long the provider keeps sent mail; quoted in the privacy policy), `pacing` (rate-limit delays), and the `templates` map (seeded into the DB, admin-editable) |
 | `pages` | copy for the server-rendered pages behind mail links (confirm, delete, Treffen); defaults in `server/pages.js` |
-| `features` | `kreisverbandField`, `occupationField`, `germanyMap`, `stateResolution`, `zoomEvent`, `inviteLinks`: toggle the optional modules |
+| `features` | `kreisverbandField`, `occupationField`, `germanyMap`, `stateResolution`, `zoomEvent`, `inviteLinks`, `multiLanguage`: toggle the optional modules (see [Languages](#languages)) |
 | `ui` | interface texts that have no section of their own (buttons, modals, list, sign form, email settings page, user-facing errors, public server wording under `ui.server`); per-language defaults (`de`, `en`) in `config/ui.js`, the letter's `ui` block still overrides any key |
 | `invite` | invite-link texts and how exact the private stats are: `statsMode` (`"ranges"` default, `"threshold"`, `"exact"`), `statsRanges`, `statsThreshold` (only read when `features.inviteLinks`); omitted keys use the defaults in `config/invite.js`. Placeholders: `{firstName}`, `{title}`, `{url}` |
 | `zoom` | event label/date/duration (only read when `features.zoomEvent`) |
+| `languages` / `i18n` | only with `features.multiLanguage`: the languages the letter is published in and each language's copy; see [Languages](#languages) |
 
 
 The rich letter body and FAQ are React components in the sibling `content.jsx`.
+
+## Languages
+
+A letter is published in one language, `brand.lang`, unless it turns on `features.multiLanguage`:
+
+```js
+features: { multiLanguage: true },
+languages: ["de", "en"],
+i18n: {
+  en: {
+    meta: { title: "…", description: "…" },
+    hero: { headlineLines: ["…"] },
+    ui: { chrome: { impressum: "Legal notice" } },
+  },
+},
+```
+
+- The first entry of `languages` is the default and is served at `/`; every other one at `/<lang>` (`/en`). Each page gets `<html lang>`, its own canonical URL and `<link rel="alternate" hreflang>` for every language plus `x-default`. A "DE | EN" switch appears in the top bar (in the menu below 480px) and keeps the section the reader is on.
+- `i18n.<lang>` is a partial letter config deep-merged over the letter: objects merge key by key, arrays and strings replace.
+- Texts for a language resolve in this order, later wins: the defaults for that language (`uiDefaults(lang)` in `config/ui.js`, `defaultPageCopy(lang)` in `server/pages.js`), the letter config, the letter's `i18n.<lang>` block (including `i18n.<lang>.ui`), then the admin overrides.
+- Admin overrides (**Texte & Modus**) apply to the default language only for now; the other language pages show their config texts.
+- The page sends its language to the API (`X-Lang` header or `?lang=`, only when it is not the default), so `/api/boot` and user-facing error messages follow it. Unknown values fall back to the default.
+- A letter's `content.jsx` may export `en = { LetterArticle, FaqContent }` (one per further language) for the letter body and FAQ.
+- Not yet per language: invite pages (`/i/<code>`), the unsubscribe page, emails and the mail-link pages; they stay in the default language.
+
+With the flag off, `languages` and `i18n` are ignored and the page is exactly as before (the `ui` defaults are the German table, as they always were).
 
 ## Admin-editable settings
 

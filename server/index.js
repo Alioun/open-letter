@@ -3,7 +3,13 @@ import { Buffer } from "node:buffer";
 import { existsSync, readFileSync, writeFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { SignJWT, jwtVerify } from "jose";
-import cfg, { LETTER_NAME } from "../config/letter.config.js";
+import cfg, {
+  LETTER_NAME,
+  LANGUAGES,
+  DEFAULT_LANG,
+  configFor,
+} from "../config/letter.config.js";
+import { requestLang, langPrefix } from "../config/i18n.js";
 import { regionLabels } from "../config/region.js";
 import { resolvePrivacy, retentionCutoff } from "../config/privacy.js";
 import { resolveInvite, statsDisplay } from "../config/invite.js";
@@ -22,6 +28,8 @@ import {
   renderIndexHtml,
   renderUnsubscribeHtml,
   analyticsOrigin,
+  languageUrl,
+  languageAlternates,
 } from "../config/html.js";
 import {
   getSigners,
@@ -368,16 +376,39 @@ const indexTemplate = readFileSync(
   new URL("../index.template.html", import.meta.url),
   "utf8",
 );
+// Languages (features.multiLanguage): the default is served at "/", every
+// other at "/<lang>" from its own generated page. One language adds nothing.
+const EXTRA_LANGS = LANGUAGES.filter((l) => l !== DEFAULT_LANG);
+const alternates = languageAlternates(cfg.meta.canonicalUrl, LANGUAGES, (l) =>
+  langPrefix(cfg, l),
+);
 writeIfChanged(
   "index.generated.html",
   renderIndexHtml(indexTemplate, cfg, LETTER_NAME, {
     preloadBoot: true,
     letterCss,
+    lang: DEFAULT_LANG,
+    ...(alternates.length && { alternates }),
   }),
 );
+for (const l of EXTRA_LANGS) {
+  writeIfChanged(
+    `index.${l}.generated.html`,
+    renderIndexHtml(indexTemplate, configFor(l), LETTER_NAME, {
+      preloadBoot: `/api/boot?lang=${l}`,
+      letterCss,
+      lang: l,
+      canonical: languageUrl(cfg.meta.canonicalUrl, langPrefix(cfg, l)),
+      alternates,
+    }),
+  );
+}
 writeIfChanged(
   "unsubscribe.generated.html",
-  renderUnsubscribeHtml(indexTemplate, cfg, LETTER_NAME, { letterCss }),
+  renderUnsubscribeHtml(indexTemplate, cfg, LETTER_NAME, {
+    letterCss,
+    lang: DEFAULT_LANG,
+  }),
 );
 // /i/<code>: the normal page, minus analytics. The path carries the invite
 // code (and the stats link's fragment a token), which must not end up in
@@ -388,6 +419,7 @@ writeIfChanged(
     analytics: false,
     private: true,
     letterCss,
+    lang: DEFAULT_LANG,
   }),
 );
 writeIfChanged(
@@ -402,6 +434,14 @@ const { default: unsubscribePage } =
   await import("../unsubscribe.generated.html");
 const { default: admin } = await import("../admin.generated.html");
 const { default: invitePage } = await import("../invite.generated.html");
+// "/en" and "/en/" for each further language. The invite page (/i/<code>)
+// and the unsubscribe page stay in the default language for now.
+const languageRoutes = {};
+for (const l of EXTRA_LANGS) {
+  const { default: page } = await import(`../index.${l}.generated.html`);
+  languageRoutes[`/${l}`] = page;
+  languageRoutes[`/${l}/`] = page;
+}
 
 const adminRoute = `/${ADMIN_PATH}`;
 const jwtSecret = new TextEncoder().encode(ADMIN_JWT_SECRET);
@@ -425,7 +465,14 @@ function normalizeAdminPath(path) {
   const value = String(path || "")
     .trim()
     .replace(/^\/+|\/+$/g, "");
-  if (!value || value.includes("/") || value.includes("?") || value === "api") {
+  // Must not shadow /api or a language page ("/en").
+  if (
+    !value ||
+    value.includes("/") ||
+    value.includes("?") ||
+    value === "api" ||
+    LANGUAGES.includes(value)
+  ) {
     return "";
   }
   return value;
@@ -672,7 +719,7 @@ async function denyPublic(req, bucket, max, windowMs) {
   const ip = getClientIp(req);
   const { allowed, retryAfter } = checkRateLimit(ip, bucket, max, windowMs);
   if (!allowed) {
-    return json({ error: cfg.ui.errors.tooMany }, 429, {
+    return json({ error: reqUi(req).errors.tooMany }, 429, {
       "Retry-After": String(retryAfter),
     });
   }
@@ -680,6 +727,17 @@ async function denyPublic(req, bucket, max, windowMs) {
     return json({ error: "Unauthorized" }, 401);
   }
   return null;
+}
+
+// The language of the page a public request comes from (config/i18n.js).
+function reqLang(req) {
+  return requestLang(cfg, req);
+}
+
+// Interface texts in the requester's language. The default language is `cfg`
+// itself, admin overrides included; other languages get none yet.
+function reqUi(req) {
+  return configFor(reqLang(req)).ui;
 }
 
 function denyRate(req, bucket, max, windowMs) {
@@ -690,7 +748,7 @@ function denyRate(req, bucket, max, windowMs) {
     windowMs,
   );
   if (!allowed) {
-    return json({ error: cfg.ui.errors.tooMany }, 429, {
+    return json({ error: reqUi(req).errors.tooMany }, 429, {
       "Retry-After": String(retryAfter),
     });
   }
@@ -1446,6 +1504,7 @@ const server = Bun.serve({
     "/": homepage,
     [adminRoute]: admin,
     "/abmelden/:token": unsubscribePage,
+    ...languageRoutes,
     // Personal invite link: the normal page; the client shows the invite.
     ...(INVITES_ENABLED && { "/i/:code": invitePage }),
 
@@ -1509,12 +1568,14 @@ const server = Bun.serve({
         const xml = [
           '<?xml version="1.0" encoding="UTF-8"?>',
           '<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">',
-          "  <url>",
-          `    <loc>${BASE_URL}/</loc>`,
-          `    <lastmod>${now}</lastmod>`,
-          "    <changefreq>daily</changefreq>",
-          "    <priority>1.0</priority>",
-          "  </url>",
+          ...LANGUAGES.flatMap((l) => [
+            "  <url>",
+            `    <loc>${BASE_URL}${langPrefix(cfg, l)}/</loc>`,
+            `    <lastmod>${now}</lastmod>`,
+            "    <changefreq>daily</changefreq>",
+            "    <priority>1.0</priority>",
+            "  </url>",
+          ]),
           "</urlset>",
         ].join("\n");
         return new Response(xml, {
@@ -1540,10 +1601,13 @@ const server = Bun.serve({
         const blocked = denyRate(req, "public-read", 120, 60 * 1000);
         if (blocked) return blocked;
         try {
+          // Admin overrides are default-language texts; another language's
+          // page gets none (per-language overrides are a later step).
+          const lang = reqLang(req);
           const [stats, zoom, copy] = await Promise.all([
             statsPayload(),
             cfg.features.zoomEvent ? zoomPayload() : null,
-            currentOverrides(),
+            lang === DEFAULT_LANG ? currentOverrides() : {},
           ]);
           // Link pages are rendered on the server; the browser needs the rest.
           for (const path of Object.keys(copy)) {
@@ -1572,7 +1636,7 @@ const server = Bun.serve({
           15 * 60 * 1000,
         );
         if (!allowed) {
-          return json({ error: cfg.ui.errors.tooMany }, 429, {
+          return json({ error: reqUi(req).errors.tooMany }, 429, {
             "Retry-After": String(retryAfter),
           });
         }
@@ -1721,7 +1785,7 @@ const server = Bun.serve({
           );
           if (!allowed) {
             return json(
-              { error: cfg.ui.errors.tooMany },
+              { error: reqUi(req).errors.tooMany },
               429,
               { "Retry-After": String(retryAfter) },
             );
@@ -1745,11 +1809,11 @@ const server = Bun.serve({
           const inviteShowName = INVITES_ENABLED && body.inviteShowName === true;
 
           if (name.length < 2) {
-            return json({ error: cfg.ui.errors.nameTooShort }, 400);
+            return json({ error: reqUi(req).errors.nameTooShort }, 400);
           }
           if (!isValidEmail(email)) {
             return json(
-              { error: cfg.ui.errors.invalidEmail },
+              { error: reqUi(req).errors.invalidEmail },
               400,
             );
           }
@@ -1807,7 +1871,7 @@ const server = Bun.serve({
           );
           if (!allowed) {
             return json(
-              { error: cfg.ui.errors.tooMany },
+              { error: reqUi(req).errors.tooMany },
               429,
               { "Retry-After": String(retryAfter) },
             );
@@ -1826,11 +1890,11 @@ const server = Bun.serve({
             zoomCfg.showDelegierter && Boolean(body.delegierter);
 
           if (name.length < 2) {
-            return json({ error: cfg.ui.errors.nameTooShort }, 400);
+            return json({ error: reqUi(req).errors.nameTooShort }, 400);
           }
           if (!isValidEmail(email)) {
             return json(
-              { error: cfg.ui.errors.invalidEmail },
+              { error: reqUi(req).errors.invalidEmail },
               400,
             );
           }
@@ -1916,7 +1980,7 @@ const server = Bun.serve({
           );
           if (!allowed) {
             return json(
-              { error: cfg.ui.errors.tooMany },
+              { error: reqUi(req).errors.tooMany },
               429,
               { "Retry-After": String(retryAfter) },
             );
@@ -2224,7 +2288,7 @@ const server = Bun.serve({
           );
           if (!allowed) {
             return json(
-              { error: cfg.ui.errors.tooMany },
+              { error: reqUi(req).errors.tooMany },
               429,
               { "Retry-After": String(retryAfter) },
             );
@@ -2251,7 +2315,7 @@ const server = Bun.serve({
             (await getShowDelegierter()) && Boolean(body.delegierter);
 
           if (name.length < 2) {
-            return json({ error: cfg.ui.errors.nameTooShort }, 400);
+            return json({ error: reqUi(req).errors.nameTooShort }, 400);
           }
 
           await updateSignerByEmail(email, {
@@ -2869,7 +2933,7 @@ const server = Bun.serve({
           const to = String(body.to || "").trim();
           const kind = body.kind;
           if (!to || !isValidEmail(to)) {
-            return json({ error: cfg.ui.errors.invalidEmail }, 400);
+            return json({ error: reqUi(req).errors.invalidEmail }, 400);
           }
           if (!["confirmation", "link", "reminder"].includes(kind)) {
             return json({ error: "Unbekannter Mail-Typ" }, 400);
@@ -2935,7 +2999,7 @@ const server = Bun.serve({
           const to = String(body.to || "").trim();
           const templateId = parseInt(body.template_id, 10);
           if (!to || !isValidEmail(to)) {
-            return json({ error: cfg.ui.errors.invalidEmail }, 400);
+            return json({ error: reqUi(req).errors.invalidEmail }, 400);
           }
           if (!templateId) {
             return json({ error: "Keine Vorlage ausgewählt" }, 400);

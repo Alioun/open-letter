@@ -17,6 +17,11 @@ export const UI_DEFAULTS = {
     footerLegal: "Rechtliches",
     impressum: "Impressum",
     datenschutz: "Datenschutz",
+    // Language switch (features.multiLanguage only). {language} is a name
+    // from languageNames, or the code when it has none.
+    languageNav: "Sprache",
+    languageLink: "Diese Seite auf {language}",
+    languageNames: { de: "Deutsch", en: "Englisch" },
   },
   // Hero counter and the milestone "Störer".
   hero: {
@@ -260,6 +265,9 @@ const UI_EN = {
     footerLegal: "Legal",
     impressum: "Legal notice",
     datenschutz: "Privacy",
+    languageNav: "Language",
+    languageLink: "This page in {language}",
+    languageNames: { de: "German", en: "English" },
   },
   hero: {
     ariaCampaign: "Title and signature counter",

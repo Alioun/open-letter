@@ -15,3 +15,12 @@ export function activeLetterName() {
   }
   return "gehaltsdeckel";
 }
+
+// The page language in the browser (the server renders it into <html lang>).
+// On the server there is no page, so this returns null.
+export function activePageLang() {
+  if (typeof document !== "undefined") {
+    return document.documentElement.lang || null;
+  }
+  return null;
+}

@@ -2,7 +2,7 @@ import { createRoot } from "react-dom/client";
 import App from "./App.jsx";
 import UnsubscribeApp from "./UnsubscribeApp.jsx";
 import { ErrorBoundary } from "./ErrorBoundary.jsx";
-import cfg from "../config/letter.config.js";
+import cfg, { LANG, DEFAULT_LANG } from "../config/letter.config.js";
 import { injectThemeCss } from "../config/theme-css.js";
 import { setPath } from "../config/editable.js";
 import "./index.css";
@@ -35,7 +35,11 @@ function applyCopy(boot) {
 const BOOT_TIMEOUT_MS = 1500;
 
 function loadBoot() {
-  const request = fetch("/api/boot")
+  // Another language's page asks for its own state (no default-language
+  // admin texts); the default page keeps the preloaded request.
+  const request = fetch(
+    LANG === DEFAULT_LANG ? "/api/boot" : `/api/boot?lang=${LANG}`,
+  )
     .then((res) => (res.ok ? res.json() : null))
     .catch(() => null);
   const timeout = new Promise((resolve) =>

@@ -197,6 +197,7 @@ export function editableFields(pristine, pageDefaults = null) {
   for (const [path, type, group] of ui) {
     if (group === "ui" && path.startsWith("ui.zoomForm.") && !pristine.features?.zoomEvent) continue;
     if (path.startsWith("ui.stoerer.") && !pristine.features?.zoomEvent) continue;
+    if (path.startsWith("ui.chrome.language") && !pristine.features?.multiLanguage) continue;
     add(path, type, group, getPath(pristine, path));
   }
   return fields;
