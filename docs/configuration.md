@@ -44,7 +44,7 @@ i18n: {
 - The first entry of `languages` is the default and is served at `/`; every other one at `/<lang>` (`/en`). Each page gets `<html lang>`, its own canonical URL and `<link rel="alternate" hreflang>` for every language plus `x-default`. A "DE | EN" switch appears in the top bar (in the menu below 480px) and keeps the section the reader is on.
 - `i18n.<lang>` is a partial letter config deep-merged over the letter: objects merge key by key, arrays and strings replace.
 - Texts for a language resolve in this order, later wins: the defaults for that language (`uiDefaults(lang)` in `config/ui.js`, `defaultPageCopy(lang)` in `server/pages.js`), the letter config, the letter's `i18n.<lang>` block (including `i18n.<lang>.ui`), then the admin overrides.
-- Admin overrides (**Texte & Modus**) apply to the default language only for now; the other language pages show their config texts.
+- Admin overrides (**Texte & Modus**) are per language: a language switch at the top of the tab picks which one is edited, and an override for one language never shows in another. The default language is stored as `copy:<path>` in `app_settings` (as with one language), every other one as `copy:<lang>:<path>`; resetting a field clears only that language's override.
 - The page sends its language to the API (`X-Lang` header or `?lang=`, only when it is not the default), so `/api/boot` and user-facing error messages follow it. Unknown values fall back to the default.
 - A letter's `content.jsx` may export `en = { LetterArticle, FaqContent }` (one per further language) for the letter body and FAQ.
 - Not yet per language: invite pages (`/i/<code>`), the unsubscribe page, emails and the mail-link pages; they stay in the default language.

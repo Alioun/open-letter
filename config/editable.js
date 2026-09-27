@@ -264,3 +264,27 @@ export function applyOverrides(target, fields, overrides) {
     setPath(target, f.path, structuredClone(value));
   }
 }
+
+// Storage keys for overrides (app_settings). The default language keeps
+// `copy:<path>`; every other language uses `copy:<lang>:<path>`. Paths are
+// dotted and never contain ":", and a language code is `xx` or `xx-yy`, so a
+// key reads back one way only.
+const LANG_RE = /^[a-z]{2}(-[a-z]{2})?$/;
+
+export function copyKey(path, lang = null) {
+  if (String(path).includes(":")) throw new Error(`${path}: ungültiger Pfad`);
+  if (lang == null) return `copy:${path}`;
+  if (!LANG_RE.test(lang)) throw new Error(`${lang}: ungültige Sprache`);
+  return `copy:${lang}:${path}`;
+}
+
+// { lang, path } for a stored key (lang null for the default), or null.
+export function parseCopyKey(key) {
+  if (typeof key !== "string" || !key.startsWith("copy:")) return null;
+  const parts = key.slice(5).split(":");
+  if (parts.length === 1 && parts[0]) return { lang: null, path: parts[0] };
+  if (parts.length === 2 && LANG_RE.test(parts[0]) && parts[1]) {
+    return { lang: parts[0], path: parts[1] };
+  }
+  return null;
+}

@@ -1,6 +1,8 @@
 // Admin tab "Texte & Modus": every runtime-editable config value
 // (config/editable.js), grouped, searchable, each resettable to the deployed
-// default. Changes go live on the next page load, without a redeploy.
+// default. Changes go live on the next page load, without a redeploy. With
+// several languages (features.multiLanguage) each language is edited on its
+// own; the switch at the top picks which.
 import { useState, useEffect, useMemo, useCallback } from "react";
 
 const SECTION_LABELS = {
@@ -160,15 +162,19 @@ export default function AdminCopy({ api }) {
   const [reset, setReset] = useState(new Set());
   const [query, setQuery] = useState("");
   const [status, setStatus] = useState(null);
+  // null: the server's default language (no ?lang=, as with one language).
+  const [lang, setLang] = useState(null);
 
   const load = useCallback(async () => {
-    const res = await api("/api/admin/copy");
+    const res = await api(
+      lang ? `/api/admin/copy?lang=${encodeURIComponent(lang)}` : "/api/admin/copy",
+    );
     if (res.ok) {
       setData(await res.json());
       setDraft({});
       setReset(new Set());
     } else setStatus("Laden fehlgeschlagen");
-  }, [api]);
+  }, [api, lang]);
 
   useEffect(() => {
     load();
@@ -222,7 +228,7 @@ export default function AdminCopy({ api }) {
     setStatus("saving");
     const res = await api("/api/admin/copy", {
       method: "POST",
-      body: JSON.stringify({ changes }),
+      body: JSON.stringify(lang ? { changes, lang } : { changes }),
     });
     const body = await res.json().catch(() => ({}));
     if (res.ok) {
@@ -245,6 +251,36 @@ export default function AdminCopy({ api }) {
   return (
     <section className="section">
       <form className="section-inner" onSubmit={save}>
+        {data.languages?.length > 1 && (
+          <div
+            role="group"
+            aria-label="Sprache"
+            style={{ display: "flex", gap: 6, alignItems: "center" }}
+          >
+            <span className="admin-muted">Sprache:</span>
+            {data.languages.map((l) => (
+              <button
+                key={l}
+                type="button"
+                aria-pressed={l === data.lang}
+                disabled={status === "saving"}
+                onClick={() => {
+                  if (l === data.lang) return;
+                  if (
+                    dirty &&
+                    !window.confirm("Ungespeicherte Änderungen verwerfen?")
+                  )
+                    return;
+                  setStatus(null);
+                  setLang(l);
+                }}
+                style={l === data.lang ? { fontWeight: 700 } : undefined}
+              >
+                {l.toUpperCase()}
+              </button>
+            ))}
+          </div>
+        )}
         <div
           className="admin-card"
           style={{

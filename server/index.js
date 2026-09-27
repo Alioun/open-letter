@@ -734,10 +734,21 @@ function reqLang(req) {
   return requestLang(cfg, req);
 }
 
-// Interface texts in the requester's language. The default language is `cfg`
-// itself, admin overrides included; other languages get none yet.
+// Interface texts in the requester's language, its admin overrides included.
 function reqUi(req) {
   return configFor(reqLang(req)).ui;
+}
+
+// The language an admin copy request works on (?lang= or the body's `lang`):
+// one of the letter's languages, the default when absent, null when unknown.
+function adminCopyLang(req, bodyLang) {
+  let q = null;
+  try {
+    q = new URL(req.url).searchParams.get("lang");
+  } catch {}
+  const l = bodyLang ?? q;
+  if (l == null || l === "") return DEFAULT_LANG;
+  return LANGUAGES.includes(l) ? l : null;
 }
 
 function denyRate(req, bucket, max, windowMs) {
@@ -1199,25 +1210,42 @@ async function sendZoomReminderMails(cfg) {
 let pages = pageCopy(cfg);
 
 // Admin-editable texts and presentation mode (config/editable.js). Overrides
-// are written onto `cfg` itself, so every read at request time sees them;
-// `pages` is rebuilt from it.
-const EDITABLE = editableFields(PRISTINE_CFG, pageCopy(PRISTINE_CFG));
-const EDITABLE_BY_PATH = new Map(EDITABLE.map((f) => [f.path, f]));
+// are written onto each language's config itself (`cfg` for the default,
+// configFor(lang) for the others), so every read at request time sees them;
+// `pages` is rebuilt from `cfg`. Each language has its own fields, defaults
+// and overrides: an edit in one never reaches another.
+function editableFor(lang) {
+  const pristine =
+    lang === DEFAULT_LANG ? PRISTINE_CFG : structuredClone(configFor(lang));
+  const fields = editableFields(
+    pristine,
+    lang === DEFAULT_LANG ? pageCopy(pristine) : pageCopy(pristine, lang),
+  );
+  return { fields, byPath: new Map(fields.map((f) => [f.path, f])) };
+}
+const EDITABLE_BY_LANG = Object.fromEntries(
+  LANGUAGES.map((l) => [l, editableFor(l)]),
+);
+
+// Stored under `copy:<path>` for the default language, `copy:<lang>:<path>`
+// for another.
+const storageLang = (lang) => (lang === DEFAULT_LANG ? null : lang);
 
 // Only overrides for paths this letter still offers (a stale row for a
 // removed field is ignored).
-async function currentOverrides() {
-  const all = await getCopyOverrides();
+async function currentOverrides(lang = DEFAULT_LANG) {
+  const all = await getCopyOverrides(storageLang(lang));
+  const { byPath } = EDITABLE_BY_LANG[lang];
   return Object.fromEntries(
-    Object.entries(all).filter(([path]) => EDITABLE_BY_PATH.has(path)),
+    Object.entries(all).filter(([path]) => byPath.has(path)),
   );
 }
 
 async function refreshCopy() {
-  const overrides = await currentOverrides();
-  applyOverrides(cfg, EDITABLE, overrides);
+  for (const l of LANGUAGES) {
+    applyOverrides(configFor(l), EDITABLE_BY_LANG[l].fields, await currentOverrides(l));
+  }
   pages = pageCopy(cfg);
-  return overrides;
 }
 
 try {
@@ -1601,13 +1629,12 @@ const server = Bun.serve({
         const blocked = denyRate(req, "public-read", 120, 60 * 1000);
         if (blocked) return blocked;
         try {
-          // Admin overrides are default-language texts; another language's
-          // page gets none (per-language overrides are a later step).
+          // The admin overrides for the page's language.
           const lang = reqLang(req);
           const [stats, zoom, copy] = await Promise.all([
             statsPayload(),
             cfg.features.zoomEvent ? zoomPayload() : null,
-            lang === DEFAULT_LANG ? currentOverrides() : {},
+            currentOverrides(lang),
           ]);
           // Link pages are rendered on the server; the browser needs the rest.
           for (const path of Object.keys(copy)) {
@@ -2862,10 +2889,14 @@ const server = Bun.serve({
     "/api/admin/copy": {
       async GET(req) {
         return adminJson(req, async () => {
-          const overrides = await currentOverrides();
+          const lang = adminCopyLang(req);
+          if (!lang) return json({ error: "Sprache unbekannt" }, 400);
+          const overrides = await currentOverrides(lang);
           return json({
             groups: EDITABLE_GROUPS,
-            fields: EDITABLE.map((f) => ({
+            languages: LANGUAGES,
+            lang,
+            fields: EDITABLE_BY_LANG[lang].fields.map((f) => ({
               ...f,
               overridden: Object.prototype.hasOwnProperty.call(overrides, f.path),
               value: overrides[f.path] ?? f.default,
@@ -2873,7 +2904,8 @@ const server = Bun.serve({
           });
         });
       },
-      // { changes: { path: value | null } }; null restores the default.
+      // { changes: { path: value | null }, lang? }; null restores the default
+      // for that language only.
       async POST(req) {
         return adminJson(req, async () => {
           if (bodyTooLarge(req))
@@ -2883,17 +2915,20 @@ const server = Bun.serve({
           if (!changes || typeof changes !== "object" || Array.isArray(changes)) {
             return json({ error: "changes fehlt" }, 400);
           }
+          const lang = adminCopyLang(req, body?.lang);
+          if (!lang) return json({ error: "Sprache unbekannt" }, 400);
+          const { byPath } = EDITABLE_BY_LANG[lang];
           const clean = {};
           try {
             for (const [path, value] of Object.entries(changes)) {
-              const field = EDITABLE_BY_PATH.get(path);
+              const field = byPath.get(path);
               if (!field) throw new Error(`${path}: nicht editierbar`);
               clean[path] = value === null ? null : cleanValue(field, value);
             }
           } catch (e) {
             return json({ error: e.message }, 400);
           }
-          await setCopyOverrides(clean);
+          await setCopyOverrides(clean, storageLang(lang));
           await refreshCopy();
           return json({ ok: true });
         });
