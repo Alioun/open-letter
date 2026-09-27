@@ -86,6 +86,75 @@ export const DEFAULT_PAGE_COPY = {
   },
 };
 
+// The same page copy in English: identical keys and {placeholders}.
+const PAGE_COPY_EN = {
+  title: "{siteName}",
+  error: {
+    heading: "Error",
+    text: "Something went wrong. Please try again later.",
+  },
+  expired: {
+    heading: "Link expired",
+    text: "Sorry, this link is no longer valid. You can sign up again on {home}.",
+  },
+  confirmSignature: {
+    heading: "Confirm your signature",
+    intro: "Please check your details and confirm your signature.",
+    nameLabel: "Name",
+    publicLabel: "Show name publicly",
+    newsletterLabel: "Newsletter",
+    inviteNameLabel: "First name on your invite link",
+    yes: "yes",
+    no: "no",
+    button: "Confirm signature",
+    note: "Something wrong? Then don't confirm: we delete unconfirmed entries automatically.",
+  },
+  deleteData: {
+    heading: "Delete data",
+    text: "When you click the button, we delete all data stored for your email address: your signature and your meeting registration, if any. This cannot be undone.",
+    button: "Delete for good",
+    note: "If you didn't ask for the deletion, just close this page.",
+  },
+  treffenConfirm: {
+    heading: "Confirm your registration",
+    intro: "Hello <strong>{firstName}</strong>, please confirm your registration for the meeting{when}.",
+    nameLabel: "Name",
+    delegate: "You're signing up as a <strong>delegate</strong>.",
+    button: "Confirm registration",
+  },
+  treffenInvite: {
+    heading: "Sign up for the meeting",
+    askNew: "Hello <strong>{firstName}</strong>, would you like to sign up for the meeting{when}?",
+    askNewDelegate: "Hello <strong>{firstName}</strong>, would you like to sign up for the meeting{when} as a <strong>delegate</strong>?",
+    askToDelegate: "Hello <strong>{firstName}</strong>, would you like to change your registration to <strong>delegate</strong>?",
+    askToRegular: "Hello <strong>{firstName}</strong>, would you like to change your registration to <strong>regular participant</strong>?",
+    buttonNew: "Sign up now",
+    buttonChange: "Change registration",
+  },
+  treffenAlready: {
+    heading: "You're already signed up",
+    text: "Hello <strong>{firstName}</strong>, you're already registered{status} for the meeting.",
+    statusDelegate: " as a <strong>delegate</strong>",
+    statusRegular: " as a regular participant",
+    toDelegate: "Sign up as a delegate",
+    toRegular: "Don't sign up as a delegate",
+    unsubscribe: "Unsubscribe",
+  },
+  treffenDone: {
+    heading: "You're in!",
+    text: "We've saved your registration for the meeting, <strong>{firstName}</strong>.",
+    delegate: "You've signed up as a <strong>delegate</strong>.",
+    updated: "Your registration has been updated.",
+  },
+};
+
+const PAGE_COPY = { en: PAGE_COPY_EN };
+
+// Default page copy for a language; German for "de" and anything unknown.
+export function defaultPageCopy(lang) {
+  return PAGE_COPY[lang] || DEFAULT_PAGE_COPY;
+}
+
 // The letter's page copy, section by section over the defaults.
 export function pageCopy(cfg) {
   const own = cfg?.pages || {};

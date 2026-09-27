@@ -13,6 +13,7 @@ import {
   cleanValue,
   GROUPS as EDITABLE_GROUPS,
 } from "../config/editable.js";
+import { fillText } from "../config/ui.js";
 
 // The config as deployed, before admin overrides ("Texte & Modus") are applied
 // onto `cfg` below. Taken first, so it never contains an override.
@@ -222,26 +223,26 @@ function formatZoomLabel(date) {
     hour: "2-digit",
     minute: "2-digit",
   }).format(date);
-  return `${day}, ${time} Uhr`;
+  return serverText("dateLabel", { day, time });
+}
+
+// A public server string from the text table (`ui.server`, admin-editable),
+// with its {placeholders} filled.
+function serverText(key, values) {
+  return fillText(cfg.ui.server[key], values);
 }
 
 // Confirmation-mail phrasing derived from the link-mail offset.
 function offsetPhrase(hours) {
   if (hours % 24 === 0) {
     const days = hours / 24;
-    if (days === 1) return "einen Tag";
-    const words = {
-      2: "zwei",
-      3: "drei",
-      4: "vier",
-      5: "fünf",
-      6: "sechs",
-      7: "sieben",
-    };
-    return `${words[days] || days} Tage`;
+    if (days === 1) return serverText("oneDay");
+    const words = String(cfg.ui.server.numberWords || "").split(",");
+    const n = (days <= 7 && words[days - 1]?.trim()) || days;
+    return serverText("days", { n });
   }
-  if (hours === 1) return "eine Stunde";
-  return `${hours} Stunden`;
+  if (hours === 1) return serverText("oneHour");
+  return serverText("hours", { n: hours });
 }
 
 // Effective Zoom config: DB settings override env defaults.
@@ -279,10 +280,12 @@ async function getZoomConfig() {
     eventLabelFallback,
     // Date phrase for email copy: " am 12. Juli, 19 Uhr" when a date is set, or
     // "" when it's still TBD, so templates read cleanly either way.
-    whenPhrase: dateSet ? ` am ${formatZoomLabel(eventAt)}` : "",
+    whenPhrase: dateSet
+      ? serverText("when", { label: formatZoomLabel(eventAt) })
+      : "",
     icsUrl: ZOOM_ICS_URL,
     // Nav/CTA label for the Treffen (admin-editable, falls back to config).
-    navLabel: s.zoom_nav_label || cfg.zoom?.navLabel || "Treffen",
+    navLabel: s.zoom_nav_label || cfg.zoom?.navLabel || serverText("meetingFallback"),
     // Delegate field toggle: admin-editable, seeded from the letter config.
     showDelegierter:
       s.zoom_show_delegierter != null
@@ -741,7 +744,7 @@ function isLinkWindowOpen(zc) {
 // getZoomConfig() result.
 function buildMeetingInfo(
   zc,
-  { pending = false, timingText = "vor dem Termin" } = {},
+  { pending = false, timingText = serverText("shortly") } = {},
 ) {
   const calBtn = zoomCalendarButton(ZOOM_ICS_URL);
   if (zc?.mode === "inperson") {
@@ -751,17 +754,17 @@ function buildMeetingInfo(
       .map(escapeHtml)
       .join(", ");
     const wherePart = where
-      ? `<p>Wir treffen uns <strong>vor Ort</strong>: ${where}.</p>`
-      : `<p>Den genauen Ort schicken wir dir rechtzeitig vor dem Termin per E-Mail.</p>`;
+      ? serverText("meetInPerson", { where })
+      : serverText("placeLater");
     const mapPart = loc.mapsUrl
-      ? `<p><a href="${escapeHtml(loc.mapsUrl)}">Auf der Karte ansehen</a></p>`
+      ? `<p><a href="${escapeHtml(loc.mapsUrl)}">${serverText("mapLink")}</a></p>`
       : "";
     return wherePart + mapPart + calBtn;
   }
   // online
   if (pending) {
     return (
-      `<p>Den <strong>Einwahllink bekommst du ${timingText} vor dem Termin</strong> per E-Mail.</p>` +
+      serverText("linkPending", { timing: timingText }) +
       calBtn
     );
   }
@@ -770,41 +773,43 @@ function buildMeetingInfo(
   // invite email (sent well ahead) would leak the link before it's time.
   const linkPart =
     safeLink && isLinkWindowOpen(zc)
-      ? `<p>Hier geht's direkt zum Treffen: <a href="${escapeHtml(safeLink)}">${escapeHtml(safeLink)}</a></p>`
-      : `<p>Den Einwahllink schicken wir dir rechtzeitig vor dem Termin per E-Mail.</p>`;
+      ? serverText("linkNow", {
+          link: `<a href="${escapeHtml(safeLink)}">${escapeHtml(safeLink)}</a>`,
+        })
+      : serverText("linkLater");
   return linkPart + calBtn;
 }
 
 function buildZoomEventIcs(zc, { includeLink = false } = {}) {
   const brand = cfg.brand?.name || "Initiative";
-  const summary = `Treffen - ${brand}`;
+  const summary = serverText("icsSummary", { brand });
   if (zc?.mode === "inperson") {
     const loc = zc.location || {};
     const where = [loc.name, loc.address].filter(Boolean).join(", ");
     const desc = where
-      ? `Treffen der ${brand}.\nOrt: ${where}`
-      : `Treffen der ${brand}.\nDen genauen Ort bekommst du per E-Mail.`;
+      ? serverText("icsPlace", { brand, where })
+      : serverText("icsPlaceLater", { brand });
     return buildZoomIcs({
       start: zc.eventAt,
       durationMin: zc.durationMin,
       summary,
       description: desc,
       url: loc.mapsUrl || "",
-      location: where || "Vor Ort",
+      location: where || serverText("icsInPerson"),
       uid: `zoom-${zc.eventAt.getTime()}@gehaltsdeckel.jetzt`,
     });
   }
   const link = includeLink ? zc.link : "";
   const desc = link
-    ? `Online-Treffen der ${brand}.\nEinwahl: ${link}`
-    : `Online-Treffen der ${brand}.\nDen Einwahllink bekommst du per E-Mail.`;
+    ? serverText("icsOnline", { brand, link })
+    : serverText("icsOnlineLater", { brand });
   return buildZoomIcs({
     start: zc.eventAt,
     durationMin: zc.durationMin,
     summary,
     description: desc,
     url: link,
-    location: "Online",
+    location: serverText("icsOnlineLocation"),
     uid: `zoom-${zc.eventAt.getTime()}@gehaltsdeckel.jetzt`,
   });
 }
@@ -1288,7 +1293,7 @@ async function treffenAnmelden(req, { commit }) {
         para(fill(done.text, vars)) +
         (delegiert ? para(done.delegate) : "") +
         (isNew ? "" : para(done.updated)) +
-        buildMeetingInfo(zoomCfg, { pending: true, timingText: "kurz" }),
+        buildMeetingInfo(zoomCfg, { pending: true, timingText: serverText("shortly") }),
     );
   } catch (err) {
     console.error(`${req.method} /api/treffen-anmelden error:`, err);
@@ -1884,7 +1889,7 @@ const server = Bun.serve({
         if (blocked) return blocked;
         const cfg = await getZoomConfig();
         if (!cfg.dateSet) {
-          return new Response("Termin noch nicht festgelegt.", { status: 404 });
+          return new Response(serverText("noDateYet"), { status: 404 });
         }
         const ics = buildZoomEventIcs(cfg, {
           includeLink: Boolean(cfg.link) && isLinkWindowOpen(cfg),
@@ -2375,7 +2380,7 @@ const server = Bun.serve({
                   firstName: firstNameHtml(reg.name),
                 }),
               ) +
-              buildMeetingInfo(zoomCfg, { pending: true, timingText: "kurz" }),
+              buildMeetingInfo(zoomCfg, { pending: true, timingText: serverText("shortly") }),
           );
         } catch (err) {
           console.error("POST /api/treffen-bestaetigen error:", err);

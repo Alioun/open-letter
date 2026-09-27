@@ -2,6 +2,7 @@ import juice from "juice";
 import nodemailer from "nodemailer";
 import { getEmailTemplateBySlug, getNewsletterStats } from "./db.js";
 import cfg from "../config/letter.config.js";
+import { fillText } from "../config/ui.js";
 import { escapeHtml } from "./pages.js";
 import { resolvePrivacy } from "../config/privacy.js";
 
@@ -115,9 +116,9 @@ const ec = cfg.theme.colors;
 const emailDisplay = String(cfg.theme.fonts.display).replace(/"/g, "'");
 const emailBody = String(cfg.theme.fonts.body).replace(/"/g, "'");
 
-// Email-safe "Zum Kalender hinzufügen" button (inline styles, no border-radius).
+// Email-safe calendar button (inline styles, no border-radius); label from ui.server.calendarButton.
 export function zoomCalendarButton(icsUrl) {
-  return `<p><a href="${icsUrl}" style="display:inline-block;background:${ec.rot};color:${ec.weiss};font-family:${emailDisplay};font-weight:700;font-size:15px;text-decoration:none;padding:13px 22px;border:2px solid ${ec.akzent};">Zum Kalender hinzufügen</a></p>`;
+  return `<p><a href="${icsUrl}" style="display:inline-block;background:${ec.rot};color:${ec.weiss};font-family:${emailDisplay};font-weight:700;font-size:15px;text-decoration:none;padding:13px 22px;border:2px solid ${ec.akzent};">${cfg.ui.server.calendarButton}</a></p>`;
 }
 
 const emailCss = `
@@ -170,7 +171,7 @@ export function renderEmailHtml(htmlBody, variables = {}) {
   const body = interpolateTemplate(htmlBody, variables);
   const needsFooter = variables.unsubscribeUrl && !/<footer[\s>]/i.test(body);
   const footer = needsFooter
-    ? `<footer>Du möchtest keine E-Mails mehr erhalten? <a href="${variables.unsubscribeUrl}">Hier abmelden</a>.</footer>`
+    ? fillText(cfg.ui.server.unsubscribeFooter, { url: variables.unsubscribeUrl })
     : "";
   const document = `<!doctype html><html><head><meta charset="utf-8"><style>${emailCss}</style></head><body>${body}${footer}</body></html>`;
   return juice(document);
