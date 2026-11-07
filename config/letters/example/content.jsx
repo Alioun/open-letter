@@ -1,5 +1,5 @@
-// Example rich page content (generic open letter). Mirrors the exports of
-// config/letters/gehaltsdeckel/content.jsx.
+// Example rich page content (generic open letter): the LetterArticle and
+// FaqContent exports every letter's content.jsx provides.
 
 export function LetterArticle({ total }) {
   return (

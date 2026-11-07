@@ -32,7 +32,6 @@ export default {
     },
     style: {
       shadowOffset: "10px 10px 0",
-      radius: "0",
       borderWidth: "2px",
     },
   },

@@ -3,7 +3,7 @@
  * Capture full-section screenshots of the live site for the design deck.
  *
  * Usage:
- *   bun scripts/capture-design-shots.js                              # production
+ *   bun scripts/capture-design-shots.js                              # localhost:3000
  *   bun scripts/capture-design-shots.js http://localhost:3002        # local dev
  *
  * Requires `puppeteer` (a devDependency). Output: design-export/shots/*.png
@@ -18,7 +18,7 @@ const OUT_DIR = resolve(ROOT, "design-export/shots");
 
 const SCALE = 2;
 const VIEWPORT_W = 1440;
-const TARGET = process.argv[2] || "https://gehaltsdeckel.jetzt";
+const TARGET = process.argv[2] || "http://localhost:3000";
 
 // Sections to capture: selector -> output name. `maxH` clips very tall
 // sections to a representative top region so the slide image stays legible.

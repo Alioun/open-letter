@@ -7,14 +7,14 @@ services:
       - DATABASE_ENCRYPTION_KEY=${DATABASE_ENCRYPTION_KEY}
       - API_TOKEN_SECRET=${API_TOKEN_SECRET}
       - PORT=${PORT:-3000}
-      - BASE_URL=${BASE_URL:-https://gehaltsdeckel.jetzt}
-      - ALLOWED_ORIGINS=${ALLOWED_ORIGINS:-https://gehaltsdeckel.jetzt,https://gehaltsdeckel-jetzt.de}
+      - BASE_URL=${BASE_URL:?set BASE_URL to the public URL}
+      - ALLOWED_ORIGINS=${ALLOWED_ORIGINS:-}
       - NODE_ENV=production
       - ADMIN_PATH=${ADMIN_PATH}
       - ADMIN_PASSWORD=${ADMIN_PASSWORD}
       - ADMIN_JWT_SECRET=${ADMIN_JWT_SECRET}
       - RESEND_API_KEY=${RESEND_API_KEY}
-      - RESEND_FROM=${RESEND_FROM:-"Gehaltsdeckel Initiative" <noreply@gehaltsdeckel.jetzt>}
+      - RESEND_FROM=${RESEND_FROM}
       - BACKUP_DIR=/app/backups
       # Unset = privacy.backupRetentionHours from the letter config.
       - BACKUP_KEEP=${BACKUP_KEEP:-}

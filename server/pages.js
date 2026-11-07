@@ -186,11 +186,14 @@ export function simplePage(inner, cfg, pageLang) {
   // Theme values come from the config; strip anything that could end the
   // <style> block.
   const css = (v, fallback) => String(v ?? fallback).replace(/[<>{};]/g, "");
-  const accent = css(c.akzent, "#6f003c");
-  const red = css(c.rot, "#ff0000");
-  const redText = css(c.rotText, "#cc0000");
+  const accent = css(c.akzent, "#0f172a");
+  const red = css(c.rot, "#1d4ed8");
+  const redText = css(c.rotText, "#1e40af");
+  const style = cfg?.theme?.style || {};
+  const cardRadius = css(style.cardRadius, "16px");
+  const buttonRadius = css(style.buttonRadius, "10px");
   // Letters without offset shadows set style.shadowOffset to "none".
-  const offset = css(cfg?.theme?.style?.shadowOffset, "10px 10px 0");
+  const offset = css(style.shadowOffset, "10px 10px 0");
   const shadow = offset === "none" ? "none" : `${offset} ${red}`;
   return `<!doctype html><html lang="${lang}"><head><meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
@@ -198,11 +201,11 @@ export function simplePage(inner, cfg, pageLang) {
 <meta name="referrer" content="no-referrer">
 <title>${title}</title>
 <style>
-  body { margin:0; min-height:100vh; display:flex; align-items:center; justify-content:center; background:${css(c.fond, "#f4f1ec")}; color:${accent}; font-family:${css(fonts.body, "Inter, Arial, sans-serif")}; padding:24px; }
-  .card { max-width:520px; background:${css(c.weiss, "#fff")}; border:1px solid ${accent}; box-shadow:${shadow}; padding:40px; }
+  body { margin:0; min-height:100vh; display:flex; align-items:center; justify-content:center; background:${css(c.fond, "#f1f5f9")}; color:${accent}; font-family:${css(fonts.body, "Inter, Arial, sans-serif")}; padding:24px; }
+  .card { max-width:520px; background:${css(c.weiss, "#fff")}; border:1px solid ${accent}; box-shadow:${shadow}; border-radius:${cardRadius}; padding:40px; }
   h1 { font-family:${css(fonts.display, "Arial, sans-serif")}; font-weight:900; font-size:28px; margin:0 0 16px; }
   p { font-size:16px; line-height:1.6; margin:0 0 16px; }
-  button { font-family:${css(fonts.display, "Arial, sans-serif")}; font-weight:700; font-size:15px; color:${css(c.weiss, "#fff")}; background:${red}; border:none; padding:14px 22px; cursor:pointer; }
+  button { font-family:${css(fonts.display, "Arial, sans-serif")}; font-weight:700; font-size:15px; color:${css(c.weiss, "#fff")}; background:${red}; border:none; border-radius:${buttonRadius}; padding:14px 22px; cursor:pointer; }
   button:hover { background:${redText}; }
 </style></head><body><div class="card">${inner}</div></body></html>`;
 }

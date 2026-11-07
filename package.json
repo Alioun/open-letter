@@ -1,6 +1,7 @@
 {
   "name": "diaetendeckel",
   "private": true,
+  "license": "MIT",
   "type": "module",
   "scripts": {
     "test": "bun test",

@@ -1,13 +1,12 @@
 // Active open-letter configuration (plain data, no JSX).
 //
 // One deployment serves one letter. Pick which one with the LETTER_CONFIG env
-// var (default "gehaltsdeckel"). Add a new letter by copying
-// config/letters/gehaltsdeckel/ and registering it in the maps below.
+// var (default "example"). Add a new letter by copying
+// config/letters/example/ and registering it in the maps below.
 //
 // Imported by both the server (server/*, db/*, scripts/*) and the client bundle
 // (src/*). Rich page content (letter body, FAQ) lives in ./content.jsx.
 
-import gehaltsdeckel from "./letters/gehaltsdeckel/index.js";
 import example from "./letters/example/index.js";
 import { activeLetterName, activePageLang } from "./active-letter.js";
 import {
@@ -18,13 +17,12 @@ import {
 } from "./i18n.js";
 
 const LETTERS = {
-  gehaltsdeckel,
   example,
 };
 
 export const LETTER_NAME = activeLetterName();
 
-const letter = LETTERS[LETTER_NAME] || gehaltsdeckel;
+const letter = LETTERS[LETTER_NAME] || example;
 // The letter as written, before its `ui` block is merged and before any admin
 // override reaches it. Every further language is built from this copy.
 const RAW = structuredClone(letter);

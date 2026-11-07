@@ -1,5 +1,6 @@
 // Preload for test/person-lang.test.js: a child process whose letter has
-// features.multiLanguage on (de + en), with an English verification template.
+// features.multiLanguage on (de + en, German first), with an English
+// verification template.
 // Runs before config/letter.config.js is imported, so the letter is read with
 // the flag on. Opens its own throwaway database like test/setup.js.
 import { readFileSync, mkdtempSync, rmSync } from "node:fs";
@@ -7,7 +8,7 @@ import { tmpdir } from "node:os";
 import { join, dirname } from "node:path";
 import { fileURLToPath } from "node:url";
 import process from "node:process";
-import letter from "../../config/letters/gehaltsdeckel/index.js";
+import letter from "../../config/letters/example/index.js";
 
 const repoRoot = join(dirname(fileURLToPath(import.meta.url)), "../..");
 const tmp = mkdtempSync(join(tmpdir(), "diaet-lang-test-"));
@@ -22,6 +23,7 @@ process.env.HONKER_EXTENSION_PATH ??= join(
 );
 
 letter.features = { ...letter.features, multiLanguage: true };
+letter.brand = { ...letter.brand, lang: "de" };
 letter.languages = ["de", "en"];
 letter.i18n = {
   en: {

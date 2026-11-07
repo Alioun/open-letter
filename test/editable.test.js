@@ -17,12 +17,18 @@ import * as q from "../server/db.js";
 beforeEach(resetDb);
 
 const pristine = () => structuredClone(cfg);
+// The event texts are editable only when the letter has the event.
+const withEvent = () => {
+  const c = pristine();
+  c.features = { ...c.features, zoomEvent: true };
+  return c;
+};
 const fieldsFor = (c) => editableFields(c, pageCopy(c));
 const field = (fields, path) => fields.find((f) => f.path === path);
 
 describe("editable fields", () => {
   test("cover the mode toggles, config texts, pages and every ui default", () => {
-    const fields = fieldsFor(pristine());
+    const fields = fieldsFor(withEvent());
     const paths = new Set(fields.map((f) => f.path));
     for (const p of [
       "features.successMode",
@@ -66,7 +72,7 @@ describe("editable fields", () => {
   });
 
   test("values are checked against their type", () => {
-    const fields = fieldsFor(pristine());
+    const fields = fieldsFor(withEvent());
     const clean = (path, v) => cleanValue(field(fields, path), v);
     expect(clean("features.successMode", true)).toBe(true);
     expect(() => clean("features.successMode", "yes")).toThrow();

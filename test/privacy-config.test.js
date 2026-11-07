@@ -4,7 +4,6 @@ import {
   backupKeepHours,
   PRIVACY_DEFAULTS,
 } from "../config/privacy.js";
-import gehaltsdeckel from "../config/letters/gehaltsdeckel/index.js";
 import example from "../config/letters/example/index.js";
 import { interpolateTemplate } from "../server/email.js";
 
@@ -71,7 +70,6 @@ describe("privacy config", () => {
   });
 
   test("shipped letters resolve", () => {
-    expect(() => resolvePrivacy(gehaltsdeckel)).not.toThrow();
     expect(() => resolvePrivacy(example)).not.toThrow();
   });
 

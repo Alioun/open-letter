@@ -32,7 +32,7 @@ beforeAll(() => {
       "./test/fixtures/multi-language.js",
       "./test/fixtures/person-lang-check.js",
     ],
-    { cwd: root, env: { ...process.env, LETTER_CONFIG: "gehaltsdeckel" } },
+    { cwd: root, env: { ...process.env, LETTER_CONFIG: "example" } },
   );
   if (run.exitCode !== 0) throw new Error(run.stderr.toString());
   on = JSON.parse(run.stdout.toString().trim().split("\n").pop());
@@ -61,7 +61,7 @@ describe("flag on: person language", () => {
     expect(on.mail.enFallback.html).toContain("Unsubscribe here");
     expect(on.calendar.en).toContain("Add to calendar");
     expect(on.calendar.de).toContain("Zum Kalender hinzufügen");
-    expect(on.ics).toContain("PRODID:-//Gehaltsdeckel jetzt//Treffen//EN");
+    expect(on.ics).toContain("PRODID:-//Open Letter//Treffen//EN");
   });
 
   test("link pages in the person language", () => {
@@ -84,20 +84,20 @@ describe("flag off: unchanged", () => {
   beforeEach(resetDb);
 
   test("any language asked for is the default: nothing stored, no prefix", async () => {
-    expect(storedLang(cfg, "en")).toBeNull();
-    expect(langUrl(`${base}/api/confirm/t`, "en")).toBe(`${base}/api/confirm/t`);
-    expect(pageUrl(base, "/abmelden/t", "en")).toBe(`${base}/abmelden/t`);
+    expect(storedLang(cfg, "de")).toBeNull();
+    expect(langUrl(`${base}/api/confirm/t`, "de")).toBe(`${base}/api/confirm/t`);
+    expect(pageUrl(base, "/abmelden/t", "de")).toBe(`${base}/abmelden/t`);
   });
 
   test("mails render as without a language", async () => {
     const vars = { name: "Ada", firstName: "Ada", unsubscribeUrl: `${base}/u` };
     for (const slug of Object.keys(cfg.email.templates)) {
-      expect(await renderTemplateBySlug(slug, vars, "en")).toEqual(
+      expect(await renderTemplateBySlug(slug, vars, "de")).toEqual(
         await renderTemplateBySlug(slug, vars),
       );
     }
-    expect(zoomCalendarButton("https://x", "en")).toBe(zoomCalendarButton("https://x"));
-    expect(simplePage("<p>x</p>", cfg)).toContain('<html lang="de">');
+    expect(zoomCalendarButton("https://x", "de")).toBe(zoomCalendarButton("https://x"));
+    expect(simplePage("<p>x</p>", cfg)).toContain(`<html lang="${cfg.brand.lang}">`);
   });
 
   test("a stored language is ignored", async () => {
@@ -110,13 +110,13 @@ describe("flag off: unchanged", () => {
       showPublicly: true,
       token: "t",
       expiresAt: future(),
-      lang: "en",
+      lang: "de",
     });
     const signerId = await q.getSignerIdByEmail("p@example.org");
     const args = await prepareQueuedEmail({ kind: "verification", signerId, baseUrl: base });
     expect(args.unsubscribeUrl).toStartWith(`${base}/abmelden/`);
-    const c = { subject: "S", i18n: { en: { subject: "E" } } };
-    const v = await campaignVersion(c, { html_body: "<p>d</p>" }, "en");
+    const c = { subject: "S", i18n: { de: { subject: "E" } } };
+    const v = await campaignVersion(c, { html_body: "<p>d</p>" }, "de");
     expect(v).toEqual({ lang: undefined, template: { html_body: "<p>d</p>" }, subject: "S" });
   });
 
@@ -126,7 +126,7 @@ describe("flag off: unchanged", () => {
       templateId: t.id,
       subject: "S",
       scheduledAt: future(),
-      i18n: { en: { subject: "E" } },
+      i18n: { de: { subject: "E" } },
     });
     const [row] = await q.listCampaigns();
     expect("i18n" in row).toBe(false);

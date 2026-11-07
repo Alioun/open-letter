@@ -7,7 +7,7 @@ import {
 } from "./db.js";
 
 const NOMINATIM_BASE = "https://nominatim.openstreetmap.org/search";
-const USER_AGENT = "GehaltsdeckelJetzt/1.0 (kontakt@gehaltsdeckel.jetzt)";
+const USER_AGENT = `OpenLetter/1.0 (${process.env.BASE_URL || "self-hosted"})`;
 const WORKER_INTERVAL = 5000;
 const RATE_LIMIT_MS = 1100;
 const FETCH_TIMEOUT_MS = 10000;

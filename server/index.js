@@ -227,6 +227,7 @@ const ZOOM_EVENT_DURATION_MIN_DEFAULT = parseInt(
   10,
 );
 const ZOOM_ICS_URL = `${BASE_URL}/api/termin.ics`;
+const ICS_UID_HOST = new URL(BASE_URL).host;
 
 // Human label for the event date/time, e.g. "9. Juni, 20:00 Uhr" (in `lang`,
 // the default language without it).
@@ -956,7 +957,8 @@ function buildZoomEventIcs(zc, { includeLink = false } = {}) {
       description: desc,
       url: loc.mapsUrl || "",
       location: where || serverText("icsInPerson", {}, lang),
-      uid: `zoom-${zc.eventAt.getTime()}@gehaltsdeckel.jetzt`,
+      uid: `zoom-${zc.eventAt.getTime()}@${ICS_UID_HOST}`,
+      product: brand,
       ...(lang && { lang }),
     });
   }
@@ -971,7 +973,8 @@ function buildZoomEventIcs(zc, { includeLink = false } = {}) {
     description: desc,
     url: link,
     location: serverText("icsOnlineLocation", {}, lang),
-    uid: `zoom-${zc.eventAt.getTime()}@gehaltsdeckel.jetzt`,
+    uid: `zoom-${zc.eventAt.getTime()}@${ICS_UID_HOST}`,
+    product: brand,
     ...(lang && { lang }),
   });
 }

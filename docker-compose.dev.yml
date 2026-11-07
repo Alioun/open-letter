@@ -16,7 +16,7 @@ services:
       - ADMIN_PASSWORD=${ADMIN_PASSWORD}
       - ADMIN_JWT_SECRET=${ADMIN_JWT_SECRET}
       - RESEND_API_KEY=${RESEND_API_KEY}
-      - RESEND_FROM=${RESEND_FROM:-"Gehaltsdeckel Initiative" <noreply@gehaltsdeckel.jetzt>}
+      - RESEND_FROM=${RESEND_FROM:-"Open Letter" <noreply@letter.example.org>}
       - DATABASE_JOURNAL_MODE=${DATABASE_JOURNAL_MODE:-DELETE}
     volumes:
       - data-dev:/app/data

@@ -9,7 +9,7 @@
  *
  * Usage:
  *   bun scripts/generate-signal.js                              # dev server (port 3002)
- *   bun scripts/generate-signal.js https://gehaltsdeckel.jetzt  # production
+ *   bun scripts/generate-signal.js https://letter.example.org  # production
  *
  * Requires `puppeteer` (installed automatically on first run).
  */

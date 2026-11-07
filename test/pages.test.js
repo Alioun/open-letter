@@ -7,7 +7,6 @@ import {
   fill,
   DEFAULT_PAGE_COPY,
 } from "../server/pages.js";
-import gehaltsdeckel from "../config/letters/gehaltsdeckel/index.js";
 import example from "../config/letters/example/index.js";
 
 describe("server-rendered pages", () => {
@@ -29,9 +28,9 @@ describe("server-rendered pages", () => {
   });
 
   test("the card keeps its offset shadow unless the letter turns it off", () => {
-    expect(simplePage("")).toContain("box-shadow:10px 10px 0 #ff0000;");
-    expect(simplePage("", gehaltsdeckel)).toContain(
-      "box-shadow:10px 10px 0 #ff0000;",
+    expect(simplePage("")).toContain("box-shadow:10px 10px 0 #1d4ed8;");
+    expect(simplePage("", example)).toContain(
+      `box-shadow:10px 10px 0 ${example.theme.colors.rot};`,
     );
     const flat = {
       ...example,
@@ -43,12 +42,21 @@ describe("server-rendered pages", () => {
     expect(simplePage("", flat)).toContain("box-shadow:none;");
   });
 
+  test("card and button corners are rounded unless the letter squares them", () => {
+    expect(simplePage("")).toContain("border-radius:16px;");
+    expect(simplePage("")).toContain("border-radius:10px;");
+    const square = simplePage("", {
+      theme: { style: { cardRadius: "0", buttonRadius: "0" } },
+    });
+    expect(square).not.toContain("border-radius:16px;");
+    expect(square).not.toContain("border-radius:10px;");
+  });
+
   test("simplePage takes language, title and colours from the letter", () => {
     const html = simplePage("<p>x</p>", example);
     expect(html).toContain('<html lang="en">');
     expect(html).toContain("<title>Open Letter</title>");
     expect(html).toContain(example.theme.colors.rot);
-    expect(html).not.toContain("Gehaltsdeckel");
   });
 
   test("theme values can't break out of the style block", () => {
@@ -63,7 +71,7 @@ describe("server-rendered pages", () => {
     expect(copy.deleteData.button).toBe("Delete permanently");
     // Not set by the example letter (it has no Treffen): German default.
     expect(copy.treffenDone.heading).toBe(DEFAULT_PAGE_COPY.treffenDone.heading);
-    expect(pageCopy(gehaltsdeckel).deleteData.text).toContain("Treffen");
+    expect(pageCopy({ pages: { deleteData: { text: "Bye" } } }).deleteData.text).toBe("Bye");
     expect(pageCopy({}).expired).toEqual(DEFAULT_PAGE_COPY.expired);
   });
 

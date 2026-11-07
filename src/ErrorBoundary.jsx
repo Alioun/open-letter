@@ -15,7 +15,7 @@ export class ErrorBoundary extends Component {
           style={{
             padding: "40px 24px",
             fontFamily: "Inter, sans-serif",
-            color: "var(--akzent, #6f003c)",
+            color: "var(--akzent)",
             maxWidth: 480,
             margin: "80px auto",
           }}
@@ -30,9 +30,10 @@ export class ErrorBoundary extends Component {
             onClick={() => window.location.reload()}
             style={{
               padding: "12px 24px",
-              background: "var(--rot, #ff0000)",
+              background: "var(--rot)",
               color: "#fff",
               border: "none",
+              borderRadius: "var(--radius-button)",
               cursor: "pointer",
               fontFamily: "inherit",
               fontSize: "1rem",

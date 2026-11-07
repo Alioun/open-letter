@@ -1,21 +1,21 @@
-Resend Email Setup | gehaltsdeckel.jetzt
+Resend Email Setup | letter.example.org
 ========================================
 
-GOAL: Send transactional emails FROM noreply@gehaltsdeckel.jetzt through
+GOAL: Send transactional emails FROM noreply@letter.example.org through
       Resend. Cloudflare Email Routing can remain active for inbound mail.
 
 RESEND API
 ----------
   Endpoint: https://api.resend.com/emails
   Auth:     Authorization: Bearer <RESEND_API_KEY>
-  Sender:   "Gehaltsdeckel Initiative" <noreply@gehaltsdeckel.jetzt>
+  Sender:   "Open Letter" <noreply@letter.example.org>
 
 
 STEP 1: Verify the domain in Resend
 ------------------------------------
 In the Resend dashboard, add and verify:
 
-  gehaltsdeckel.jetzt
+  letter.example.org
 
 Resend will show the DNS records required for SPF/DKIM/domain verification.
 Add those records in Cloudflare exactly as Resend shows them. Leave existing
@@ -34,9 +34,9 @@ SPF + DKIM alone don't tell receivers what to do with spoofed mail. Add a
 DMARC TXT record so mailbox providers can act on failures and so you get
 reports. Start in monitor-only mode, then tighten once DKIM/SPF pass cleanly:
 
-  Name:  _dmarc.gehaltsdeckel.jetzt
+  Name:  _dmarc.letter.example.org
   Type:  TXT
-  Value: v=DMARC1; p=none; rua=mailto:dmarc@gehaltsdeckel.jetzt; fo=1
+  Value: v=DMARC1; p=none; rua=mailto:dmarc@letter.example.org; fo=1
 
 After a week or two of clean aggregate reports, tighten the policy to
 "p=quarantine" and eventually "p=reject" for anti-spoofing protection.
@@ -49,7 +49,7 @@ STEP 2: Create an API key
 Create a Resend API key with send access and add it to the server environment:
 
   RESEND_API_KEY=re_...
-  RESEND_FROM="Gehaltsdeckel Initiative" <noreply@gehaltsdeckel.jetzt>
+  RESEND_FROM="Open Letter" <noreply@letter.example.org>
 
 RESEND_FROM is optional. If it is not set, the app uses the value above.
 
@@ -78,5 +78,5 @@ If the app exits with "Production email requires RESEND_API_KEY", add
 RESEND_API_KEY to the deployment environment.
 
 If Resend rejects a message, the app logs a "Resend email failed" error with
-the HTTP status and API message. Check that gehaltsdeckel.jetzt is verified in
+the HTTP status and API message. Check that letter.example.org is verified in
 Resend and that RESEND_FROM uses that verified domain.

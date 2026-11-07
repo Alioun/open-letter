@@ -7,7 +7,7 @@ Everything specific to a campaign lives in `config/letters/<name>/`: `index.js` 
 | Key | What it controls |
 | --- | --- |
 | `brand` | `name`, `wordmark`, `lang`, `locale` |
-| `theme` | `colors` (palette → CSS variables), `fonts` (`display`/`body`), `style` (`shadowOffset` (`"none"` also drops the shadow on link pages), `radius`, `borderWidth`, plus optional `shadow: "soft"` for blurred drop shadows instead of offset blocks, `cardRadius`, `buttonRadius`, `headlineMaxWidth`, `inputRadius`, `checkRadius`, `bannerRadius`, `bannerPadBottom`); optional colours `onAkzent`, `ctaBg`, `ctaFg`, `goalFill`, `ctaHoverBg`, `ctaHoverFg`, `heroBg`, `statBg` recolour the counter card, primary buttons, hero and stats; the theme drives the page, emails, and generated images |
+| `theme` | `colors` (palette → CSS variables), `fonts` (`display`/`body`), `style` (`shadowOffset` (`"none"` also drops the shadow on link pages), `radius`, `borderWidth` (corners are rounded by default: cards 16px, buttons and inputs 10px; set the radius keys to `"0"` for sharp corners), plus optional `shadow: "soft"` for blurred drop shadows instead of offset blocks, `cardRadius`, `buttonRadius`, `headlineMaxWidth`, `inputRadius`, `checkRadius`, `bannerRadius`, `bannerPadBottom`); optional colours `onAkzent`, `ctaBg`, `ctaFg`, `goalFill`, `ctaHoverBg`, `ctaHoverFg`, `heroBg`, `statBg` recolour the counter card, primary buttons, hero and stats; the theme drives the page, emails, and generated images |
 | `meta` | `<head>`: title, description, canonical, OG/Twitter, favicon, JSON-LD `schemaAbout`, optional `analytics` `{src, websiteId, retentionMonths}` |
 | `privacy` | retention periods and link lifetimes, enforced by the server and quoted in the privacy policy; see [Data retention](operations.md#data-retention) |
 | `hero` | headline lines, CTA labels, counter/goal labels, seed `milestones` |
@@ -64,7 +64,7 @@ The admin dashboard (served at the secret `/${ADMIN_PATH}` route) can edit, at r
 
 | Variable           | Required   | Default                 | Description                                                                                                           |
 | ------------------ | ---------- | ----------------------- | --------------------------------------------------------------------------------------------------------------------- |
-| `LETTER_CONFIG`    | No         | `gehaltsdeckel`         | Which open letter to serve: a directory name under `config/letters/`                                                |
+| `LETTER_CONFIG`    | No         | `example`               | Which open letter to serve: a directory name under `config/letters/`                                                |
 | `DATABASE_PATH`    | No         | `./data/diaetendeckel.db` | Path to the encrypted SQLite database file                                                                          |
 | `DATABASE_ENCRYPTION_KEY` | Yes | -                       | SQLCipher passphrase. The app fails closed (won't start) without it.                                                 |
 | `HONKER_EXTENSION_PATH` | No    | platform default        | Path to the Honker SQLite extension (`libhonker_ext.{dylib,so}`) for durable jobs                                    |
@@ -84,7 +84,7 @@ The admin dashboard (served at the secret `/${ADMIN_PATH}` route) can edit, at r
 | `EMAIL_PROVIDER`   | No         | `email.provider` (config) | Mail transport: `resend` or `smtp`. In production it must match the letter config's `email.provider` (the app refuses to start otherwise), because the privacy policy names the processor from the config. |
 | `EMAIL_FROM`       | No         | `email.from` (config)   | Verified sender for either provider (alias of `RESEND_FROM`)                                                          |
 | `RESEND_API_KEY`   | Yes when provider=resend (prod) | -          | Resend API key used to send transactional email                                                                       |
-| `RESEND_FROM`      | No         | `Gehaltsdeckel Initiative <noreply@gehaltsdeckel.jetzt>` | Verified sender used for outbound email                                                  |
+| `RESEND_FROM`      | No         | `email.from` (config)   | Verified sender used for outbound email (alias of `EMAIL_FROM`)                                                       |
 | `SMTP_HOST`        | Yes when provider=smtp (prod) | `email.smtp.host` (config) | SMTP server hostname                                                                                       |
 | `SMTP_PORT`        | No         | `email.smtp.port` or `587` | SMTP port (`465` = implicit TLS, `587` = STARTTLS)                                                                  |
 | `SMTP_SECURE`      | No         | `email.smtp.secure` or `false` | `true` for implicit TLS (port 465); `false` uses STARTTLS                                                       |

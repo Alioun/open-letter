@@ -23,7 +23,7 @@ const region = regionLabels(cfg);
 const STATES_ON = Boolean(cfg.features?.stateResolution);
 const OCCUPATION_ON = Boolean(cfg.features?.occupationField);
 
-const TOKEN_KEY = "gehaltsdeckel_admin_token";
+const TOKEN_KEY = "open_letter_admin_token";
 const AUDIENCE_LABELS = {
   newsletter: "Newsletter-Unterschreiber",
   zoom: "Zoom-Anmelder",

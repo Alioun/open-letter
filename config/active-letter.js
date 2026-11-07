@@ -13,7 +13,7 @@ export function activeLetterName() {
   if (typeof process !== "undefined" && process.env && process.env.LETTER_CONFIG) {
     return process.env.LETTER_CONFIG;
   }
-  return "gehaltsdeckel";
+  return "example";
 }
 
 // The page language in the browser (the server renders it into <html lang>).

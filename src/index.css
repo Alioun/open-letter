@@ -7,14 +7,14 @@
 @import "@fontsource/inter/latin-700.css";
 
 :root {
-  --rot: #ff0000;
-  --rot-text: #cc0000;
+  --rot: #1d4ed8;
+  --rot-text: #1e40af;
   --weiss: #ffffff;
-  --akzent: #6f003c;
-  --fond: #f4f1ec;
+  --akzent: #0f172a;
+  --fond: #f1f5f9;
   --grau: #5c5c5c;
   --grau-stark: #4a4a4a;
-  --grau-hell: #e6e6e6;
+  --grau-hell: #e2e8f0;
   --erfolg: #0a7a3a;
   --fehler: #b00020;
   --fehler-hell: color-mix(in srgb, var(--fehler) 7%, var(--weiss));
@@ -33,8 +33,12 @@
   /* Themeable tokens, overridden per letter from config (see config/theme-css.js). */
   --font-display: "Work Sans", Arial, sans-serif;
   --font-body: "Inter", system-ui, sans-serif;
-  --shadow-offset: var(--shadow-offset);
-  --radius: 0;
+  --radius: 10px;
+  --radius-card: 16px;
+  --radius-button: 10px;
+  --radius-input: 10px;
+  --radius-check: 4px;
+  --radius-banner: 10px;
   --border-width: 2px;
 }
 
@@ -1038,94 +1042,6 @@ h1.headline .banner {
   margin: 24px 0 12px;
 }
 
-/* Line-item calculation blocks (Beispiel 1 + Gehaltsdeckel-Äquivalent) */
-.faq-calc-grid {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
-  gap: 18px;
-  margin: 0 0 22px;
-}
-
-.faq-calc {
-  border: 1px solid var(--akzent);
-  background: var(--fond);
-  padding: 18px 20px;
-}
-
-.faq-calc-title {
-  font-family: var(--font-display);
-  font-weight: 700;
-  font-size: 13px;
-  letter-spacing: var(--ls-caps);
-  text-transform: uppercase;
-  color: var(--akzent);
-  margin: 0 0 4px;
-}
-
-.faq-calc-sub {
-  font-size: 13.5px;
-  line-height: 1.4;
-  color: var(--grau-stark);
-  margin: 0 0 14px;
-}
-
-.faq-calc-row {
-  display: flex;
-  align-items: baseline;
-  justify-content: space-between;
-  gap: 16px;
-  padding: 6px 0;
-  font-size: 15px;
-  line-height: 1.4;
-  color: var(--akzent);
-}
-
-.faq-calc-row .amount {
-  flex: none;
-  font-variant-numeric: tabular-nums;
-  font-weight: 500;
-  white-space: nowrap;
-}
-
-.faq-calc-row .note {
-  font-size: 12.5px;
-  color: var(--grau);
-}
-
-.faq-calc-row--result {
-  border-top: 2px solid var(--akzent);
-  margin-top: 6px;
-  padding-top: 12px;
-  font-family: var(--font-display);
-  font-weight: 700;
-}
-
-.faq-calc-row--result .amount {
-  font-weight: 900;
-  font-size: 17px;
-}
-
-.faq-calc-note {
-  font-size: 13px;
-  line-height: 1.5;
-  color: var(--grau);
-  margin: 4px 0 0;
-}
-
-.faq-footnotes {
-  margin: 20px 0 0;
-  padding-top: 14px;
-  border-top: 1px solid var(--grau-hell);
-  list-style: none;
-}
-
-.faq-footnotes li {
-  font-size: 13px;
-  line-height: 1.5;
-  color: var(--grau);
-  margin-bottom: 8px;
-}
-
 @media (max-width: 600px) {
   .faq-list {
     box-shadow: var(
@@ -1141,14 +1057,6 @@ h1.headline .banner {
 
   .faq-answer {
     padding: 4px 16px 20px;
-  }
-
-  .faq-calc {
-    padding: 14px 14px;
-  }
-
-  .faq-calc-row {
-    font-size: 14px;
   }
 }
 
@@ -1180,6 +1088,8 @@ h1.headline .banner {
 }
 
 .demands-grid {
+  border-radius: var(--radius-card);
+  overflow: hidden;
   display: grid;
   grid-template-columns: repeat(3, 1fr);
   gap: 1px;
@@ -1315,6 +1225,7 @@ h1.headline .banner {
 }
 
 .form-card .badge {
+  border-radius: var(--radius-check);
   position: absolute;
   top: -14px;
   left: 24px;
@@ -1974,6 +1885,8 @@ h1.headline .banner {
 }
 
 .signers-grid {
+  border-radius: var(--radius-card);
+  overflow: hidden;
   display: grid;
   grid-template-columns: repeat(3, 1fr);
   gap: 1px;
@@ -2021,6 +1934,7 @@ h1.headline .banner {
 }
 
 .signer .avatar {
+  border-radius: var(--radius-input);
   width: 44px;
   height: 44px;
   background: var(--akzent);
@@ -2149,6 +2063,7 @@ h1.headline .banner {
 }
 
 .occupation-count {
+  border-radius: var(--radius-check);
   font-family: var(--font-display);
   font-weight: 900;
   font-size: 12px;
@@ -2424,6 +2339,7 @@ footer {
 }
 
 .footer-disclaimer {
+  border-radius: var(--radius-card);
   background: var(--fond);
   border: 1px solid var(--akzent);
   padding: 18px 22px;
@@ -2677,6 +2593,7 @@ footer {
 }
 
 .admin-card {
+  border-radius: var(--radius-card);
   background: var(--fond);
   border: 1px solid var(--akzent);
   padding: 22px;
@@ -2690,6 +2607,7 @@ footer {
 }
 
 .admin-table-wrap {
+  border-radius: var(--radius-card);
   overflow-x: auto;
   border: 1px solid var(--akzent);
   background: var(--weiss);
@@ -2738,6 +2656,7 @@ footer {
 .admin-login input,
 .campaign-form input,
 .campaign-form select {
+  border-radius: var(--radius-input);
   width: 100%;
   background: var(--weiss);
   border: 1.5px solid var(--akzent);
@@ -2811,6 +2730,7 @@ footer {
 }
 
 .admin-list button {
+  border-radius: var(--radius-button);
   border: 1px solid var(--akzent);
   display: grid;
   gap: 4px;
@@ -2854,6 +2774,7 @@ footer {
 
 .editor-toolbar button,
 .admin-variable-row button {
+  border-radius: var(--radius-button);
   background: var(--weiss);
   border: 1px solid var(--akzent);
   color: var(--akzent);
@@ -2902,6 +2823,7 @@ footer {
 }
 
 .admin-editor-surface {
+  border-radius: var(--radius-input);
   background: var(--fond);
   border: 1px solid var(--akzent);
   color: var(--akzent);
@@ -2942,6 +2864,7 @@ footer {
 }
 
 .admin-danger {
+  border-radius: var(--radius-button);
   background: var(--fehler);
   border: 1px solid var(--fehler);
   color: var(--weiss);
@@ -2963,6 +2886,7 @@ footer {
 }
 
 .preview-card iframe {
+  border-radius: var(--radius-input);
   background: var(--weiss);
   border: 1px solid var(--akzent);
   height: 620px;
@@ -3012,6 +2936,7 @@ footer {
 
 .signer-selection-actions button,
 .signer-pagination button {
+  border-radius: var(--radius-button);
   border: 1px solid var(--akzent);
   background: var(--weiss);
   padding: 6px 12px;
@@ -3104,6 +3029,7 @@ footer {
 .rdp-button_next {
   background: var(--fond);
   border: 1.5px solid var(--akzent);
+  border-radius: var(--radius-check);
   color: var(--akzent);
   transition:
     background 0.12s ease,
@@ -3254,6 +3180,7 @@ footer {
 }
 
 .campaign-row {
+  border-radius: var(--radius-input);
   align-items: center;
   border: 1px solid var(--akzent);
   display: grid;
@@ -3274,6 +3201,7 @@ footer {
 }
 
 .admin-status {
+  border-radius: 999px;
   border: 1px solid var(--akzent);
   font-family: var(--font-display);
   font-size: 12px;
@@ -3330,6 +3258,7 @@ footer {
 }
 
 .outlier-group {
+  border-radius: var(--radius-input);
   border: 1px solid var(--fond);
   padding: 12px 16px;
 }
@@ -3437,6 +3366,7 @@ footer {
 }
 
 .status-message {
+  border-radius: var(--radius-input);
   background: var(--fond);
   border: 1px solid var(--akzent);
   color: var(--akzent);
@@ -3611,6 +3541,7 @@ footer {
 }
 
 .deletion-sent {
+  border-radius: var(--radius-input);
   background: var(--fond);
   border: 1px solid var(--akzent);
   padding: 14px 18px;

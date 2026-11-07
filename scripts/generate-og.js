@@ -4,7 +4,7 @@
  *
  * Usage:
  *   bun scripts/generate-og.js                                 # dev server
- *   bun scripts/generate-og.js https://gehaltsdeckel.jetzt     # production
+ *   bun scripts/generate-og.js https://letter.example.org     # production
  *
  * Requires `puppeteer` (installed automatically on first run).
  * Output: public/og.png
@@ -91,7 +91,7 @@ try {
       const bg =
         getComputedStyle(document.documentElement)
           .getPropertyValue("--fond")
-          .trim() || "#f4f1ec";
+          .trim() || "#f1f5f9";
       ctx.fillStyle = bg;
       ctx.fillRect(0, 0, canvas.width, canvas.height);
 

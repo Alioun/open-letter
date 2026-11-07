@@ -21,7 +21,7 @@ services:
       - BASE_URL=http://app:3000
       - DATABASE_PATH=/app/data/diaetendeckel.db
       - DATABASE_JOURNAL_MODE=${DATABASE_JOURNAL_MODE:-DELETE}
-      - LETTER_CONFIG=${LETTER_CONFIG:-gehaltsdeckel}
+      - LETTER_CONFIG=${LETTER_CONFIG:-example}
       - TRUST_PROXY=true
       - EMAIL_PROVIDER=smtp
       - SMTP_HOST=mailpit
