@@ -39,9 +39,15 @@ export const PRIVACY_DEFAULTS = {
 // because this module is also bundled for the browser.
 export function backupKeepHours(privacy, envValue) {
   const fromEnv = parseInt(envValue ?? "", 10);
-  return Number.isFinite(fromEnv) && fromEnv >= 1
-    ? fromEnv
-    : privacy.backupRetentionHours;
+  const hours =
+    Number.isFinite(fromEnv) && fromEnv >= 1
+      ? fromEnv
+      : privacy.backupRetentionHours;
+  if (hours > privacy.erasureLogDays * 24)
+    throw new Error(
+      "BACKUP_KEEP must not exceed privacy.erasureLogDays in hours",
+    );
+  return hours;
 }
 
 // The cutoff for signerRetentionYears as of `now`: everything created before
@@ -80,7 +86,11 @@ export function resolvePrivacy(cfg) {
   const analytics = cfg?.meta?.analytics;
   if (analytics?.src) {
     const months = analytics.retentionMonths;
-    if (!(typeof months === "number" && Number.isFinite(months) && months > 0)) {
+    if (!(
+      typeof months === "number" &&
+      Number.isFinite(months) &&
+      months > 0
+    )) {
       throw new Error(
         "config meta.analytics.retentionMonths must be a positive number when analytics is enabled",
       );

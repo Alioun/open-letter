@@ -1,0 +1,222 @@
+{
+  "project": "openletter-perf-1794220546960-93723",
+  "date": "2026-11-09T10:35:47.194Z",
+  "profile": true,
+  "cpus": [
+    {
+      "times": {
+        "user": 56190,
+        "nice": 0,
+        "sys": 57060,
+        "idle": 2697310,
+        "irq": 0
+      },
+      "model": "AMD Ryzen 5 5600X 6-Core Processor",
+      "speed": 0
+    },
+    {
+      "times": {
+        "user": 50200,
+        "nice": 0,
+        "sys": 45740,
+        "idle": 2583200,
+        "irq": 0
+      },
+      "model": "AMD Ryzen 5 5600X 6-Core Processor",
+      "speed": 0
+    },
+    {
+      "times": {
+        "user": 85280,
+        "nice": 0,
+        "sys": 57050,
+        "idle": 2641920,
+        "irq": 0
+      },
+      "model": "AMD Ryzen 5 5600X 6-Core Processor",
+      "speed": 0
+    },
+    {
+      "times": {
+        "user": 74820,
+        "nice": 0,
+        "sys": 40520,
+        "idle": 2886670,
+        "irq": 0
+      },
+      "model": "AMD Ryzen 5 5600X 6-Core Processor",
+      "speed": 0
+    },
+    {
+      "times": {
+        "user": 77280,
+        "nice": 0,
+        "sys": 56760,
+        "idle": 2774880,
+        "irq": 0
+      },
+      "model": "AMD Ryzen 5 5600X 6-Core Processor",
+      "speed": 0
+    },
+    {
+      "times": {
+        "user": 72180,
+        "nice": 0,
+        "sys": 42820,
+        "idle": 2910160,
+        "irq": 0
+      },
+      "model": "AMD Ryzen 5 5600X 6-Core Processor",
+      "speed": 0
+    },
+    {
+      "times": {
+        "user": 61480,
+        "nice": 0,
+        "sys": 57860,
+        "idle": 2798470,
+        "irq": 0
+      },
+      "model": "AMD Ryzen 5 5600X 6-Core Processor",
+      "speed": 0
+    },
+    {
+      "times": {
+        "user": 50090,
+        "nice": 0,
+        "sys": 42930,
+        "idle": 2955270,
+        "irq": 0
+      },
+      "model": "AMD Ryzen 5 5600X 6-Core Processor",
+      "speed": 0
+    },
+    {
+      "times": {
+        "user": 61220,
+        "nice": 0,
+        "sys": 56860,
+        "idle": 2834130,
+        "irq": 0
+      },
+      "model": "AMD Ryzen 5 5600X 6-Core Processor",
+      "speed": 0
+    },
+    {
+      "times": {
+        "user": 48790,
+        "nice": 0,
+        "sys": 42720,
+        "idle": 2961790,
+        "irq": 0
+      },
+      "model": "AMD Ryzen 5 5600X 6-Core Processor",
+      "speed": 0
+    },
+    {
+      "times": {
+        "user": 79980,
+        "nice": 0,
+        "sys": 55590,
+        "idle": 2862190,
+        "irq": 0
+      },
+      "model": "AMD Ryzen 5 5600X 6-Core Processor",
+      "speed": 0
+    },
+    {
+      "times": {
+        "user": 67580,
+        "nice": 0,
+        "sys": 41800,
+        "idle": 2939650,
+        "irq": 0
+      },
+      "model": "AMD Ryzen 5 5600X 6-Core Processor",
+      "speed": 0
+    }
+  ],
+  "totalMemory": 16723521536,
+  "kernel": "6.18.54.1-microsoft-standard-WSL2",
+  "arch": "x64",
+  "dataset": 100000,
+  "tiers": [
+    "1:512m"
+  ],
+  "repeats": 1,
+  "hold": 30,
+  "tabs": 1000,
+  "signupRate": 1,
+  "journal": "WAL",
+  "uptime": " 11:35:47 up 52 min,  1 user,  load average: 2.39, 2.43, 2.21\n",
+  "docker": "{\"Platform\":{\"Name\":\"\"},\"Version\":\"29.1.3\",\"ApiVersion\":\"1.52\",\"MinAPIVersion\":\"1.44\",\"Os\":\"linux\",\"Arch\":\"amd64\",\"Components\":[{\"Name\":\"Engine\",\"Version\":\"29.1.3\",\"Details\":{\"ApiVersion\":\"1.52\",\"Arch\":\"amd64\",\"BuildTime\":\"Wed Apr 29 16:41:06 2026\",\"Experimental\":\"false\",\"GitCommit\":\"29.1.3-0ubuntu3~24.04.2\",\"GoVersion\":\"go1.24.4\",\"KernelVersion\":\"6.18.54.1-microsoft-standard-WSL2\",\"MinAPIVersion\":\"1.44\",\"Os\":\"linux\"}},{\"Name\":\"containerd\",\"Version\":\"2.2.1\",\"Details\":{\"GitCommit\":\"\"}},{\"Name\":\"runc\",\"Version\":\"1.3.4-0ubuntu1~24.04.1\",\"Details\":{\"GitCommit\":\"\"}},{\"Name\":\"docker-init\",\"Version\":\"0.19.0\",\"Details\":{\"GitCommit\":\"\"}}],\"GitCommit\":\"29.1.3-0ubuntu3~24.04.2\",\"GoVersion\":\"go1.24.4\",\"KernelVersion\":\"6.18.54.1-microsoft-standard-WSL2\",\"BuildTime\":\"2026-04-29T16:41:06.000000000+00:00\"}\n",
+  "image": "\"sha256:7ff585c153b388827e45cf75cebab299a09b20b5e341ca227b9bbb6bda0a4486\"\n",
+  "packages": {
+    "name": "diaetendeckel",
+    "private": true,
+    "license": "MIT",
+    "type": "module",
+    "scripts": {
+      "test": "bun test",
+      "dev": "bun scripts/dev.js",
+      "start": "NODE_ENV=production bun server/index.js",
+      "db:setup": "bun db/setup.js",
+      "db:seed": "bun db/seed.js",
+      "db:migrate": "bun db/migrate-pg-to-sqlite.js",
+      "db:restore": "bun db/restore-backup.js",
+      "honker:build": "bash scripts/build-honker.sh",
+      "og": "bun scripts/generate-og.js",
+      "verify:publishing": "bun test --timeout 30000 test/publications.test.js test/email-setup.test.js test/email-tls.test.js test/statistics.test.js",
+      "verify:app": "bun scripts/verify-publishing.js",
+      "format:publishing": "prettier --check config/publication.js config/css-policy.js config/faq.js server/publications.js server/email-setup.js server/frontend.js src/publishing src/ui.jsx"
+    },
+    "trustedDependencies": [
+      "@journeyapps/sqlcipher"
+    ],
+    "overrides": {
+      "undici": "^8.12.4",
+      "prosemirror-model": "1.25.13",
+      "fflate": "^0.8.3"
+    },
+    "dependencies": {
+      "@base-ui/react": "1.9.0",
+      "@codemirror/autocomplete": "^6.20.4",
+      "@codemirror/commands": "^6.11.1",
+      "@codemirror/lang-css": "^6.3.1",
+      "@codemirror/lint": "^6.9.7",
+      "@codemirror/state": "^6.7.6",
+      "@codemirror/view": "^6.43.15",
+      "@fontsource/inter": "^5.3.0",
+      "@fontsource/work-sans": "^5.3.0",
+      "@journeyapps/sqlcipher": "^6.0.0",
+      "@puckeditor/core": "0.24.0",
+      "@tiptap/core": "^3.33.0",
+      "@tiptap/extension-character-count": "^3.33.0",
+      "@tiptap/extension-link": "^3.33.0",
+      "@tiptap/extension-placeholder": "^3.33.0",
+      "@tiptap/extension-underline": "^3.33.0",
+      "@tiptap/pm": "^3.33.0",
+      "@tiptap/react": "^3.33.0",
+      "@tiptap/starter-kit": "^3.33.0",
+      "analytik": "1.22.0",
+      "css-tree": "^3.2.1",
+      "date-fns": "^4.4.0",
+      "hono": "^4.13.17",
+      "jose": "^6.2.16",
+      "juice": "^12.2.1",
+      "nodemailer": "^10.4.0",
+      "postgres": "^4.1.0",
+      "react": "^19.3.1",
+      "react-day-picker": "^10.0.2",
+      "react-dom": "^19.3.1",
+      "sanitize-html": "^2.18.1",
+      "satori": "^0.63.2",
+      "sharp": "^0.35.5"
+    },
+    "devDependencies": {
+      "prettier": "^3.9.10",
+      "puppeteer": "^25.16.0"
+    },
+    "packageManager": "bun@1.4.4"
+  }
+}

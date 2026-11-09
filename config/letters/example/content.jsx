@@ -8,14 +8,13 @@ export function LetterArticle({ total }) {
       <p className="anrede">To whom it may concern,</p>
 
       <p className="lead">
-        This is an example open letter. Replace this content with your own
-        campaign text in <code>config/letters/&lt;your-letter&gt;/content.jsx</code>.
+        Change begins when people come together around a clear demand. We ask
+        decision-makers to listen, act and report openly on their progress.
       </p>
 
       <p>
-        Everything else on this page (the title, colours, hero, sign form,
-        emails and feature flags) is configured in the sibling{" "}
-        <code>index.js</code> file.
+        Our signatures show that this issue matters to people across our
+        community. Each voice strengthens the call for a practical response.
       </p>
 
       <blockquote className="pullquote">
@@ -23,8 +22,8 @@ export function LetterArticle({ total }) {
       </blockquote>
 
       <p>
-        Add as many paragraphs as you need. The layout, typography and theme are
-        provided by the template.
+        Please add your name and share this letter with others who support its
+        aim. Together, we can turn shared concern into lasting change.
       </p>
 
       <p className="gruss">With thanks</p>
@@ -47,7 +46,7 @@ export function FaqContent() {
           asked.
         </h2>
         <div className="faq-intro">
-          <p>Replace these questions with your own.</p>
+          <p>Learn how to take part and what happens after you sign.</p>
         </div>
       </aside>
 
@@ -55,7 +54,7 @@ export function FaqContent() {
         <details className="faq-item">
           <summary className="faq-q">What is this?</summary>
           <div className="faq-answer">
-            <p>An example open letter built on a reusable template.</p>
+            <p>A shared call for action, supported by everyone who signs.</p>
           </div>
         </details>
         <details className="faq-item">

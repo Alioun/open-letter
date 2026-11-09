@@ -12,12 +12,14 @@ DATASETS=${DATASETS:-"1000 10000 100000"}
 TIERS=${TIERS:-"0.5:512m 1:1g 2:2g 4:4g"}
 SCENARIOS=${SCENARIOS:-"visitors signup"}
 OUT=${OUT:-results/$(date +%Y-%m-%d)}
+PROJECT=${LOADTEST_PROJECT:-openletter-matrix-$(date +%s)-$$}
 RAW="$OUT/raw"
 mkdir -p "$RAW"
 
 [ -f .env.loadtest ] || ./gen-env.sh
 
-dc() { docker compose -f docker-compose.yml "$@"; }
+dc() { docker compose --project-name "$PROJECT" -f docker-compose.yml "$@"; }
+trap 'dc down -v >/dev/null 2>&1 || true' EXIT
 
 wait_healthy() {
   for _ in $(seq 1 120); do
@@ -32,11 +34,18 @@ wait_healthy() {
 # Streaming `docker stats` emits a line per second; --no-stream would take
 # several seconds per sample and miss peaks.
 sample_stats() { # $1 = container, $2 = csv
+  local stats_pid
+  trap 'kill "$stats_pid" 2>/dev/null || true' TERM INT
   echo "ts,cpu_pct,mem" > "$2"
-  docker stats --format '{{.CPUPerc}},{{.MemUsage}}' "$1" 2>/dev/null |
+  local sample_dir; sample_dir=$(mktemp -d)
+  local fifo="$sample_dir/stats"
+  mkfifo "$fifo"
+  docker stats --format '{{.CPUPerc}},{{.MemUsage}}' "$1" > "$fifo" 2>/dev/null &
+  stats_pid=$!
+  trap 'kill "$stats_pid" 2>/dev/null || true; rm -f "$fifo"; rmdir "$sample_dir"' EXIT TERM INT
     while IFS= read -r line; do
       case $line in *%*) echo "$(date +%s),$line" >> "$2" ;; esac
-    done
+    done < "$fifo"
 }
 
 start_app() { # $1 cpus, $2 mem
@@ -72,13 +81,14 @@ run_k6() { # $1 name, $2 script, rest = extra k6 args
   sample_stats "$cid" "$RAW/$name.stats.csv" &
   local sampler=$!
   # shellcheck disable=SC2046  # intentional word splitting of the -e pairs
+  local k6_exit=0
   dc --profile k6 run --rm --no-deps -T k6 run --quiet $(k6_env) "$@" \
     --summary-export "/results/$(basename "$OUT")/raw/$name.json" "/scripts/$script" \
-    > "$RAW/$name.k6.log" 2>&1 || true
+    > "$RAW/$name.k6.log" 2>&1 || k6_exit=$?
   kill "$sampler" 2>/dev/null || true
-  pkill -f "docker stats --format {{.CPUPerc}}" 2>/dev/null || true
   wait "$sampler" 2>/dev/null || true
   {
+    echo "k6_exit=$k6_exit"
     echo "oom_killed=$(docker inspect -f '{{.State.OOMKilled}}' "$cid")"
     echo "restarts=$(docker inspect -f '{{.RestartCount}}' "$cid")"
     echo "running=$(docker inspect -f '{{.State.Running}}' "$cid")"

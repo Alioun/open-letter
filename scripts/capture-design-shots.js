@@ -70,7 +70,7 @@ try {
   for (const { sel, name, maxH } of TARGETS) {
     const el = await page.$(sel);
     if (!el) {
-      console.warn(`  ! skipped ${name}: selector not found: ${sel}`);
+      console.warn(`Skipped ${name}. Selector not found: ${sel}`);
       continue;
     }
     await el.scrollIntoView();
@@ -95,10 +95,10 @@ try {
         : await el.screenshot(opts);
     writeFileSync(out, shot);
     const kb = (statSync(out).size / 1024).toFixed(1);
-    console.log(`  ✓ ${name}.png (${kb} KB)`);
+    console.log(`Saved ${name}.png (${kb} KB)`);
   }
 } finally {
   await browser.close();
 }
 
-console.log(`Done → ${OUT_DIR}`);
+console.log(`Screenshots saved to ${OUT_DIR}`);

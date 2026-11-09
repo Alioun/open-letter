@@ -133,9 +133,13 @@ CREATE TABLE IF NOT EXISTS campaigns (
   -- Refreshed while a send runs. A 'sending' row whose heartbeat went stale
   -- (the process died mid-send) may be claimed again.
   heartbeat_at    TEXT,
+  failure         TEXT,
+  delivery_expires_at TEXT,
   -- Texts in further languages (features.multiLanguage), JSON
   -- {"<lang>": {"templateId": …, "subject": "…"}}; NULL = default text only.
   i18n            TEXT,
+  request_key     TEXT,
+  request_hash    TEXT,
   created_at      TEXT DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ','now'))
 );
 
@@ -202,6 +206,7 @@ CREATE TABLE IF NOT EXISTS zoom_event_mailings (
   status          TEXT NOT NULL DEFAULT 'sending',
   recipient_count INTEGER,
   sent_at         TEXT,
+  failure         TEXT,
   -- updated_at doubles as the heartbeat of a running send (see campaigns).
   attempts        INTEGER NOT NULL DEFAULT 0,
   updated_at      TEXT DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ','now'))

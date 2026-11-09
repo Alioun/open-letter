@@ -10,6 +10,7 @@ export class ErrorBoundary extends Component {
   }
   render() {
     if (this.state.crashed) {
+      if (this.props.fallback) return this.props.fallback;
       return (
         <div
           style={{

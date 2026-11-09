@@ -1,0 +1,21 @@
+[
+  {
+    "name": "current-n100000-cpu1-mem256m-r1",
+    "cpu": 1,
+    "memory": "256m",
+    "repetition": 1,
+    "started": "2026-11-09T10:51:13.364Z",
+    "limits": {
+      "nanoCpus": 1000000000,
+      "memory": 268435456,
+      "swap": 268435456
+    },
+    "passed": false,
+    "error": "Startup stopped: OOM=true, exit=137",
+    "finalState": {
+      "oom": true,
+      "exit": 137,
+      "running": false
+    }
+  }
+]

@@ -1,5 +1,5 @@
 import { describe, test, expect, beforeEach } from "bun:test";
-import { resetDb } from "./helpers.js";
+import { resetDb, db } from "./helpers.js";
 import cfg from "../config/letter.config.js";
 import {
   editableFields,
@@ -13,6 +13,20 @@ import { localizeConfig } from "../config/i18n.js";
 import { UI_DEFAULTS, fillText, deepMerge } from "../config/ui.js";
 import { pageCopy } from "../server/pages.js";
 import * as q from "../server/db.js";
+
+async function legacyOverrides(changes, lang = null) {
+  for (const [path, value] of Object.entries(changes)) {
+    const key = copyKey(path, lang);
+    if (value === null)
+      await db.query("DELETE FROM app_settings WHERE key=?").run(key);
+    else
+      await db
+        .query(
+          "INSERT INTO app_settings(key,value) VALUES (?,?) ON CONFLICT(key) DO UPDATE SET value=excluded.value",
+        )
+        .run(key, JSON.stringify(value));
+  }
+}
 
 beforeEach(resetDb);
 
@@ -44,7 +58,12 @@ describe("editable fields", () => {
       expect(paths.has(p)).toBe(true);
     }
     // Structural or privacy-relevant keys stay out.
-    for (const p of ["features.inviteLinks", "privacy.signerRetentionYears", "invite.statsMode", "email.provider"]) {
+    for (const p of [
+      "features.inviteLinks",
+      "privacy.signerRetentionYears",
+      "invite.statsMode",
+      "email.provider",
+    ]) {
       expect(paths.has(p)).toBe(false);
     }
     expect(field(fields, "ui.stoerer.showFrom").type).toBe("number");
@@ -76,13 +95,17 @@ describe("editable fields", () => {
     const clean = (path, v) => cleanValue(field(fields, path), v);
     expect(clean("features.successMode", true)).toBe(true);
     expect(() => clean("features.successMode", "yes")).toThrow();
-    expect(clean("features.collapsedSections", ["faq", "faq", "liste"])).toEqual(["faq", "liste"]);
+    expect(
+      clean("features.collapsedSections", ["faq", "faq", "liste"]),
+    ).toEqual(["faq", "liste"]);
     expect(() => clean("features.collapsedSections", ["hero"])).toThrow();
     expect(clean("sign.criteria", [" a ", "", "b"])).toEqual(["a", "b"]);
     expect(clean("ui.stoerer.showFrom", "2500")).toBe(2500);
     expect(() => clean("ui.stoerer.showFrom", -1)).toThrow();
     expect(() => clean("success.antragUrl", "javascript:alert(1)")).toThrow();
-    expect(() => clean("hero.headlineLines", [{ text: "x", style: "a b" }])).toThrow();
+    expect(() =>
+      clean("hero.headlineLines", [{ text: "x", style: "a b" }]),
+    ).toThrow();
     expect(() => clean("hero.ctaPrimary", "x".repeat(6000))).toThrow();
   });
 });
@@ -91,7 +114,9 @@ describe("ui defaults", () => {
   test("are merged into the config and fill placeholders", () => {
     expect(getPath(cfg, "ui.settings.save")).toBe(UI_DEFAULTS.settings.save);
     expect(fillText("{a} und {b} {c}", { a: 1, b: "x" })).toBe("1 und x {c}");
-    expect(deepMerge({ a: { b: 1, c: 2 }, l: [1] }, { a: { b: 3 }, l: [2] })).toEqual({
+    expect(
+      deepMerge({ a: { b: 1, c: 2 }, l: [1] }, { a: { b: 3 }, l: [2] }),
+    ).toEqual({
       a: { b: 3, c: 2 },
       l: [2],
     });
@@ -100,12 +125,15 @@ describe("ui defaults", () => {
 
 describe("override storage", () => {
   test("stores JSON per path and deletes on null", async () => {
-    await q.setCopyOverrides({ "hero.ctaPrimary": "Los!", "sign.criteria": ["a"] });
+    await legacyOverrides({
+      "hero.ctaPrimary": "Los!",
+      "sign.criteria": ["a"],
+    });
     expect(await q.getCopyOverrides()).toEqual({
       "hero.ctaPrimary": "Los!",
       "sign.criteria": ["a"],
     });
-    await q.setCopyOverrides({ "hero.ctaPrimary": null });
+    await legacyOverrides({ "hero.ctaPrimary": null });
     expect(await q.getCopyOverrides()).toEqual({ "sign.criteria": ["a"] });
   });
 });
@@ -115,10 +143,26 @@ describe("per-language overrides", () => {
     expect(copyKey("hero.ctaPrimary")).toBe("copy:hero.ctaPrimary");
     expect(copyKey("hero.ctaPrimary", "en")).toBe("copy:en:hero.ctaPrimary");
     expect(copyKey("ui.a.b", "pt-br")).toBe("copy:pt-br:ui.a.b");
-    expect(parseCopyKey("copy:hero.ctaPrimary")).toEqual({ lang: null, path: "hero.ctaPrimary" });
-    expect(parseCopyKey("copy:en:hero.ctaPrimary")).toEqual({ lang: "en", path: "hero.ctaPrimary" });
-    expect(parseCopyKey("copy:pt-br:ui.a")).toEqual({ lang: "pt-br", path: "ui.a" });
-    for (const bad of ["copy:", "copy:EN:x", "copy:eng:x", "copy:en:", "copy:en:a:b", "milestones"]) {
+    expect(parseCopyKey("copy:hero.ctaPrimary")).toEqual({
+      lang: null,
+      path: "hero.ctaPrimary",
+    });
+    expect(parseCopyKey("copy:en:hero.ctaPrimary")).toEqual({
+      lang: "en",
+      path: "hero.ctaPrimary",
+    });
+    expect(parseCopyKey("copy:pt-br:ui.a")).toEqual({
+      lang: "pt-br",
+      path: "ui.a",
+    });
+    for (const bad of [
+      "copy:",
+      "copy:EN:x",
+      "copy:eng:x",
+      "copy:en:",
+      "copy:en:a:b",
+      "milestones",
+    ]) {
       expect(parseCopyKey(bad)).toBeNull();
     }
     expect(() => copyKey("a:b")).toThrow();
@@ -126,15 +170,18 @@ describe("per-language overrides", () => {
   });
 
   test("stores each language apart; reset clears only that language", async () => {
-    await q.setCopyOverrides({ "hero.ctaPrimary": "Los!" });
-    await q.setCopyOverrides({ "hero.ctaPrimary": "Go!", "sign.criteria": ["a"] }, "en");
+    await legacyOverrides({ "hero.ctaPrimary": "Los!" });
+    await legacyOverrides(
+      { "hero.ctaPrimary": "Go!", "sign.criteria": ["a"] },
+      "en",
+    );
     expect(await q.getCopyOverrides()).toEqual({ "hero.ctaPrimary": "Los!" });
     expect(await q.getCopyOverrides("en")).toEqual({
       "hero.ctaPrimary": "Go!",
       "sign.criteria": ["a"],
     });
     expect(await q.getCopyOverrides("fr")).toEqual({});
-    await q.setCopyOverrides({ "hero.ctaPrimary": null }, "en");
+    await legacyOverrides({ "hero.ctaPrimary": null }, "en");
     expect(await q.getCopyOverrides()).toEqual({ "hero.ctaPrimary": "Los!" });
     expect(await q.getCopyOverrides("en")).toEqual({ "sign.criteria": ["a"] });
   });
@@ -149,25 +196,34 @@ describe("per-language overrides", () => {
     const byLang = {};
     for (const l of ["de", "en"]) {
       const c = localizeConfig(structuredClone(letter), l);
-      byLang[l] = { c, fields: editableFields(structuredClone(c), pageCopy(c, l)) };
+      byLang[l] = {
+        c,
+        fields: editableFields(structuredClone(c), pageCopy(c, l)),
+      };
     }
-    await q.setCopyOverrides({ "hero.ctaPrimary": "Los!" });
+    await legacyOverrides({ "hero.ctaPrimary": "Los!" });
     const apply = async () => {
       applyOverrides(byLang.de.c, byLang.de.fields, await q.getCopyOverrides());
-      applyOverrides(byLang.en.c, byLang.en.fields, await q.getCopyOverrides("en"));
+      applyOverrides(
+        byLang.en.c,
+        byLang.en.fields,
+        await q.getCopyOverrides("en"),
+      );
     };
     await apply();
     expect(byLang.de.c.hero.ctaPrimary).toBe("Los!");
     // No fallback to the default language's override: i18n.en still wins.
     expect(byLang.en.c.hero.ctaPrimary).toBe("Sign (en)");
-    expect(byLang.en.c.ui.errors.invalidEmail).toBe(byLang.en.fields.find((f) => f.path === "ui.errors.invalidEmail").default);
+    expect(byLang.en.c.ui.errors.invalidEmail).toBe(
+      byLang.en.fields.find((f) => f.path === "ui.errors.invalidEmail").default,
+    );
 
-    await q.setCopyOverrides({ "hero.ctaPrimary": "Go!" }, "en");
+    await legacyOverrides({ "hero.ctaPrimary": "Go!" }, "en");
     await apply();
     expect(byLang.en.c.hero.ctaPrimary).toBe("Go!");
     expect(byLang.de.c.hero.ctaPrimary).toBe("Los!");
 
-    await q.setCopyOverrides({ "hero.ctaPrimary": null }, "en");
+    await legacyOverrides({ "hero.ctaPrimary": null }, "en");
     await apply();
     expect(byLang.en.c.hero.ctaPrimary).toBe("Sign (en)");
     expect(byLang.de.c.hero.ctaPrimary).toBe("Los!");

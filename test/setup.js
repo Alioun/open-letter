@@ -8,6 +8,7 @@ import { tmpdir } from "node:os";
 import { join, dirname } from "node:path";
 import { fileURLToPath } from "node:url";
 import process from "node:process";
+import { ensureCampaignSubmissionKeys } from "../db/campaign-submissions.js";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const repoRoot = join(__dirname, "..");
@@ -31,6 +32,7 @@ if (!process.env.HONKER_EXTENSION_PATH) {
 // Open the (now correctly-configured) shared connection and apply the schema.
 const { db } = await import("../db/connection.js");
 await db.run(readFileSync(join(repoRoot, "db/schema.sql"), "utf-8"));
+await ensureCampaignSubmissionKeys(db);
 
 // Best-effort cleanup of the temp DB dir on exit.
 process.on("exit", () => {

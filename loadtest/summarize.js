@@ -1,9 +1,9 @@
-// Turns loadtest/results/<date>/raw/* into markdown tables.
+// Read loadtest/results/<date>/raw/* and print Markdown result tables.
 //
 //   bun loadtest/summarize.js loadtest/results/2026-09-16
 //
-// "Max OK" is the largest step that stayed under the pass criteria:
-// p95 < 500 ms and < 1% failed requests (sign-ups: p95 < 1000 ms).
+// A step passes below 1% failed requests and p95 below 500 ms for visits
+// or 1000 ms for sign-ups. Report the largest passing and tested steps.
 import { readdirSync, readFileSync, existsSync } from "fs";
 import { join } from "path";
 
@@ -77,19 +77,19 @@ for (const f of readdirSync(raw).filter((f) => f.endsWith(".json")).sort()) {
 const fmt = (v, d = 0) => (v === undefined ? "-" : v.toFixed(d));
 const byScenario = (sc) => runs.filter((r) => r.scenario === sc);
 
-for (const [sc, unit] of [["visitors", "open tabs"], ["mixed", "open tabs (+ sign-ups & searches)"], ["signup", "sign-ups/s"]]) {
+for (const [sc, unit] of [["visitors", "open tabs"], ["mixed", "open tabs with sign-ups and searches"], ["signup", "sign-ups/s"]]) {
   const rs = byScenario(sc);
   if (!rs.length) continue;
   console.log(`\n## ${sc}: ${unit}\n`);
-  console.log("| signers | CPU | RAM | max OK | tested up to | p95 @ max OK | peak CPU | peak RSS | notes |");
+  console.log("| Signers | CPU | RAM | Largest passing step | Largest tested step | p95 at passing step | Peak CPU | Peak RSS | Notes |");
   console.log("| --- | --- | --- | --- | --- | --- | --- | --- | --- |");
   for (const r of rs.sort((a, b) => a.n - b.n || parseFloat(a.cpus) - parseFloat(b.cpus))) {
     const at = r.steps.find(([k]) => k === r.maxOk)?.[1];
     const notes = [
-      r.meta.oom_killed === "true" ? "**OOM-killed**" : null,
-      r.meta.running === "false" ? "**app died**" : null,
-      r.maxOk === 0 ? "failed at lowest step" : null,
-      r.maxOk === r.reached ? "no ceiling found" : null,
+      r.meta.oom_killed === "true" ? "Stopped for exceeding memory limit" : null,
+      r.meta.running === "false" ? "Container stopped" : null,
+      r.maxOk === 0 ? "Lowest step failed" : null,
+      r.maxOk === r.reached ? "Largest tested step passed" : null,
     ].filter(Boolean).join(", ");
     console.log(
       `| ${r.n.toLocaleString("en-US")} | ${r.cpus} | ${r.mem} | ${r.maxOk || "-"} | ${r.reached} | ` +
@@ -98,13 +98,13 @@ for (const [sc, unit] of [["visitors", "open tabs"], ["mixed", "open tabs (+ sig
   }
 }
 
-console.log("\n## per-step detail\n");
+console.log("\n## Results by step\n");
 for (const r of runs) {
   console.log(
-    `\n**${r.scenario} · ${r.n.toLocaleString("en-US")} signers · ${r.cpus} CPU / ${r.mem}** ` +
-    `(peak CPU ${fmt(r.cpuMax)}%, peak RSS ${fmt(r.memMax)} MiB)\n`,
+    `\n### ${r.scenario} · ${r.n.toLocaleString("en-US")} signers · ${r.cpus} CPU / ${r.mem}\n\n` +
+    `Peak CPU was ${fmt(r.cpuMax)}%. Peak RSS was ${fmt(r.memMax)} MiB.\n`,
   );
-  console.log("| step | req/s | p50 | p95 | p99 | failed |");
+  console.log("| Step | Requests/s | p50 | p95 | p99 | Failed |");
   console.log("| --- | --- | --- | --- | --- | --- |");
   for (const [step, s] of r.steps) {
     console.log(

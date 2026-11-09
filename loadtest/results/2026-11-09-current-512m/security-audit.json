@@ -1,0 +1,856 @@
+{
+  "checkedAt": "2026-11-09T11:37:47.206Z",
+  "endpoint": "https://registry.npmjs.org/-/npm/v1/security/advisories/bulk",
+  "packageNames": 273,
+  "packageVersions": 301,
+  "packages": {
+    "@babel/runtime": [
+      "8.1.0"
+    ],
+    "@base-ui/react": [
+      "1.9.0"
+    ],
+    "@base-ui/utils": [
+      "0.5.0"
+    ],
+    "@codemirror/autocomplete": [
+      "6.20.4"
+    ],
+    "@codemirror/commands": [
+      "6.11.1"
+    ],
+    "@codemirror/lang-css": [
+      "6.3.1"
+    ],
+    "@codemirror/language": [
+      "6.13.1"
+    ],
+    "@codemirror/lint": [
+      "6.9.7"
+    ],
+    "@codemirror/state": [
+      "6.7.6"
+    ],
+    "@codemirror/streamparser": [
+      "6.0.0"
+    ],
+    "@codemirror/view": [
+      "6.43.15"
+    ],
+    "@csstools/selector-resolve-nested": [
+      "4.0.2"
+    ],
+    "@csstools/selector-specificity": [
+      "6.0.1"
+    ],
+    "@date-fns/tz": [
+      "1.5.0"
+    ],
+    "@dnd-kit/abstract": [
+      "0.4.0"
+    ],
+    "@dnd-kit/collision": [
+      "0.4.0"
+    ],
+    "@dnd-kit/dom": [
+      "0.4.0"
+    ],
+    "@dnd-kit/geometry": [
+      "0.4.0"
+    ],
+    "@dnd-kit/helpers": [
+      "0.4.0"
+    ],
+    "@dnd-kit/react": [
+      "0.4.0"
+    ],
+    "@dnd-kit/state": [
+      "0.4.0"
+    ],
+    "@emnapi/runtime": [
+      "1.11.3"
+    ],
+    "@floating-ui/core": [
+      "1.8.0"
+    ],
+    "@floating-ui/dom": [
+      "1.8.0"
+    ],
+    "@floating-ui/react-dom": [
+      "2.1.9"
+    ],
+    "@floating-ui/utils": [
+      "0.2.12"
+    ],
+    "@fontsource/inter": [
+      "5.3.0"
+    ],
+    "@fontsource/work-sans": [
+      "5.3.0"
+    ],
+    "@img/colour": [
+      "1.1.0"
+    ],
+    "@img/sharp-darwin-arm64": [
+      "0.35.5"
+    ],
+    "@img/sharp-darwin-x64": [
+      "0.35.5"
+    ],
+    "@img/sharp-freebsd-wasm32": [
+      "0.35.5"
+    ],
+    "@img/sharp-libvips-darwin-arm64": [
+      "1.3.4"
+    ],
+    "@img/sharp-libvips-darwin-x64": [
+      "1.3.4"
+    ],
+    "@img/sharp-libvips-linux-arm": [
+      "1.3.4"
+    ],
+    "@img/sharp-libvips-linux-arm64": [
+      "1.3.4"
+    ],
+    "@img/sharp-libvips-linux-ppc64": [
+      "1.3.4"
+    ],
+    "@img/sharp-libvips-linux-riscv64": [
+      "1.3.4"
+    ],
+    "@img/sharp-libvips-linux-s390x": [
+      "1.3.4"
+    ],
+    "@img/sharp-libvips-linux-x64": [
+      "1.3.4"
+    ],
+    "@img/sharp-libvips-linuxmusl-arm64": [
+      "1.3.4"
+    ],
+    "@img/sharp-libvips-linuxmusl-x64": [
+      "1.3.4"
+    ],
+    "@img/sharp-linux-arm": [
+      "0.35.5"
+    ],
+    "@img/sharp-linux-arm64": [
+      "0.35.5"
+    ],
+    "@img/sharp-linux-ppc64": [
+      "0.35.5"
+    ],
+    "@img/sharp-linux-riscv64": [
+      "0.35.5"
+    ],
+    "@img/sharp-linux-s390x": [
+      "0.35.5"
+    ],
+    "@img/sharp-linux-x64": [
+      "0.35.5"
+    ],
+    "@img/sharp-linuxmusl-arm64": [
+      "0.35.5"
+    ],
+    "@img/sharp-linuxmusl-x64": [
+      "0.35.5"
+    ],
+    "@img/sharp-wasm32": [
+      "0.35.5"
+    ],
+    "@img/sharp-webcontainers-wasm32": [
+      "0.35.5"
+    ],
+    "@img/sharp-win32-arm64": [
+      "0.35.5"
+    ],
+    "@img/sharp-win32-ia32": [
+      "0.35.5"
+    ],
+    "@img/sharp-win32-x64": [
+      "0.35.5"
+    ],
+    "@journeyapps/sqlcipher": [
+      "6.0.0"
+    ],
+    "@lezer/common": [
+      "1.5.5"
+    ],
+    "@lezer/css": [
+      "1.3.9"
+    ],
+    "@lezer/highlight": [
+      "1.2.5"
+    ],
+    "@lezer/lr": [
+      "1.4.12"
+    ],
+    "@marijn/find-cluster-break": [
+      "1.0.4"
+    ],
+    "@preact/signals-core": [
+      "1.14.5"
+    ],
+    "@puckeditor/core": [
+      "0.24.0"
+    ],
+    "@puppeteer/browsers": [
+      "3.2.6"
+    ],
+    "@radix-ui/primitive": [
+      "1.2.0"
+    ],
+    "@radix-ui/react-arrow": [
+      "1.1.17"
+    ],
+    "@radix-ui/react-compose-refs": [
+      "1.1.5"
+    ],
+    "@radix-ui/react-context": [
+      "1.3.0"
+    ],
+    "@radix-ui/react-dismissable-layer": [
+      "1.2.1"
+    ],
+    "@radix-ui/react-focus-guards": [
+      "1.2.0"
+    ],
+    "@radix-ui/react-focus-scope": [
+      "1.3.1"
+    ],
+    "@radix-ui/react-id": [
+      "1.1.4"
+    ],
+    "@radix-ui/react-popover": [
+      "1.3.1"
+    ],
+    "@radix-ui/react-popper": [
+      "1.4.0"
+    ],
+    "@radix-ui/react-portal": [
+      "1.2.0"
+    ],
+    "@radix-ui/react-presence": [
+      "1.1.11"
+    ],
+    "@radix-ui/react-primitive": [
+      "2.2.0"
+    ],
+    "@radix-ui/react-slot": [
+      "1.5.0"
+    ],
+    "@radix-ui/react-use-callback-ref": [
+      "1.1.5"
+    ],
+    "@radix-ui/react-use-controllable-state": [
+      "1.3.0"
+    ],
+    "@radix-ui/react-use-effect-event": [
+      "0.0.5"
+    ],
+    "@radix-ui/react-use-layout-effect": [
+      "1.1.4"
+    ],
+    "@radix-ui/react-use-rect": [
+      "1.1.4"
+    ],
+    "@radix-ui/react-use-size": [
+      "1.1.5"
+    ],
+    "@radix-ui/rect": [
+      "1.1.3"
+    ],
+    "@shuding/opentype.js": [
+      "1.4.0-beta.0"
+    ],
+    "@tanstack/react-virtual": [
+      "3.14.26"
+    ],
+    "@tanstack/virtual-core": [
+      "3.19.11"
+    ],
+    "@tiptap/core": [
+      "3.33.0"
+    ],
+    "@tiptap/extension-blockquote": [
+      "3.31.3",
+      "3.33.0"
+    ],
+    "@tiptap/extension-bold": [
+      "3.31.3",
+      "3.33.0"
+    ],
+    "@tiptap/extension-bubble-menu": [
+      "3.33.0"
+    ],
+    "@tiptap/extension-character-count": [
+      "3.33.0"
+    ],
+    "@tiptap/extension-code": [
+      "3.31.3",
+      "3.33.0"
+    ],
+    "@tiptap/extension-code-block": [
+      "3.31.3",
+      "3.33.0"
+    ],
+    "@tiptap/extension-document": [
+      "3.31.3",
+      "3.33.0"
+    ],
+    "@tiptap/extension-dropcursor": [
+      "3.33.0"
+    ],
+    "@tiptap/extension-floating-menu": [
+      "3.33.0"
+    ],
+    "@tiptap/extension-gapcursor": [
+      "3.33.0"
+    ],
+    "@tiptap/extension-hard-break": [
+      "3.31.3",
+      "3.33.0"
+    ],
+    "@tiptap/extension-heading": [
+      "3.31.3",
+      "3.33.0"
+    ],
+    "@tiptap/extension-horizontal-rule": [
+      "3.31.3",
+      "3.33.0"
+    ],
+    "@tiptap/extension-italic": [
+      "3.31.3",
+      "3.33.0"
+    ],
+    "@tiptap/extension-link": [
+      "3.33.0"
+    ],
+    "@tiptap/extension-list": [
+      "3.31.3",
+      "3.33.0"
+    ],
+    "@tiptap/extension-paragraph": [
+      "3.31.3",
+      "3.33.0"
+    ],
+    "@tiptap/extension-placeholder": [
+      "3.33.0"
+    ],
+    "@tiptap/extension-strike": [
+      "3.31.3",
+      "3.33.0"
+    ],
+    "@tiptap/extension-text": [
+      "3.31.3",
+      "3.33.0"
+    ],
+    "@tiptap/extension-text-align": [
+      "3.33.0"
+    ],
+    "@tiptap/extension-underline": [
+      "3.33.0"
+    ],
+    "@tiptap/extensions": [
+      "3.33.0"
+    ],
+    "@tiptap/html": [
+      "3.33.0"
+    ],
+    "@tiptap/pm": [
+      "3.33.0"
+    ],
+    "@tiptap/react": [
+      "3.33.0"
+    ],
+    "@tiptap/starter-kit": [
+      "3.33.0"
+    ],
+    "@types/node": [
+      "26.6.6"
+    ],
+    "@types/react": [
+      "19.3.0"
+    ],
+    "@types/react-dom": [
+      "19.3.0"
+    ],
+    "@types/use-sync-external-store": [
+      "0.0.6"
+    ],
+    "@types/whatwg-mimetype": [
+      "3.0.2"
+    ],
+    "@types/ws": [
+      "8.18.2"
+    ],
+    "analytik": [
+      "1.22.0"
+    ],
+    "ansi-colors": [
+      "4.1.3"
+    ],
+    "ansi-regex": [
+      "6.3.0"
+    ],
+    "ansi-styles": [
+      "6.2.3"
+    ],
+    "aria-hidden": [
+      "1.2.6"
+    ],
+    "base64-js": [
+      "0.0.8"
+    ],
+    "bindings": [
+      "1.5.0"
+    ],
+    "boolbase": [
+      "1.0.0"
+    ],
+    "buffer-image-size": [
+      "0.6.4"
+    ],
+    "camelize": [
+      "1.0.1"
+    ],
+    "cheerio": [
+      "1.2.0"
+    ],
+    "cheerio-select": [
+      "2.1.0"
+    ],
+    "chromium-bidi": [
+      "157.0.8090-0"
+    ],
+    "cliui": [
+      "9.0.1"
+    ],
+    "color-name": [
+      "1.1.4"
+    ],
+    "commander": [
+      "14.0.3"
+    ],
+    "crelt": [
+      "1.0.7"
+    ],
+    "css-background-parser": [
+      "0.1.0"
+    ],
+    "css-box-shadow": [
+      "1.0.0-3"
+    ],
+    "css-color-keywords": [
+      "1.0.0"
+    ],
+    "css-gradient-parser": [
+      "0.0.17"
+    ],
+    "css-select": [
+      "5.2.2"
+    ],
+    "css-to-react-native": [
+      "3.2.0"
+    ],
+    "css-tree": [
+      "3.2.1"
+    ],
+    "css-what": [
+      "6.2.2"
+    ],
+    "csstype": [
+      "3.2.3"
+    ],
+    "date-fns": [
+      "4.4.0"
+    ],
+    "dayjs": [
+      "1.11.23"
+    ],
+    "deep-diff": [
+      "1.0.2"
+    ],
+    "detect-libc": [
+      "2.1.2"
+    ],
+    "detect-node-es": [
+      "1.1.0"
+    ],
+    "devtools-protocol": [
+      "0.0.1704951"
+    ],
+    "dom-serializer": [
+      "2.0.0",
+      "3.1.1"
+    ],
+    "domelementtype": [
+      "3.0.0",
+      "2.3.0"
+    ],
+    "domhandler": [
+      "5.0.3",
+      "6.0.1"
+    ],
+    "domutils": [
+      "3.2.2",
+      "4.0.2"
+    ],
+    "emoji-regex": [
+      "10.6.0"
+    ],
+    "emoji-regex-xs": [
+      "2.0.1"
+    ],
+    "encoding-sniffer": [
+      "0.2.1"
+    ],
+    "entities": [
+      "8.1.0",
+      "4.5.0",
+      "7.0.1",
+      "6.0.1"
+    ],
+    "escalade": [
+      "3.2.0"
+    ],
+    "escape-goat": [
+      "3.0.0"
+    ],
+    "escape-html": [
+      "1.0.3"
+    ],
+    "escape-string-regexp": [
+      "4.0.0"
+    ],
+    "fast-equals": [
+      "5.2.2",
+      "5.4.2"
+    ],
+    "fflate": [
+      "0.8.3"
+    ],
+    "file-uri-to-path": [
+      "1.0.0"
+    ],
+    "flat": [
+      "5.0.2"
+    ],
+    "get-caller-file": [
+      "2.0.5"
+    ],
+    "get-east-asian-width": [
+      "1.6.0"
+    ],
+    "get-nonce": [
+      "1.0.1"
+    ],
+    "happy-dom": [
+      "21.0.4"
+    ],
+    "harfbuzzjs": [
+      "0.10.0"
+    ],
+    "hex-rgb": [
+      "4.3.0"
+    ],
+    "hono": [
+      "4.13.17"
+    ],
+    "htmlparser2": [
+      "12.0.0",
+      "10.1.0",
+      "9.1.0"
+    ],
+    "iconv-lite": [
+      "0.6.3"
+    ],
+    "is-plain-object": [
+      "5.1.0"
+    ],
+    "jose": [
+      "6.2.16"
+    ],
+    "juice": [
+      "12.2.1"
+    ],
+    "launder": [
+      "1.7.2"
+    ],
+    "lilconfig": [
+      "3.1.3"
+    ],
+    "linebreak": [
+      "1.1.0"
+    ],
+    "linkifyjs": [
+      "4.3.3"
+    ],
+    "mdn-data": [
+      "2.27.1"
+    ],
+    "mime": [
+      "2.6.0"
+    ],
+    "mitt": [
+      "3.0.1"
+    ],
+    "modern-tar": [
+      "0.8.6"
+    ],
+    "nanoid": [
+      "3.3.20"
+    ],
+    "node-addon-api": [
+      "8.9.2"
+    ],
+    "nodemailer": [
+      "10.4.0"
+    ],
+    "nth-check": [
+      "2.1.1"
+    ],
+    "object-hash": [
+      "3.0.0"
+    ],
+    "orderedmap": [
+      "2.1.1"
+    ],
+    "pako": [
+      "0.2.9"
+    ],
+    "parse-css-color": [
+      "0.2.1"
+    ],
+    "parse-srcset": [
+      "1.0.2"
+    ],
+    "parse5": [
+      "7.3.0"
+    ],
+    "parse5-htmlparser2-tree-adapter": [
+      "7.1.0"
+    ],
+    "parse5-parser-stream": [
+      "7.1.2"
+    ],
+    "picocolors": [
+      "1.1.1"
+    ],
+    "postcss": [
+      "8.5.32"
+    ],
+    "postcss-nesting": [
+      "14.0.3"
+    ],
+    "postcss-safe-parser": [
+      "7.1.0"
+    ],
+    "postcss-selector-parser": [
+      "7.2.0"
+    ],
+    "postcss-value-parser": [
+      "4.2.0"
+    ],
+    "postgres": [
+      "4.1.0"
+    ],
+    "prettier": [
+      "3.9.10"
+    ],
+    "prosemirror-changeset": [
+      "2.4.6"
+    ],
+    "prosemirror-commands": [
+      "1.7.2"
+    ],
+    "prosemirror-dropcursor": [
+      "1.8.4"
+    ],
+    "prosemirror-gapcursor": [
+      "1.4.1"
+    ],
+    "prosemirror-history": [
+      "1.5.1"
+    ],
+    "prosemirror-inputrules": [
+      "1.5.1"
+    ],
+    "prosemirror-keymap": [
+      "1.2.3"
+    ],
+    "prosemirror-model": [
+      "1.25.13"
+    ],
+    "prosemirror-schema-list": [
+      "1.5.1"
+    ],
+    "prosemirror-state": [
+      "1.4.4"
+    ],
+    "prosemirror-tables": [
+      "1.8.5"
+    ],
+    "prosemirror-transform": [
+      "1.12.5",
+      "1.12.1"
+    ],
+    "prosemirror-view": [
+      "1.42.9",
+      "1.42.3"
+    ],
+    "puppeteer": [
+      "25.16.0"
+    ],
+    "puppeteer-core": [
+      "25.16.0"
+    ],
+    "react": [
+      "19.3.1"
+    ],
+    "react-day-picker": [
+      "10.0.2"
+    ],
+    "react-dom": [
+      "19.3.1"
+    ],
+    "react-hotkeys-hook": [
+      "4.6.2"
+    ],
+    "react-remove-scroll": [
+      "2.7.2"
+    ],
+    "react-remove-scroll-bar": [
+      "2.3.8"
+    ],
+    "react-style-singleton": [
+      "2.2.3"
+    ],
+    "reselect": [
+      "5.3.0"
+    ],
+    "rope-sequence": [
+      "1.3.4"
+    ],
+    "safer-buffer": [
+      "2.1.2"
+    ],
+    "sanitize-html": [
+      "2.18.1"
+    ],
+    "satori": [
+      "0.63.2"
+    ],
+    "scheduler": [
+      "0.28.0"
+    ],
+    "semver": [
+      "7.8.6"
+    ],
+    "sharp": [
+      "0.35.5"
+    ],
+    "source-map-js": [
+      "1.2.2"
+    ],
+    "string-width": [
+      "8.2.2",
+      "7.2.0"
+    ],
+    "string.prototype.codepointat": [
+      "0.2.1"
+    ],
+    "strip-ansi": [
+      "7.2.0"
+    ],
+    "style-mod": [
+      "4.1.4"
+    ],
+    "tiny-inflate": [
+      "1.0.3"
+    ],
+    "tslib": [
+      "2.9.1"
+    ],
+    "typed-query-selector": [
+      "2.12.3"
+    ],
+    "undici": [
+      "8.12.4"
+    ],
+    "undici-types": [
+      "8.9.0"
+    ],
+    "unicode-trie": [
+      "2.0.0"
+    ],
+    "use-callback-ref": [
+      "1.3.3"
+    ],
+    "use-debounce": [
+      "9.0.4"
+    ],
+    "use-sidecar": [
+      "1.1.3"
+    ],
+    "use-sync-external-store": [
+      "1.7.0"
+    ],
+    "util-deprecate": [
+      "1.0.2"
+    ],
+    "valid-data-url": [
+      "3.0.1"
+    ],
+    "w3c-keyname": [
+      "2.2.8"
+    ],
+    "web-resource-inliner": [
+      "8.0.0"
+    ],
+    "webdriver-bidi-protocol": [
+      "1.0.1"
+    ],
+    "whatwg-encoding": [
+      "3.1.1"
+    ],
+    "whatwg-mimetype": [
+      "3.0.0",
+      "4.0.0"
+    ],
+    "wrap-ansi": [
+      "9.0.2"
+    ],
+    "ws": [
+      "8.22.2",
+      "8.21.3"
+    ],
+    "y18n": [
+      "5.0.8"
+    ],
+    "yargs": [
+      "18.1.0"
+    ],
+    "yargs-parser": [
+      "22.0.0"
+    ],
+    "zod": [
+      "4.6.7"
+    ],
+    "zustand": [
+      "5.1.0"
+    ],
+    "@tiptap/extension-bullet-list": [
+      "3.33.0"
+    ],
+    "@tiptap/extension-list-item": [
+      "3.33.0"
+    ],
+    "@tiptap/extension-list-keymap": [
+      "3.33.0"
+    ],
+    "@tiptap/extension-ordered-list": [
+      "3.33.0"
+    ]
+  },
+  "advisories": {}
+}

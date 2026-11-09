@@ -14,7 +14,14 @@ const CONTENT = {
 
 const name = activeLetterName();
 const active = CONTENT[name] || example;
-const localized = (LANG !== DEFAULT_LANG && active[LANG]) || {};
+export function contentFor(lang) {
+  const localized = (lang !== DEFAULT_LANG && active[lang]) || {};
+  return {
+    LetterArticle: localized.LetterArticle || active.LetterArticle,
+    FaqContent: localized.FaqContent || active.FaqContent,
+  };
+}
+const localized = contentFor(LANG);
 
 export const LetterArticle = localized.LetterArticle || active.LetterArticle;
 export const FaqContent = localized.FaqContent || active.FaqContent;

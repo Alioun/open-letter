@@ -1,36 +1,73 @@
-import { useCallback, useEffect, useState } from "react";
-import cfg, { LANGUAGES, DEFAULT_LANG } from "../config/letter.config.js";
-import AdminCopy from "./AdminCopy.jsx";
-import { regionLabels } from "../config/region.js";
-import { DayPicker } from "react-day-picker";
-import { format, parse, isValid } from "date-fns";
-import { de } from "date-fns/locale";
-import { EditorContent, useEditor } from "@tiptap/react";
-import StarterKit from "@tiptap/starter-kit";
-import Placeholder from "@tiptap/extension-placeholder";
-import CharacterCount from "@tiptap/extension-character-count";
-import Link from "@tiptap/extension-link";
-import Underline from "@tiptap/extension-underline";
+import { Input } from "@base-ui/react/input";
+import { Checkbox } from "@base-ui/react/checkbox";
+import { Choice, SelectControl } from "./ui.jsx";
 import {
-  Mark,
-  mergeAttributes,
-  markInputRule,
-  markPasteRule,
-} from "@tiptap/core";
+  isCampaignTemplate,
+  campaignText,
+} from "../config/campaign-templates.js";
+import { useCallback, useEffect, useState, useId, useRef } from "react";
+import { Collapsible } from "@base-ui/react/collapsible";
+import { Button } from "@base-ui/react/button";
+import cfg, { LANGUAGES, DEFAULT_LANG } from "../config/letter.config.js";
+import AdminPublisher from "./publishing/AdminPublisher.jsx";
+import EmailSetup from "./EmailSetup.jsx";
+import EmailFailure from "./EmailFailure.jsx";
+import AdminStatistics from "./AdminStatistics.jsx";
+import CampaignTestLanguage from "./CampaignTestLanguage.jsx";
+import CampaignMessageFields from "./CampaignMessageFields.jsx";
+import SelectedRecipients from "./SelectedRecipients.jsx";
+import CampaignAudit from "./CampaignAudit.jsx";
+import CampaignRetryReview from "./CampaignRetryReview.jsx";
+import ZoomMailingRecovery from "./ZoomMailingRecovery.jsx";
+import ZoomRegistrations from "./ZoomRegistrations.jsx";
+import MeetingDeliveryReview from "./MeetingDeliveryReview.jsx";
+import MeetingSettings from "./MeetingSettings.jsx";
+import { useMeetingForm } from "./meeting-form.js";
+import MilestoneSettings from "./MilestoneSettings.jsx";
+import { useMilestoneForm } from "./milestone-form.js";
+import { useAdminRead, AdminReadStatus, readAdminJson } from "./admin-read.jsx";
+import {
+  futureCampaignDate,
+  useCampaignDraft,
+  useCampaignSubmission,
+  campaignTemplatesAvailable,
+} from "./campaign-draft.js";
+import { campaignSchedule } from "../config/campaign-schedule.js";
+import {
+  readCampaignAudience,
+  readCampaignRetryReview,
+  readCampaignSubjectExamples,
+} from "./campaign-approval.js";
+import { regionLabels } from "../config/region.js";
+import { adminAreaFromHash, SETTINGS_SECTIONS } from "./admin-navigation.js";
+import { useAdminSession } from "./admin-session.js";
+import { signerDateRange } from "./signer-filters.js";
+import AdminLogin from "./AdminLogin.jsx";
+import { Calendar, ConfirmDialog } from "./ui.jsx";
+import { format, parse, isValid } from "date-fns";
+import { de } from "react-day-picker/locale";
 
 const region = regionLabels(cfg);
-// Bundesland filter, column and card only make sense with state resolution.
-const STATES_ON = Boolean(cfg.features?.stateResolution);
-const OCCUPATION_ON = Boolean(cfg.features?.occupationField);
-
-const TOKEN_KEY = "open_letter_admin_token";
 const AUDIENCE_LABELS = {
-  newsletter: "Newsletter-Unterschreiber",
+  newsletter: "Newsletter-Empfänger",
   zoom: "Zoom-Anmelder",
   zoom_delegates: "Delegierte (Zoom)",
-  email_not_zoom: "Newsletter-Unterschreiber ohne Zoom-Anmeldung",
+  email_not_zoom: "Newsletter-Empfänger ohne Zoom-Anmeldung",
   selection: "Auswahl",
 };
+
+function ScheduleCalendar(props) {
+  return (
+    <Collapsible.Root className="schedule-calendar">
+      <Collapsible.Trigger className="admin-button">
+        Datum im Kalender wählen <span aria-hidden="true">▾</span>
+      </Collapsible.Trigger>
+      <Collapsible.Panel>
+        <Calendar mode="single" locale={de} {...props} />
+      </Collapsible.Panel>
+    </Collapsible.Root>
+  );
+}
 
 function zoomMailingStatus(mailings, kind) {
   const m = (mailings || []).find((x) => x.kind === kind);
@@ -45,7 +82,7 @@ function zoomMailingStatus(mailings, kind) {
   if (m.status === "sending") return "läuft …";
   if (m.status === "failed") return "fehlgeschlagen, wird erneut versucht";
   if (m.status === "aborted")
-    return "abgebrochen nach wiederholten Fehlern. Server-Log prüfen";
+    return "nach mehreren Fehlern angehalten · Versand prüfen";
   return m.status;
 }
 const GERMAN_STATES = [
@@ -66,80 +103,16 @@ const GERMAN_STATES = [
   "Schleswig-Holstein",
   "Thüringen",
 ];
-const variables = [
-  "name",
-  "firstName",
-  "confirmUrl",
-  "deleteUrl",
-  "signerCount",
-  "unsubscribeUrl",
-  "eventLabel",
-  "eventWhen",
-  "zoomJaUrl",
-  "zoomJaDelegiertUrl",
-];
-
-const TemplateVariable = Mark.create({
-  name: "templateVariable",
-
-  parseHTML() {
-    return [{ tag: "span[data-template-variable]" }];
-  },
-
-  renderHTML({ HTMLAttributes }) {
-    return [
-      "span",
-      mergeAttributes(HTMLAttributes, { "data-template-variable": "" }),
-      0,
-    ];
-  },
-
-  addInputRules() {
-    return [
-      markInputRule({
-        find: /(\{\{\s*(?:name|confirmUrl|deleteUrl|signerCount|unsubscribeUrl)\s*\}\})$/,
-        type: this.type,
-      }),
-    ];
-  },
-
-  addPasteRules() {
-    return [
-      markPasteRule({
-        find: /\{\{\s*(?:name|confirmUrl|deleteUrl|signerCount|unsubscribeUrl)\s*\}\}/g,
-        type: this.type,
-      }),
-    ];
-  },
-});
-
-function authHeaders(token) {
-  return {
-    "Content-Type": "application/json",
-    Authorization: `Bearer ${token}`,
-  };
-}
-
-// ISO timestamp -> value for <input type="datetime-local"> in browser-local time.
-function isoToLocalInput(iso) {
-  const d = new Date(iso);
-  if (Number.isNaN(d.getTime())) return "";
-  const pad = (n) => String(n).padStart(2, "0");
-  return (
-    `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}` +
-    `T${pad(d.getHours())}:${pad(d.getMinutes())}`
-  );
-}
 
 // Further languages of the letter (features.multiLanguage); empty otherwise,
 // and then the campaign forms look and send exactly as before.
-const EXTRA_LANGS = LANGUAGES.filter((l) => l !== DEFAULT_LANG);
+const extraLanguages = () => LANGUAGES.filter((l) => l !== DEFAULT_LANG);
 
 // The campaign's `i18n` field from the per-language inputs: only languages
 // with a template or subject of their own; the rest get the default text.
 function campaignI18n(texts) {
   const out = {};
-  for (const l of EXTRA_LANGS) {
+  for (const l of extraLanguages()) {
     const t = texts[l] || {};
     const entry = {};
     if (t.templateId) entry.templateId = Number(t.templateId);
@@ -152,361 +125,100 @@ function campaignI18n(texts) {
 // A template and subject per further language. Recipients whose language has
 // neither get the default text above.
 function CampaignLanguages({ templates, value, onChange }) {
-  if (EXTRA_LANGS.length === 0) return null;
+  if (extraLanguages().length === 0) return null;
   const set = (l, patch) =>
     onChange({ ...value, [l]: { ...(value[l] || {}), ...patch } });
-  return EXTRA_LANGS.map((l) => {
+  return extraLanguages().map((l) => {
     const code = l.toUpperCase();
     const t = value[l] || {};
     return (
       <div key={l}>
-        <div className="field">
-          <label>Vorlage ({code})</label>
-          <select
-            value={t.templateId || ""}
-            onChange={(e) => {
-              const template = templates.find(
-                (item) => String(item.id) === e.target.value,
-              );
-              set(l, {
-                templateId: e.target.value,
-                ...(template && { subject: template.subject }),
-              });
-            }}
-          >
-            <option value="">wie Standardsprache</option>
-            {templates.map((template) => (
-              <option key={template.id} value={template.id}>
-                {template.name}
-              </option>
-            ))}
-          </select>
-        </div>
-        <div className="field">
-          <label>Betreff ({code})</label>
-          <input
-            value={t.subject || ""}
-            placeholder="wie Standardsprache"
-            onChange={(e) => set(l, { subject: e.target.value })}
-          />
-        </div>
+        <CampaignMessageFields
+          templates={templates}
+          templateId={t.templateId || ""}
+          subject={t.subject || ""}
+          onTemplateChange={(templateId) => set(l, { templateId })}
+          onSubjectChange={(subject) => set(l, { subject })}
+          labelSuffix={` (${code})`}
+          allowFallback
+        />
       </div>
     );
   });
 }
 
 function StatusBadge({ status }) {
-  return <span className={`admin-status status-${status}`}>{status}</span>;
-}
-
-function ToolbarButton({ active, children, onClick, title }) {
   return (
-    <button
-      type="button"
-      className={active ? "active" : ""}
-      onClick={onClick}
-      title={title}
-      aria-label={title}
-    >
-      {children}
-    </button>
-  );
-}
-
-function TemplateEditor({ token, template, onSaved, onDeleted }) {
-  const [subject, setSubject] = useState(template?.subject || "");
-  const [htmlBody, setHtmlBody] = useState(template?.html_body || "");
-  const [preview, setPreview] = useState("");
-  const [saving, setSaving] = useState(false);
-  const [saved, setSaved] = useState(false);
-  const [message, setMessage] = useState("");
-  const [linkInput, setLinkInput] = useState(null);
-
-  const editor = useEditor({
-    extensions: [
-      StarterKit,
-      Underline,
-      Link.configure({ openOnClick: false }),
-      Placeholder.configure({ placeholder: "E-Mail-Text schreiben ..." }),
-      CharacterCount.configure({ limit: 20000 }),
-      TemplateVariable,
-    ],
-    content: htmlBody,
-    immediatelyRender: false,
-    onUpdate({ editor }) {
-      setHtmlBody(editor.getHTML());
-    },
-  });
-
-  useEffect(() => {
-    setSubject(template?.subject || "");
-    setHtmlBody(template?.html_body || "");
-    setMessage("");
-    if (editor && !editor.isDestroyed) {
-      editor.commands.setContent(template?.html_body || "", false);
-    }
-  }, [template, editor]);
-
-  useEffect(() => {
-    if (!htmlBody) {
-      setPreview("");
-      return;
-    }
-    const timer = setTimeout(async () => {
-      const res = await fetch("/api/admin/preview", {
-        method: "POST",
-        headers: authHeaders(token),
-        body: JSON.stringify({ html_body: htmlBody }),
-      });
-      if (res.ok) {
-        const data = await res.json();
-        setPreview(data.html);
-      }
-    }, 350);
-    return () => clearTimeout(timer);
-  }, [htmlBody, token]);
-
-  const setLink = useCallback(() => {
-    if (!editor) return;
-    const previous = editor.getAttributes("link").href || "";
-    setLinkInput(previous);
-  }, [editor]);
-
-  const applyLink = useCallback(() => {
-    if (!editor || linkInput === null) return;
-    const href = linkInput.trim();
-    if (!href) {
-      editor.chain().focus().extendMarkRange("link").unsetLink().run();
-    } else {
-      editor.chain().focus().extendMarkRange("link").setLink({ href }).run();
-    }
-    setLinkInput(null);
-  }, [editor, linkInput]);
-
-  async function save() {
-    setSaving(true);
-    setSaved(false);
-    setMessage("");
-    const start = Date.now();
-    const res = await fetch(`/api/admin/templates/${template.id}`, {
-      method: "PUT",
-      headers: authHeaders(token),
-      body: JSON.stringify({ subject, html_body: htmlBody }),
-    });
-    const elapsed = Date.now() - start;
-    if (elapsed < 600) await new Promise((r) => setTimeout(r, 600 - elapsed));
-    setSaving(false);
-    if (!res.ok) {
-      setMessage("Speichern fehlgeschlagen.");
-      return;
-    }
-    const updated = await res.json();
-    setSaved(true);
-    onSaved(updated);
-    setTimeout(() => setSaved(false), 2000);
-  }
-
-  if (!template) return <div className="admin-empty">Vorlage auswählen.</div>;
-
-  return (
-    <div className="admin-editor-grid">
-      <div className="admin-card editor-card">
-        <div className="field">
-          <label>Betreff</label>
-          <input value={subject} onChange={(e) => setSubject(e.target.value)} />
-        </div>
-
-        <div className="editor-toolbar" aria-label="Editor-Werkzeuge">
-          <ToolbarButton
-            title="Fett"
-            active={editor?.isActive("bold")}
-            onClick={() => editor?.chain().focus().toggleBold().run()}
-          >
-            B
-          </ToolbarButton>
-          <ToolbarButton
-            title="Kursiv"
-            active={editor?.isActive("italic")}
-            onClick={() => editor?.chain().focus().toggleItalic().run()}
-          >
-            I
-          </ToolbarButton>
-          <ToolbarButton
-            title="Unterstrichen"
-            active={editor?.isActive("underline")}
-            onClick={() => editor?.chain().focus().toggleUnderline().run()}
-          >
-            U
-          </ToolbarButton>
-          <ToolbarButton
-            title="Durchgestrichen"
-            active={editor?.isActive("strike")}
-            onClick={() => editor?.chain().focus().toggleStrike().run()}
-          >
-            S
-          </ToolbarButton>
-          <ToolbarButton
-            title="H2"
-            active={editor?.isActive("heading", { level: 2 })}
-            onClick={() =>
-              editor?.chain().focus().toggleHeading({ level: 2 }).run()
-            }
-          >
-            H2
-          </ToolbarButton>
-          <ToolbarButton
-            title="H3"
-            active={editor?.isActive("heading", { level: 3 })}
-            onClick={() =>
-              editor?.chain().focus().toggleHeading({ level: 3 }).run()
-            }
-          >
-            H3
-          </ToolbarButton>
-          <ToolbarButton
-            title="Liste"
-            active={editor?.isActive("bulletList")}
-            onClick={() => editor?.chain().focus().toggleBulletList().run()}
-          >
-            •
-          </ToolbarButton>
-          <ToolbarButton
-            title="Nummerierte Liste"
-            active={editor?.isActive("orderedList")}
-            onClick={() => editor?.chain().focus().toggleOrderedList().run()}
-          >
-            1.
-          </ToolbarButton>
-          <ToolbarButton
-            title="Zitat"
-            active={editor?.isActive("blockquote")}
-            onClick={() => editor?.chain().focus().toggleBlockquote().run()}
-          >
-            ”
-          </ToolbarButton>
-          <ToolbarButton
-            title="Link"
-            active={editor?.isActive("link")}
-            onClick={setLink}
-          >
-            ↗
-          </ToolbarButton>
-          <ToolbarButton
-            title="Trennlinie"
-            onClick={() => editor?.chain().focus().setHorizontalRule().run()}
-          >
-            -
-          </ToolbarButton>
-          <ToolbarButton
-            title="Rückgängig"
-            onClick={() => editor?.chain().focus().undo().run()}
-          >
-            ↶
-          </ToolbarButton>
-          <ToolbarButton
-            title="Wiederholen"
-            onClick={() => editor?.chain().focus().redo().run()}
-          >
-            ↷
-          </ToolbarButton>
-        </div>
-
-        {linkInput !== null && (
-          <div
-            className="link-input-row"
-            role="dialog"
-            aria-modal="false"
-            aria-label="Link einfügen"
-          >
-            <input
-              autoFocus
-              type="url"
-              placeholder="https://..."
-              value={linkInput}
-              onChange={(e) => setLinkInput(e.target.value)}
-              onKeyDown={(e) => {
-                if (e.key === "Enter") applyLink();
-                if (e.key === "Escape") setLinkInput(null);
-              }}
-            />
-            <button type="button" onClick={applyLink}>
-              OK
-            </button>
-            <button
-              type="button"
-              aria-label="Abbrechen"
-              onClick={() => setLinkInput(null)}
-            >
-              ✕
-            </button>
-          </div>
-        )}
-
-        <div className="admin-editor-surface">
-          <EditorContent editor={editor} />
-        </div>
-
-        <div className="admin-variable-row">
-          {variables.map((variable) => (
-            <button
-              type="button"
-              key={variable}
-              onClick={() =>
-                editor
-                  ?.chain()
-                  .focus()
-                  .insertContent(
-                    `<span data-template-variable>{{${variable}}}</span>`,
-                  )
-                  .run()
-              }
-            >
-              {`{{${variable}}}`}
-            </button>
-          ))}
-        </div>
-
-        <div className="admin-actions">
-          <button
-            type="button"
-            className={"cta" + (saved ? " cta--saved" : "")}
-            onClick={save}
-            disabled={saving || saved}
-          >
-            {saving ? "Speichert …" : saved ? "Gespeichert ✓" : "Speichern"}
-          </button>
-          {!template.system && (
-            <button
-              type="button"
-              className="admin-danger"
-              onClick={() => onDeleted(template.id)}
-            >
-              Löschen
-            </button>
-          )}
-          <span>{message}</span>
-        </div>
-      </div>
-
-      <aside className="admin-card preview-card">
-        <div className="admin-card-title">Vorschau</div>
-        <iframe title="E-Mail Vorschau" sandbox="" srcDoc={preview} />
-      </aside>
-    </div>
+    <span className={`admin-status status-${status}`}>
+      {{
+        scheduled: "Geplant",
+        sending: "Wird gesendet",
+        sent: "Gesendet",
+        failed: "Wird erneut versucht",
+        aborted: "Angehalten",
+        cancelled: "Abgesagt",
+      }[status] || status}
+    </span>
   );
 }
 
 export default function AdminApp() {
-  const [token, setToken] = useState(
-    () => localStorage.getItem(TOKEN_KEY) || "",
-  );
-  const [password, setPassword] = useState("");
-  const [loginError, setLoginError] = useState("");
-  const [tab, setTab] = useState("templates");
+  const fieldId = useId();
+  const STATES_ON = Boolean(cfg.features.stateResolution);
+  const OCCUPATION_ON = Boolean(cfg.features.occupationField);
+  const [confirmation, setConfirmation] = useState(null);
+  const askConfirmation = (
+    message,
+    returnFocus = document.activeElement,
+    confirmLabel,
+  ) =>
+    new Promise((resolve) =>
+      setConfirmation({ message, resolve, returnFocus, confirmLabel }),
+    );
+  const resolveConfirmation = (value) => {
+    confirmation?.resolve(value);
+    setConfirmation(null);
+  };
+
+  const {
+    token,
+    status: sessionStatus,
+    api,
+    signIn,
+    signOut,
+  } = useAdminSession();
+  const [notice, setNotice] = useState("");
+  const [bootstrapErrors, setBootstrapErrors] = useState([]);
+  const [bootstrapLoading, setBootstrapLoading] = useState(false);
+  const [campaignFeedback, setCampaignFeedback] = useState(null);
+  const [tab, setTab] = useState(() => {
+    return adminAreaFromHash(
+      typeof window === "undefined" ? "" : window.location.hash,
+    );
+  });
+  const focusDestination = useRef(false);
+  const destinationHeading = useRef(null);
+  useEffect(() => {
+    if (!token) return;
+    const section =
+      tab === "settings" &&
+      SETTINGS_SECTIONS.find(([id]) => window.location.hash === `#${id}`);
+    if (!focusDestination.current && !section) return;
+    const frame = requestAnimationFrame(() => {
+      focusDestination.current = false;
+      const target = section
+        ? document.getElementById(section[0])
+        : destinationHeading.current;
+      if (section) target?.scrollIntoView({ block: "start" });
+      else window.scrollTo({ top: 0, left: 0, behavior: "instant" });
+      target?.focus({ preventScroll: true });
+    });
+    return () => cancelAnimationFrame(frame);
+  }, [tab, token]);
+  const [emailStatus, setEmailStatus] = useState(null);
+  const [emailDirty, setEmailDirty] = useState(false);
+  const [statisticsDirty, setStatisticsDirty] = useState(false);
   const [templates, setTemplates] = useState([]);
-  const [selectedId, setSelectedId] = useState(null);
-  const [selectedTemplate, setSelectedTemplate] = useState(null);
-  const [campaigns, setCampaigns] = useState([]);
   const [stats, setStats] = useState({
     signerCount: 0,
     subscriberCount: 0,
@@ -514,18 +226,51 @@ export default function AdminApp() {
     zoomCount: 0,
     zoomDelegateCount: 0,
   });
-  const [newName, setNewName] = useState("");
-  const [scheduleTemplate, setScheduleTemplate] = useState("");
-  const [scheduleSubject, setScheduleSubject] = useState("");
-  const [scheduleTexts, setScheduleTexts] = useState({});
-  const [audience, setAudience] = useState("newsletter");
-  const [selectedDate, setSelectedDate] = useState(new Date());
-  const [selectedTime, setSelectedTime] = useState("10:00");
-  const [testEmail, setTestEmail] = useState("");
-  const [testStatus, setTestStatus] = useState(null);
-  const [dateInput, setDateInput] = useState(() =>
-    format(new Date(), "dd.MM.yyyy"),
+  const newCampaignDraft = () => {
+    const date = futureCampaignDate();
+    return {
+      template: "",
+      subject: "",
+      texts: {},
+      audience: "newsletter",
+      date,
+      dateInput: format(date, "dd.MM.yyyy"),
+      time: "10:00",
+      language: DEFAULT_LANG,
+      recipientIds: [],
+    };
+  };
+  const campaignDraft = useCampaignDraft(
+    "open-letter-campaign-draft",
+    newCampaignDraft,
   );
+  const selectionDraft = useCampaignDraft(
+    "open-letter-selection-draft",
+    newCampaignDraft,
+  );
+  const campaignSubmission = useCampaignSubmission(
+    "open-letter-campaign-submission",
+  );
+  const selectionSubmission = useCampaignSubmission(
+    "open-letter-selection-submission",
+  );
+  const [scheduleTemplate, setScheduleTemplate] =
+    campaignDraft.field("template");
+  const [scheduleSubject, setScheduleSubject] = campaignDraft.field("subject");
+  const [scheduleTexts, setScheduleTexts] = campaignDraft.field("texts");
+  const [audience, setAudience] = campaignDraft.field("audience");
+  const [selectedDate, setSelectedDate] = campaignDraft.field("date");
+  const [selectedTime, setSelectedTime] = campaignDraft.field("time");
+  const [dateInput, setDateInput] = campaignDraft.field("dateInput");
+  const [testEmail, setTestEmail] = useState("");
+  const [testLanguage, setTestLanguage] = campaignDraft.field("language");
+  const [selTestLanguage, setSelTestLanguage] =
+    selectionDraft.field("language");
+  const [testStatus, setTestStatus] = useState(null);
+  const [scheduleError, setScheduleError] = useState("");
+  const [selectionScheduleError, setSelectionScheduleError] = useState("");
+  const scheduleDateField = useRef(null);
+  const selectionDateField = useRef(null);
   const [stateResolution, setStateResolution] = useState(null);
   const [resolving, setResolving] = useState(false);
   const [resolveMessage, setResolveMessage] = useState("");
@@ -536,33 +281,79 @@ export default function AdminApp() {
   const [assigningKv, setAssigningKv] = useState(null);
   const [occOutlierGroups, setOccOutlierGroups] = useState([]);
   const [occMerging, setOccMerging] = useState(null);
-  const [zoomRegs, setZoomRegs] = useState([]);
-  const [zoomMailings, setZoomMailings] = useState(null);
+  const [selectingAll, setSelectingAll] = useState(false);
+  const [selectionFeedback, setSelectionFeedback] = useState("");
+  const [campaignAction, setCampaignAction] = useState(null);
+  const [campaignActionFeedback, setCampaignActionFeedback] = useState("");
+  const [campaignFeedbackId, setCampaignFeedbackId] = useState(null);
   const [zoomTestEmail, setZoomTestEmail] = useState("");
   const [zoomTestStatus, setZoomTestStatus] = useState(null);
   const [zoomClearStatus, setZoomClearStatus] = useState(null);
-  const [zoomEventAtInput, setZoomEventAtInput] = useState("");
-  const [zoomLinkInput, setZoomLinkInput] = useState("");
-  const [zoomLinkOffset, setZoomLinkOffset] = useState(24);
-  const [zoomReminderOffset, setZoomReminderOffset] = useState(2);
-  // Ported operational Treffen settings (admin-editable, no redeploy).
-  const [zoomShowDelegierter, setZoomShowDelegierter] = useState(false);
-  const [zoomMode, setZoomMode] = useState("online");
-  const [zoomLocationName, setZoomLocationName] = useState("");
-  const [zoomLocationAddress, setZoomLocationAddress] = useState("");
-  const [zoomLocationMapsUrl, setZoomLocationMapsUrl] = useState("");
-  const [zoomEventLabel, setZoomEventLabel] = useState("");
-  const [zoomNavLabel, setZoomNavLabel] = useState("");
-  const [zoomDurationMin, setZoomDurationMin] = useState(90);
-  const [zoomSettingsStatus, setZoomSettingsStatus] = useState(null);
-  const [milestonesInput, setMilestonesInput] = useState("");
-  const [milestonesStatus, setMilestonesStatus] = useState(null);
+  const meetingForm = useMeetingForm({
+    api,
+    enabled: sessionStatus === "active" && tab === "zoom",
+    onAudience: setStats,
+    confirmDelivery: ({ impact, audience, templates, returnFocus }) =>
+      askConfirmation(
+        <MeetingDeliveryReview
+          impact={impact}
+          audience={audience}
+          templates={templates}
+          defaultLanguage={DEFAULT_LANG}
+          ready={emailStatus?.ready}
+        />,
+        returnFocus,
+        "Termin & Versand freigeben",
+      ),
+  });
+  const milestoneForm = useMilestoneForm(api);
+  const zoomDirty = meetingForm.dirty;
+  const settingsDirty = emailDirty || statisticsDirty || milestoneForm.dirty;
+  async function navigate(next) {
+    if (next === tab) return;
+    const dirty =
+      (tab === "zoom" && zoomDirty) || (tab === "settings" && settingsDirty);
+    if (
+      dirty &&
+      !(await askConfirmation(
+        "Ungespeicherte Einstellungen verwerfen und den Bereich wechseln?",
+        document
+          .querySelector('button[aria-label="Admin Bereich"]')
+          ?.getClientRects().length
+          ? document.querySelector('button[aria-label="Admin Bereich"]')
+          : document.activeElement,
+      ))
+    )
+      return;
+    if (tab === "zoom") meetingForm.reset();
+    if (tab === "settings") milestoneForm.reset();
+    focusDestination.current = true;
+    setTab(next);
+    window.history.replaceState(window.history.state, "", `#${next}`);
+  }
+  useEffect(() => {
+    const guard = (e) => {
+      if (
+        zoomDirty ||
+        settingsDirty ||
+        campaignDraft.error ||
+        selectionDraft.error
+      ) {
+        e.preventDefault();
+        e.returnValue = "";
+      }
+    };
+    window.addEventListener("beforeunload", guard);
+    return () => window.removeEventListener("beforeunload", guard);
+  }, [zoomDirty, settingsDirty, campaignDraft.error, selectionDraft.error]);
 
   // Unterzeichner (newsletter signer list) tab
   const SIGNER_PAGE_SIZE = 25;
   const [signerRows, setSignerRows] = useState([]);
   const [signerTotal, setSignerTotal] = useState(0);
   const [signerLoading, setSignerLoading] = useState(false);
+  const [signerError, setSignerError] = useState("");
+  const [signerAttempt, setSignerAttempt] = useState(0);
   const [signerSearch, setSignerSearch] = useState("");
   const [signerStateFilter, setSignerStateFilter] = useState("");
   const [signerKvFilter, setSignerKvFilter] = useState("");
@@ -574,40 +365,41 @@ export default function AdminApp() {
     states: [],
     kvs: [],
   });
-  const [selectedSignerIds, setSelectedSignerIds] = useState(() => new Set());
-  const [selTemplate, setSelTemplate] = useState("");
-  const [selSubject, setSelSubject] = useState("");
-  const [selTexts, setSelTexts] = useState({});
-  const [selDate, setSelDate] = useState(new Date());
-  const [selDateInput, setSelDateInput] = useState(() =>
-    format(new Date(), "dd.MM.yyyy"),
+  const [recipientIds, setRecipientIds] = selectionDraft.field("recipientIds");
+  const selectedSignerIds = new Set(recipientIds);
+  const setSelectedSignerIds = (update) =>
+    setRecipientIds((ids) => [
+      ...(typeof update === "function" ? update(new Set(ids)) : update),
+    ]);
+  const [selTemplate, setSelTemplate] = selectionDraft.field("template");
+  const [selSubject, setSelSubject] = selectionDraft.field("subject");
+  const [selTexts, setSelTexts] = selectionDraft.field("texts");
+  const scheduleTemplateAvailable = campaignTemplatesAvailable(
+    scheduleTemplate,
+    scheduleTexts,
+    templates,
   );
-  const [selTime, setSelTime] = useState("10:00");
+  const selectionTemplateAvailable = campaignTemplatesAvailable(
+    selTemplate,
+    selTexts,
+    templates,
+  );
+  const [selDate, setSelDate] = selectionDraft.field("date");
+  const [selDateInput, setSelDateInput] = selectionDraft.field("dateInput");
+  const [selTime, setSelTime] = selectionDraft.field("time");
   const [selSendStatus, setSelSendStatus] = useState(null);
   const [selTestEmail, setSelTestEmail] = useState("");
   const [selTestStatus, setSelTestStatus] = useState(null);
+  const [selectionAudit, setSelectionAudit] = useState(null);
 
-  // Resolve the active date range (ISO strings) from preset / custom inputs.
-  function signerDateRange() {
-    const now = Date.now();
-    if (signerDatePreset === "24h")
-      return { from: new Date(now - 24 * 3600e3).toISOString(), to: null };
-    if (signerDatePreset === "7d")
-      return { from: new Date(now - 7 * 24 * 3600e3).toISOString(), to: null };
-    if (signerDatePreset === "custom") {
-      const from = signerDateFrom
-        ? new Date(signerDateFrom + "T00:00:00").toISOString()
-        : null;
-      const to = signerDateTo
-        ? new Date(signerDateTo + "T23:59:59").toISOString()
-        : null;
-      return { from, to };
-    }
-    return { from: null, to: null };
-  }
+  const signerRange = signerDateRange(
+    signerDatePreset,
+    signerDateFrom,
+    signerDateTo,
+  );
 
   function signerQuery(extra = {}) {
-    const { from, to } = signerDateRange();
+    const { from, to } = signerRange;
     const params = new URLSearchParams();
     if (signerSearch.trim()) params.set("search", signerSearch.trim());
     if (signerStateFilter) params.set("state", signerStateFilter);
@@ -619,119 +411,168 @@ export default function AdminApp() {
   }
 
   function handleSelDateInput(e) {
+    setSelectionScheduleError("");
     const raw = e.target.value;
     setSelDateInput(raw);
-    if (raw.length === 10) {
-      const parsed = parse(raw, "dd.MM.yyyy", new Date());
-      if (isValid(parsed)) setSelDate(parsed);
-    }
+    const parsed = parse(raw, "dd.MM.yyyy", new Date());
+    setSelDate(raw.length === 10 && isValid(parsed) ? parsed : null);
   }
 
   function handleDateInput(e) {
+    setScheduleError("");
     const raw = e.target.value;
     setDateInput(raw);
-    if (raw.length === 10) {
-      const parsed = parse(raw, "dd.MM.yyyy", new Date());
-      if (isValid(parsed)) setSelectedDate(parsed);
-    }
+    const parsed = parse(raw, "dd.MM.yyyy", new Date());
+    setSelectedDate(raw.length === 10 && isValid(parsed) ? parsed : null);
   }
 
-  const api = useCallback(
-    async (path, options = {}) => {
-      const res = await fetch(path, {
-        ...options,
-        headers: {
-          ...authHeaders(token),
-          ...(options.headers || {}),
-        },
-      });
-      if (res.status === 401) {
-        localStorage.removeItem(TOKEN_KEY);
-        setToken("");
-      }
-      return res;
-    },
-    [token],
+  const campaignRead = useAdminRead(
+    api,
+    "/api/admin/campaigns",
+    Boolean(token) && tab === "campaigns",
+    Array.isArray,
   );
+  const campaigns = campaignRead.data || [];
+  const zoomRegistrationRead = useAdminRead(
+    api,
+    "/api/admin/zoom-registrations",
+    Boolean(token) && tab === "zoom",
+    Array.isArray,
+  );
+  const zoomRegs = zoomRegistrationRead.data || [];
+  const setZoomRegs = zoomRegistrationRead.setData;
+  const zoomMailings = meetingForm.read.data;
+  const zoomShowDelegierter = Boolean(zoomMailings?.showDelegierter);
 
+  const bootstrapRequest = useRef(0);
   const loadAll = useCallback(async () => {
-    if (!token) return;
-    const [
-      templateRes,
-      campaignRes,
-      statsRes,
-      stateRes,
-      outlierRes,
-      unresolvedRes,
-      occOutlierRes,
-      milestonesRes,
-    ] = await Promise.all([
-      api("/api/admin/templates"),
-      api("/api/admin/campaigns"),
-      api("/api/admin/stats"),
-      api("/api/admin/state-resolution-status"),
-      api("/api/admin/kv-outliers"),
-      api("/api/admin/unresolved-kvs"),
-      api("/api/admin/occupation-outliers"),
-      api("/api/admin/milestones"),
-    ]);
-    if (templateRes.ok) {
-      const data = await templateRes.json();
-      setTemplates(data);
-      setSelectedId((current) => current || data[0]?.id || null);
-      setScheduleTemplate((t) => t || (data[0] ? String(data[0].id) : ""));
-      setScheduleSubject((s) => s || (data[0] ? data[0].subject : ""));
-    }
-    if (campaignRes.ok) setCampaigns(await campaignRes.json());
-    if (statsRes.ok) setStats(await statsRes.json());
-    if (stateRes.ok) setStateResolution(await stateRes.json());
-    if (outlierRes.ok) setOutlierGroups(await outlierRes.json());
-    if (unresolvedRes.ok) setUnresolvedKvs(await unresolvedRes.json());
-    if (occOutlierRes.ok) setOccOutlierGroups(await occOutlierRes.json());
-    if (milestonesRes.ok) {
-      const { milestones } = await milestonesRes.json();
-      setMilestonesInput((milestones || []).join(", "));
-    }
-  }, [api, token]);
+    if (sessionStatus !== "active") return;
+    const request = ++bootstrapRequest.current;
+    setBootstrapLoading(true);
+    const sources = [
+      [
+        "Vorlagen",
+        "/api/admin/templates",
+        (data) => setTemplates(data.filter(isCampaignTemplate)),
+      ],
+      ["Empfängerzahlen", "/api/admin/stats", setStats],
+      [
+        "Zuordnungsstatus",
+        "/api/admin/state-resolution-status",
+        setStateResolution,
+      ],
+      ["Regionskorrekturen", "/api/admin/kv-outliers", setOutlierGroups],
+      ["Offene Zuordnungen", "/api/admin/unresolved-kvs", setUnresolvedKvs],
+      [
+        "Tätigkeitskorrekturen",
+        "/api/admin/occupation-outliers",
+        setOccOutlierGroups,
+      ],
+      ["Zielmarken", "/api/admin/milestones", milestoneForm.load],
+    ];
+    const results = await Promise.allSettled(
+      sources.map(async ([, path, apply]) => {
+        const data = await readAdminJson(api, path);
+        if (request === bootstrapRequest.current) apply(data);
+      }),
+    );
+    if (request !== bootstrapRequest.current) return;
+    setBootstrapErrors(
+      sources
+        .filter((_, i) => results[i].status === "rejected")
+        .map(([label]) => label),
+    );
+    setBootstrapLoading(false);
+  }, [api, sessionStatus, milestoneForm.load]);
 
   const reloadCampaigns = useCallback(async () => {
-    const [campaignRes, statsRes] = await Promise.all([
-      api("/api/admin/campaigns"),
-      api("/api/admin/stats"),
-    ]);
-    if (campaignRes.ok) setCampaigns(await campaignRes.json());
-    if (statsRes.ok) setStats(await statsRes.json());
-  }, [api]);
+    await campaignRead.reload();
+    try {
+      setStats(await readAdminJson(api, "/api/admin/stats"));
+    } catch {
+      setNotice(
+        "Die Empfängerzahlen konnten nicht geladen werden. Lade sie erneut.",
+      );
+    }
+  }, [api, campaignRead.reload]);
 
   useEffect(() => {
     loadAll();
+    window.addEventListener("publication-published", loadAll);
+    return () => {
+      bootstrapRequest.current++;
+      window.removeEventListener("publication-published", loadAll);
+    };
   }, [loadAll]);
-
   useEffect(() => {
-    if (!selectedId || !token) return;
-    api(`/api/admin/templates/${selectedId}`).then(async (res) => {
-      if (res.ok) setSelectedTemplate(await res.json());
-    });
-  }, [api, selectedId, token]);
-
-  const loadSigners = useCallback(async () => {
     if (!token) return;
+    const refresh = () =>
+      api("/api/admin/email")
+        .then(async (res) => {
+          if (res.ok) setEmailStatus(await res.json());
+          else setEmailStatus({ ready: false, unavailable: true });
+        })
+        .catch(() => setEmailStatus({ ready: false, unavailable: true }));
+    refresh();
+    window.addEventListener("email-configuration-changed", refresh);
+    return () =>
+      window.removeEventListener("email-configuration-changed", refresh);
+  }, [api, token, tab]);
+
+  // Each result belongs to the filter that requested it, including during debounce.
+  useEffect(() => {
+    if (tab !== "signers" || !token) return;
+    const controller = new AbortController();
+    let current = true;
     setSignerLoading(true);
-    const qs = signerQuery({
-      limit: String(SIGNER_PAGE_SIZE),
-      offset: String(signerPage * SIGNER_PAGE_SIZE),
-    });
-    const res = await api(`/api/admin/newsletter-signers?${qs}`);
-    if (res.ok) {
-      const data = await res.json();
-      setSignerRows(data.signers || []);
-      setSignerTotal(data.total || 0);
+    setSignerRows([]);
+    setSignerTotal(0);
+    setSignerError("");
+    if (signerRange.error) {
+      setSignerLoading(false);
+      return;
     }
-    setSignerLoading(false);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+    const timer = setTimeout(async () => {
+      try {
+        const qs = signerQuery({
+          limit: String(SIGNER_PAGE_SIZE),
+          offset: String(signerPage * SIGNER_PAGE_SIZE),
+        });
+        const res = await api(`/api/admin/newsletter-signers?${qs}`, {
+          signal: controller.signal,
+        });
+        if (!res.ok)
+          throw new Error(
+            "Unterzeichner konnten nicht geladen werden. Deine Auswahl bleibt erhalten.",
+          );
+        const data = await res.json();
+        if (
+          !Array.isArray(data.signers) ||
+          !Number.isInteger(data.total) ||
+          data.total < 0
+        )
+          throw new Error(
+            "Die Unterzeichner konnten nicht geladen werden. Lade die Liste erneut.",
+          );
+        if (current) {
+          setSignerRows(data.signers || []);
+          setSignerTotal(data.total || 0);
+        }
+      } catch (error) {
+        if (current) setSignerError(error.message);
+      } finally {
+        if (current) setSignerLoading(false);
+      }
+    }, 250);
+    return () => {
+      current = false;
+      controller.abort();
+      clearTimeout(timer);
+    };
   }, [
     api,
     token,
+    tab,
     signerPage,
     signerSearch,
     signerStateFilter,
@@ -739,30 +580,25 @@ export default function AdminApp() {
     signerDatePreset,
     signerDateFrom,
     signerDateTo,
+    signerAttempt,
   ]);
-
-  // Debounced fetch when the signers tab is active or its filters change.
-  useEffect(() => {
-    if (tab !== "signers" || !token) return;
-    const t = setTimeout(loadSigners, 250);
-    return () => clearTimeout(t);
-  }, [tab, token, loadSigners]);
 
   // Load filter dropdown options once when entering the signers tab.
   useEffect(() => {
     if (tab !== "signers" || !token) return;
-    api("/api/admin/newsletter-signer-filters").then(async (res) => {
-      if (res.ok) setSignerFilterOpts(await res.json());
-    });
+    readAdminJson(api, "/api/admin/newsletter-signer-filters")
+      .then(setSignerFilterOpts)
+      .catch(() =>
+        setNotice(
+          "Die Filter konnten nicht geladen werden. Öffne den Bereich Unterzeichner erneut.",
+        ),
+      );
   }, [api, tab, token]);
 
-  // Seed the selection send form's template/subject from loaded templates.
   useEffect(() => {
-    if (!selTemplate && templates[0]) {
-      setSelTemplate(String(templates[0].id));
-      setSelSubject(templates[0].subject);
-    }
-  }, [templates, selTemplate]);
+    campaignDraft.initializeTemplate(templates);
+    selectionDraft.initializeTemplate(templates);
+  }, [templates, selTemplate, scheduleTemplate]);
 
   // Reset to first page whenever filters change.
   useEffect(() => {
@@ -776,182 +612,242 @@ export default function AdminApp() {
     signerDateTo,
   ]);
 
-  useEffect(() => {
-    if (tab !== "zoom" || !token) return;
-    api("/api/admin/zoom-registrations").then(async (res) => {
-      if (res.ok) setZoomRegs(await res.json());
-    });
-    api("/api/admin/zoom-mailings").then(async (res) => {
-      if (res.ok) {
-        const data = await res.json();
-        setZoomMailings(data);
-        setZoomEventAtInput(isoToLocalInput(data.eventAt));
-        setZoomLinkInput(data.link || "");
-        setZoomLinkOffset(data.linkOffsetHours ?? 24);
-        setZoomReminderOffset(data.reminderOffsetHours ?? 2);
-        setZoomShowDelegierter(Boolean(data.showDelegierter));
-        setZoomMode(data.mode === "inperson" ? "inperson" : "online");
-        setZoomLocationName(data.location?.name || "");
-        setZoomLocationAddress(data.location?.address || "");
-        setZoomLocationMapsUrl(data.location?.mapsUrl || "");
-        setZoomEventLabel(data.eventLabelFallback || "");
-        setZoomNavLabel(data.navLabel || "");
-        if (data.durationMin) setZoomDurationMin(data.durationMin);
-      }
-    });
-  }, [api, tab, token]);
-
-  async function login(e) {
-    e.preventDefault();
-    setLoginError("");
-    const res = await fetch("/api/admin/login", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ password }),
-    });
-    if (!res.ok) {
-      setLoginError("Anmeldung fehlgeschlagen.");
-      return;
-    }
-    const { token: newToken } = await res.json();
-    localStorage.setItem(TOKEN_KEY, newToken);
-    setToken(newToken);
-    setPassword("");
-    // Bootstrap data immediately with the fresh token; don't wait for the hook chain
-    const h = {
-      "Content-Type": "application/json",
-      Authorization: `Bearer ${newToken}`,
-    };
-    const [tRes, cRes, sRes] = await Promise.all([
-      fetch("/api/admin/templates", { headers: h }),
-      fetch("/api/admin/campaigns", { headers: h }),
-      fetch("/api/admin/stats", { headers: h }),
-    ]);
-    if (tRes.ok) {
-      const data = await tRes.json();
-      setTemplates(data);
-      setSelectedId(data[0]?.id || null);
-      if (data[0]) {
-        setScheduleTemplate(String(data[0].id));
-        setScheduleSubject(data[0].subject);
-      }
-    }
-    if (cRes.ok) setCampaigns(await cRes.json());
-    if (sRes.ok) setStats(await sRes.json());
-  }
-
-  async function createTemplate(e) {
-    e.preventDefault();
-    if (!newName.trim()) return;
-    const res = await api("/api/admin/templates", {
-      method: "POST",
-      body: JSON.stringify({
-        name: newName,
-        subject: "Neuer Newsletter",
-        html_body: "<h2>Neue Nachricht</h2><p>Hallo {{name}},</p><p>...</p>",
-      }),
-    });
-    if (res.ok) {
-      const created = await res.json();
-      setNewName("");
-      setTemplates((prev) => [created, ...prev]);
-      setSelectedId(created.id);
-    }
-  }
-
-  async function deleteTemplate(id) {
-    if (!window.confirm("Diese Vorlage löschen?")) return;
-    const res = await api(`/api/admin/templates/${id}`, { method: "DELETE" });
-    if (res.ok) {
-      setTemplates((prev) => prev.filter((template) => template.id !== id));
-      setSelectedId(
-        templates.find((template) => template.id !== id)?.id || null,
-      );
-    }
-  }
-
   async function scheduleCampaign(e) {
     e.preventDefault();
     if (!scheduleTemplate || !selectedDate) return;
     const [hour, minute] = selectedTime.split(":").map(Number);
     const scheduledAt = new Date(selectedDate);
     scheduledAt.setHours(hour || 0, minute || 0, 0, 0);
-
-    const res = await api("/api/admin/campaigns", {
-      method: "POST",
-      body: JSON.stringify({
-        template_id: scheduleTemplate,
-        subject: scheduleSubject,
-        scheduled_at: scheduledAt.toISOString(),
-        audience,
-        ...campaignI18n(scheduleTexts),
-      }),
-    });
-    if (res.ok) reloadCampaigns();
+    try {
+      campaignSchedule({ scheduled_at: scheduledAt });
+    } catch (error) {
+      setScheduleError(error.message);
+      scheduleDateField.current?.focus();
+      scheduleDateField.current?.scrollIntoView({ block: "center" });
+      return;
+    }
+    setScheduleError("");
+    await submitCampaign(scheduledAt);
   }
 
   async function sendNow(e) {
     e.preventDefault();
-    if (!scheduleTemplate) return;
+    await submitCampaign(new Date(), { immediate: true });
+  }
+
+  async function submitCampaign(
+    scheduledAt,
+    { immediate = false, selection = false } = {},
+  ) {
+    const returnFocus = document.activeElement;
     if (
-      !window.confirm(
-        `Jetzt an „${AUDIENCE_LABELS[audience]}" (${audienceCount.toLocaleString(
-          "de-DE",
-        )} Empfänger*innen) senden?`,
-      )
+      selection
+        ? !selectionTemplateAvailable || selectedSignerIds.size === 0
+        : !scheduleTemplateAvailable
     )
       return;
-    const res = await api("/api/admin/campaigns", {
-      method: "POST",
-      body: JSON.stringify({
-        template_id: scheduleTemplate,
-        subject: scheduleSubject,
-        scheduled_at: new Date().toISOString(),
-        audience,
-        ...campaignI18n(scheduleTexts),
-      }),
-    });
-    if (res.ok) reloadCampaigns();
+    const submission = selection ? selectionSubmission : campaignSubmission;
+    try {
+      const campaign = await submission.submit(
+        api,
+        {
+          template_id: selection ? selTemplate : scheduleTemplate,
+          subject: selection ? selSubject : scheduleSubject,
+          scheduled_at: scheduledAt.toISOString(),
+          send_now: immediate,
+          audience: selection ? "selection" : audience,
+          ...(selection && { recipient_ids: [...selectedSignerIds] }),
+          ...campaignI18n(selection ? selTexts : scheduleTexts),
+        },
+        async () => {
+          const checked = await readCampaignAudience(
+            api,
+            selection ? "selection" : audience,
+            [...selectedSignerIds],
+          );
+          if (selection) setSelectionAudit(checked.data);
+          else setStats(checked.data);
+          if (!checked.count)
+            throw new Error(
+              "Keine verfügbaren Empfänger. Es wurde kein Versandauftrag erstellt.",
+            );
+          checked.subjectExamples = await readCampaignSubjectExamples(
+            api,
+            LANGUAGES.map((language) => ({
+              language,
+              ...campaignText(
+                selection ? selTemplate : scheduleTemplate,
+                selection ? selSubject : scheduleSubject,
+                selection ? selTexts : scheduleTexts,
+                language,
+                templates,
+              ),
+            })),
+          );
+          return askConfirmation(
+            deliverySummary(immediate ? null : scheduledAt, selection, checked),
+            returnFocus,
+            immediate ? "Jetzt senden" : "Versand einplanen",
+          );
+        },
+      );
+      if (!campaign) return;
+      await reloadCampaigns();
+      const message = `Kampagne #${campaign.id}: ${campaign.status === "cancelled" ? "bereits abgesagt" : campaign.status === "sent" ? "bereits gesendet" : immediate ? "Versand beauftragt" : "Versand eingeplant"}. ${campaign.replayed ? "Dieser Auftrag existiert bereits. Es wurde keine zweite Kampagne erstellt. " : ""}Setze den Entwurf zurück oder ändere die Nachricht, um einen neuen Auftrag zu erstellen.`;
+      if (selection) setSelSendStatus({ success: true, message });
+      else setCampaignFeedback({ success: true, message });
+    } catch (error) {
+      if (selection)
+        setSelSendStatus({ success: false, message: error.message });
+      else setCampaignFeedback({ success: false, message: error.message });
+    } finally {
+      requestAnimationFrame(() => {
+        if (returnFocus?.isConnected && !returnFocus.disabled)
+          returnFocus.focus();
+      });
+    }
   }
 
   async function sendTest(e) {
     e.preventDefault();
-    if (!scheduleTemplate || !testEmail) return;
-    setTestStatus("sending");
-    const res = await api("/api/admin/test-send", {
-      method: "POST",
-      body: JSON.stringify({
-        template_id: scheduleTemplate,
-        subject: scheduleSubject,
-        to: testEmail,
-        audience,
-      }),
+    if (!scheduleTemplateAvailable || !testEmail) return;
+    const text = campaignText(
+      scheduleTemplate,
+      scheduleSubject,
+      scheduleTexts,
+      testLanguage,
+      templates,
+    );
+    await sendTestMessage(setTestStatus, "/api/admin/test-send", {
+      template_id: text.templateId,
+      subject: text.subject,
+      to: testEmail,
+      lang: testLanguage,
+      audience,
     });
-    if (res.ok) {
-      setTestStatus("ok");
-      setTimeout(() => setTestStatus(null), 4000);
-    } else {
-      const data = await res.json().catch(() => ({}));
-      setTestStatus(data.error || "Fehler beim Senden");
+  }
+
+  async function sendTestMessage(setStatus, path, message) {
+    setStatus("sending");
+    try {
+      const res = await api(path, {
+        method: "POST",
+        body: JSON.stringify(message),
+      });
+      if (res.ok) setStatus("ok");
+      else {
+        const data = await res.json().catch(() => ({}));
+        setStatus(
+          data.error || "Die Testnachricht konnte nicht gesendet werden.",
+        );
+      }
+    } catch {
+      setStatus(
+        "Der Server hat den Testversand nicht bestätigt. Prüfe das Testpostfach, bevor du erneut sendest. Deine Eingaben bleiben erhalten.",
+      );
+    } finally {
+      setStatus((current) => (current === "sending" ? null : current));
     }
   }
 
-  async function cancel(id) {
-    const res = await api(`/api/admin/campaigns/${id}`, { method: "DELETE" });
-    if (res.ok) reloadCampaigns();
-  }
-
-  async function retryCampaign(id) {
-    const res = await api(`/api/admin/campaigns/${id}/retry`, {
-      method: "POST",
-    });
-    if (res.ok) {
-      reloadCampaigns();
-    } else {
-      const data = await res.json().catch(() => ({}));
-      alert(data.error || "Erneuter Versuch nicht möglich.");
+  async function campaignActionRequest(id, retry = false) {
+    if (campaignAction !== null) return;
+    const returnFocus = document.activeElement;
+    let showFeedback = false;
+    let requested = false;
+    setCampaignAction(id);
+    setCampaignFeedbackId(id);
+    setCampaignActionFeedback("");
+    try {
+      if (retry) {
+        const review = await readCampaignRetryReview(api, id);
+        if (!review.remaining)
+          throw new Error(
+            "Es gibt keine verbleibenden Empfänger*innen. Es wurde kein neuer Versandversuch gestartet.",
+          );
+        if (
+          !(await askConfirmation(
+            <CampaignRetryReview
+              review={review}
+              paused={!emailStatus?.ready}
+            />,
+            returnFocus,
+            "Erneuten Versand freigeben",
+          ))
+        )
+          return;
+      } else {
+        const campaign = campaigns.find((item) => item.id === id);
+        if (!campaign)
+          throw new Error(
+            "Die Kampagne fehlt im geladenen Verlauf. Lade den Verlauf erneut.",
+          );
+        if (
+          !(await askConfirmation(
+            <span className="campaign-summary">
+              <strong>Geplanten Versand absagen?</strong>
+              <span>
+                Kampagne #{campaign.id} · {campaign.subject}
+              </span>
+              <span>
+                Geplant für{" "}
+                {new Date(campaign.scheduled_at).toLocaleString("de-DE", {
+                  dateStyle: "full",
+                  timeStyle: "long",
+                })}
+              </span>
+              <span>
+                Die Absage stoppt den geplanten Versand und lässt sich nicht
+                rückgängig machen. Wenn du später senden möchtest, musst du eine
+                neue Kampagne einplanen.
+              </span>
+            </span>,
+            returnFocus,
+            "Versand absagen",
+          ))
+        )
+          return;
+      }
+      requested = true;
+      const res = await api(
+        `/api/admin/campaigns/${id}${retry ? "/retry" : ""}`,
+        { method: retry ? "POST" : "DELETE" },
+      );
+      if (!res.ok) {
+        const data = await res.json().catch(() => ({}));
+        throw new Error(
+          data.error ||
+            (retry
+              ? "Der Versand konnte nicht erneut gestartet werden."
+              : "Der Versand konnte nicht abgesagt werden."),
+        );
+      }
+      setCampaignActionFeedback(
+        retry ? "Erneuter Versandversuch eingeplant." : "Kampagne abgesagt.",
+      );
+      showFeedback = true;
+      await reloadCampaigns();
+    } catch (error) {
+      showFeedback = true;
+      setCampaignActionFeedback(
+        !requested && retry
+          ? `${error instanceof TypeError || error instanceof SyntaxError ? "Die Angaben zur Versandfreigabe konnten nicht geladen werden. Versuche es erneut." : error.message} Es wurde kein neuer Versandversuch freigegeben.`
+          : `${error instanceof TypeError ? "Der Server hat die Aktion nicht bestätigt." : error.message} Lade den Verlauf erneut und prüfe den Status, bevor du die Aktion wiederholst.`,
+      );
+    } finally {
+      setCampaignAction(null);
+      requestAnimationFrame(() => {
+        const feedback = document.getElementById(`campaign-feedback-${id}`);
+        if (showFeedback && feedback) {
+          feedback.focus();
+          feedback.scrollIntoView({ block: "center" });
+        } else if (returnFocus?.isConnected && !returnFocus.disabled)
+          returnFocus.focus();
+      });
     }
   }
+  const cancel = (id) => campaignActionRequest(id);
+  const retryCampaign = (id) => campaignActionRequest(id, true);
 
   function toggleSigner(id) {
     setSelectedSignerIds((prev) => {
@@ -974,10 +870,25 @@ export default function AdminApp() {
   }
 
   async function selectAllMatching() {
-    const res = await api(`/api/admin/newsletter-signer-ids?${signerQuery()}`);
-    if (res.ok) {
-      const data = await res.json();
-      setSelectedSignerIds(new Set(data.ids || []));
+    if (selectingAll || signerRange.error) return;
+    setSelectingAll(true);
+    setSelectionFeedback("");
+    try {
+      const data = await readAdminJson(
+        api,
+        `/api/admin/newsletter-signer-ids?${signerQuery()}`,
+      );
+      if (!Array.isArray(data.ids)) throw new Error("Ungültige Auswahl");
+      setSelectedSignerIds((previous) => new Set([...previous, ...data.ids]));
+      setSelectionFeedback(
+        `${data.ids.length.toLocaleString("de-DE")} passende Empfänger zur Auswahl hinzugefügt.`,
+      );
+    } catch {
+      setSelectionFeedback(
+        "Die Empfänger konnten nicht hinzugefügt werden. Deine Auswahl bleibt erhalten. Versuche es erneut.",
+      );
+    } finally {
+      setSelectingAll(false);
     }
   }
 
@@ -985,174 +896,111 @@ export default function AdminApp() {
     setSelectedSignerIds(new Set());
   }
 
-  async function submitSelectionCampaign(scheduledAt) {
-    if (!selTemplate || selectedSignerIds.size === 0) return;
-    const res = await api("/api/admin/campaigns", {
-      method: "POST",
-      body: JSON.stringify({
-        template_id: selTemplate,
-        subject: selSubject,
-        scheduled_at: scheduledAt.toISOString(),
-        audience: "selection",
-        recipient_ids: [...selectedSignerIds],
-        ...campaignI18n(selTexts),
-      }),
-    });
-    if (res.ok) {
-      reloadCampaigns();
-      setSelSendStatus("ok");
-      setTimeout(() => setSelSendStatus(null), 4000);
-      return true;
-    }
-    const data = await res.json().catch(() => ({}));
-    setSelSendStatus(data.error || "Fehler beim Senden");
-    return false;
-  }
-
   async function sendSelectionNow() {
-    if (
-      !window.confirm(
-        `Jetzt an ${selectedSignerIds.size.toLocaleString("de-DE")} ausgewählte Empfänger*innen senden?`,
-      )
-    )
-      return;
-    await submitSelectionCampaign(new Date());
+    await submitCampaign(new Date(), { immediate: true, selection: true });
   }
 
-  function scheduleSelection(e) {
+  async function scheduleSelection(e) {
     e.preventDefault();
     if (!selDate) return;
     const [hour, minute] = selTime.split(":").map(Number);
     const when = new Date(selDate);
     when.setHours(hour || 0, minute || 0, 0, 0);
-    submitSelectionCampaign(when);
+    try {
+      campaignSchedule({ scheduled_at: when });
+    } catch (error) {
+      setSelectionScheduleError(error.message);
+      selectionDateField.current?.focus();
+      selectionDateField.current?.scrollIntoView({ block: "center" });
+      return;
+    }
+    setSelectionScheduleError("");
+    await submitCampaign(when, { selection: true });
   }
 
   async function sendSelectionTest() {
-    if (!selTemplate || !selTestEmail) return;
-    setSelTestStatus("sending");
-    const res = await api("/api/admin/test-send", {
-      method: "POST",
-      body: JSON.stringify({
-        template_id: selTemplate,
-        subject: selSubject,
-        to: selTestEmail,
-        audience: "newsletter",
-      }),
+    if (!selectionTemplateAvailable || !selTestEmail) return;
+    const text = campaignText(
+      selTemplate,
+      selSubject,
+      selTexts,
+      selTestLanguage,
+      templates,
+    );
+    await sendTestMessage(setSelTestStatus, "/api/admin/test-send", {
+      template_id: text.templateId,
+      subject: text.subject,
+      to: selTestEmail,
+      lang: selTestLanguage,
+      audience: "newsletter",
     });
-    if (res.ok) {
-      setSelTestStatus("ok");
-      setTimeout(() => setSelTestStatus(null), 4000);
-    } else {
-      const data = await res.json().catch(() => ({}));
-      setSelTestStatus(data.error || "Fehler beim Senden");
-    }
-  }
-
-  async function saveZoomSettings(e) {
-    e.preventDefault();
-    if (!zoomEventAtInput) return;
-    setZoomSettingsStatus("saving");
-    const res = await api("/api/admin/zoom-settings", {
-      method: "POST",
-      body: JSON.stringify({
-        eventAt: new Date(zoomEventAtInput).toISOString(),
-        zoomLink: zoomLinkInput,
-        linkOffsetHours: Number(zoomLinkOffset),
-        reminderOffsetHours: Number(zoomReminderOffset),
-        showDelegierter: zoomShowDelegierter,
-        mode: zoomMode,
-        locationName: zoomLocationName,
-        locationAddress: zoomLocationAddress,
-        locationMapsUrl: zoomLocationMapsUrl,
-        eventLabel: zoomEventLabel,
-        navLabel: zoomNavLabel,
-        durationMin: Number(zoomDurationMin),
-      }),
-    });
-    if (res.ok) {
-      const data = await res.json().catch(() => ({}));
-      setZoomSettingsStatus(data.mailingsReset ? "ok-reset" : "ok");
-      // reload status panel
-      api("/api/admin/zoom-mailings").then(async (r) => {
-        if (r.ok) setZoomMailings(await r.json());
-      });
-      setTimeout(() => setZoomSettingsStatus(null), 5000);
-    } else {
-      const data = await res.json().catch(() => ({}));
-      setZoomSettingsStatus(data.error || "Fehler beim Speichern");
-    }
-  }
-
-  async function saveMilestones(e) {
-    e.preventDefault();
-    const parsed = milestonesInput
-      .split(/[\s,]+/)
-      .map((s) => s.trim())
-      .filter(Boolean)
-      .map(Number);
-    if (parsed.some((n) => !Number.isFinite(n) || n <= 0)) {
-      setMilestonesStatus("Nur positive Zahlen, mit Komma getrennt.");
-      return;
-    }
-    setMilestonesStatus("saving");
-    const res = await api("/api/admin/milestones", {
-      method: "POST",
-      body: JSON.stringify({ milestones: parsed }),
-    });
-    const data = await res.json().catch(() => ({}));
-    if (res.ok) {
-      setMilestonesInput((data.milestones || []).join(", "));
-      setMilestonesStatus("ok");
-      setTimeout(() => setMilestonesStatus(null), 5000);
-    } else {
-      setMilestonesStatus(data.error || "Fehler beim Speichern");
-    }
   }
 
   async function sendZoomTest(kind) {
     if (!zoomTestEmail) return;
-    setZoomTestStatus("sending");
-    const res = await api("/api/admin/zoom-test-send", {
-      method: "POST",
-      body: JSON.stringify({ to: zoomTestEmail, kind }),
+    await sendTestMessage(setZoomTestStatus, "/api/admin/zoom-test-send", {
+      to: zoomTestEmail,
+      kind,
     });
-    if (res.ok) {
-      setZoomTestStatus("ok");
-      setTimeout(() => setZoomTestStatus(null), 4000);
-    } else {
-      const data = await res.json().catch(() => ({}));
-      setZoomTestStatus(data.error || "Fehler beim Senden");
-    }
   }
 
   async function clearZoomRegs() {
     if (
-      !confirm(
-        `Wirklich ALLE ${zoomRegs.length} Zoom-Anmeldungen unwiderruflich löschen? ` +
-          "Nutze das, um den Zoom für eine neue Runde (z. B. Auswertungszoom) freizuräumen.",
-      )
+      !(await askConfirmation(
+        `Alle ${zoomRegs.length} Zoom-Anmeldungen endgültig löschen? ` +
+          "Die gelöschten Anmeldungen lassen sich nicht wiederherstellen.",
+      ))
     )
       return;
     setZoomClearStatus("clearing");
-    const res = await api("/api/admin/zoom-registrations/clear", {
-      method: "POST",
-    });
-    if (res.ok) {
-      const data = await res.json().catch(() => ({}));
-      setZoomRegs([]);
-      setZoomClearStatus(`ok:${data.removed ?? 0}`);
-      setTimeout(() => setZoomClearStatus(null), 5000);
-    } else {
-      const data = await res.json().catch(() => ({}));
-      setZoomClearStatus(data.error || "Fehler beim Löschen");
+    try {
+      const res = await api("/api/admin/zoom-registrations/clear", {
+        method: "POST",
+      });
+      if (res.ok) {
+        const data = await res.json().catch(() => ({}));
+        setZoomRegs([]);
+        setZoomClearStatus(`ok:${data.removed ?? 0}`);
+      } else {
+        const data = await res.json().catch(() => ({}));
+        setZoomClearStatus(
+          data.error || "Die Anmeldungen konnten nicht gelöscht werden.",
+        );
+      }
+    } catch {
+      setZoomClearStatus(
+        "Löschen nicht bestätigt. Öffne den Zoom-Bereich erneut und prüfe den aktuellen Bestand, bevor du es erneut versuchst.",
+      );
+    } finally {
+      setZoomClearStatus((current) =>
+        current === "clearing" ? null : current,
+      );
     }
   }
 
-  function logout() {
-    if (!confirm("Wirklich abmelden?")) return;
-    localStorage.removeItem(TOKEN_KEY);
-    setToken("");
+  async function logout() {
+    const unsaved = [
+      emailDirty && "E-Mail-Einstellungen",
+      statisticsDirty && "Statistikerfassung",
+      milestoneForm.dirty && "Zielmarken",
+      zoomDirty && "Zoom-Termin",
+    ].filter(Boolean);
+    if (
+      !(await askConfirmation(
+        unsaved.length
+          ? `Abmelden und ungespeicherte Einstellungen verwerfen? Deine Änderungen an ${unsaved.join(", ")} gehen dabei verloren.`
+          : "Abmelden?",
+        document.activeElement,
+        unsaved.length ? "Abmelden & verwerfen" : "Abmelden",
+      ))
+    )
+      return;
+    bootstrapRequest.current++;
+    meetingForm.endSession();
+    milestoneForm.endSession();
+    setEmailDirty(false);
+    setStatisticsDirty(false);
+    signOut();
   }
 
   const audienceCount =
@@ -1164,31 +1012,114 @@ export default function AdminApp() {
           ? stats.newsletterNotZoomCount
           : stats.subscriberCount;
 
-  if (!token) {
+  function deliverySummary(when, selection, checked) {
+    const templateId = selection ? selTemplate : scheduleTemplate;
+    const subject = selection ? selSubject : scheduleSubject;
+    const texts = selection ? selTexts : scheduleTexts;
     return (
-      <main className="admin-shell login-shell">
-        <form className="form-card admin-login" onSubmit={login}>
-          <span className="badge">Admin</span>
-          <h1>Verwaltung</h1>
-          <p className="sub2">
-            Passwort eingeben, Sitzung bleibt nur in diesem Tab aktiv.
-          </p>
-          <div className="field">
-            <label>Passwort</label>
-            <input
-              type="password"
-              value={password}
-              onChange={(e) => setPassword(e.target.value)}
-              autoFocus
-            />
-          </div>
-          {loginError && <p className="error">{loginError}</p>}
-          <button className="cta" type="submit">
-            Anmelden
-          </button>
-        </form>
-      </main>
+      <span className="campaign-summary">
+        <strong>{when ? "Versand einplanen?" : "Jetzt senden?"}</strong>
+        <span>
+          {selection
+            ? "Ausgewählte Newsletter-Empfänger*innen"
+            : AUDIENCE_LABELS[audience]}{" "}
+          · {checked.count.toLocaleString("de-DE")} Empfänger*innen
+          {" · geprüft um "}
+          {checked.checkedAt.toLocaleTimeString("de-DE", { hour12: false })}
+        </span>
+        <span>
+          {when
+            ? new Intl.DateTimeFormat("de-DE", {
+                dateStyle: "full",
+                timeStyle: "long",
+              }).format(when)
+            : "Sofort nach Bestätigung"}
+        </span>
+        {LANGUAGES.map((language) => {
+          const text = campaignText(
+            templateId,
+            subject,
+            texts,
+            language,
+            templates,
+          );
+          return (
+            <span key={language}>
+              <strong>{language.toUpperCase()}</strong> ·{" "}
+              {checked.byLanguage[language] || 0} Empfänger*innen:{" "}
+              {
+                templates.find((t) => String(t.id) === String(text.templateId))
+                  ?.name
+              }{" "}
+              <small>
+                Beispielbetreff: {checked.subjectExamples[language]}
+              </small>
+              {language !== DEFAULT_LANG && (
+                <small>
+                  {text.templateFallback
+                    ? `${checked.byLanguage[language] || 0} mit Vorlage der Standardsprache (${DEFAULT_LANG.toUpperCase()})`
+                    : "Eigene Sprachvorlage"}{" "}
+                  ·{" "}
+                  {text.subjectFallback
+                    ? "Betreff der Standardsprache"
+                    : "Eigener Betreff / Betreff der Sprachvorlage"}
+                </small>
+              )}
+            </span>
+          );
+        })}
+        <small>
+          Die Beispiele verwenden Ada und 1.000 Unterschriften. Beim Versand
+          setzt die Vorlage die Angaben der Person und die aktuellen Zahlen ein.
+        </small>
+        <small>
+          Die Empfängergruppe wird beim Versand erneut ermittelt. Die
+          Sprachzahlen können sich bis dahin ändern, etwa durch Abmeldungen.
+        </small>
+        <small>
+          Der Versand verwendet die dann veröffentlichte Vorlage. Änderungen an
+          der Vorlage gelten auch für bereits geplante Nachrichten. Selbst
+          geschriebene Betreffzeilen bleiben erhalten. Betreffzeilen aus
+          Vorlagen können sich ändern.
+        </small>
+        {selection && (
+          <span>
+            {checked.data.signers?.slice(0, 10).map((person) => (
+              <span className="campaign-summary-recipient" key={person.id}>
+                {person.name} · {person.email}
+              </span>
+            ))}
+            {selectedSignerIds.size > 10 && (
+              <small>
+                Die vollständige Auswahl findest du unter "Ausgewählte Empfänger
+                prüfen".
+              </small>
+            )}
+          </span>
+        )}
+      </span>
     );
+  }
+
+  async function resetCampaignDraft(selection = false) {
+    if (
+      !(await askConfirmation(
+        `Den Nachrichtenentwurf mit allen Sprachvarianten und dem Termin zurücksetzen?${selection ? " Die ausgewählten Empfänger bleiben erhalten." : ""}`,
+      ))
+    )
+      return;
+    (selection ? selectionDraft : campaignDraft).reset(
+      selection ? { recipientIds: [...selectedSignerIds] } : {},
+    );
+    (selection ? selectionSubmission : campaignSubmission).reset();
+    if (selection) setSelSendStatus(null);
+    else setCampaignFeedback(null);
+    if (selection) setSelectionScheduleError("");
+    else setScheduleError("");
+  }
+
+  if (!token) {
+    return <AdminLogin onLogin={signIn} />;
   }
 
   return (
@@ -1198,232 +1129,361 @@ export default function AdminApp() {
           <span className="dot" />
           Verwaltung
         </div>
+        <div className="admin-mobile-section">
+          <Choice
+            label="Admin Bereich"
+            value={tab}
+            onChange={navigate}
+            options={[
+              ["copy", "Website"],
+              ["templates", "Vorlagen"],
+              ["campaigns", "Versand"],
+              ["signers", "Unterzeichner"],
+              ["zoom", "Zoom"],
+              ["settings", "Einstellungen"],
+            ]}
+          />
+        </div>
         <nav aria-label="Admin Bereiche">
-          <button
-            className={tab === "templates" ? "active" : ""}
-            aria-current={tab === "templates" ? "page" : undefined}
-            onClick={() => setTab("templates")}
-          >
-            Vorlagen
-          </button>
-          <button
-            className={tab === "campaigns" ? "active" : ""}
-            aria-current={tab === "campaigns" ? "page" : undefined}
-            onClick={() => setTab("campaigns")}
-          >
-            Versand
-          </button>
-          <button
-            className={tab === "signers" ? "active" : ""}
-            aria-current={tab === "signers" ? "page" : undefined}
-            onClick={() => setTab("signers")}
-          >
-            Unterzeichner
-          </button>
-          <button
-            className={tab === "zoom" ? "active" : ""}
-            aria-current={tab === "zoom" ? "page" : undefined}
-            onClick={() => setTab("zoom")}
-          >
-            Zoom
-          </button>
-          <button
+          <Button
             className={tab === "copy" ? "active" : ""}
             aria-current={tab === "copy" ? "page" : undefined}
-            onClick={() => setTab("copy")}
+            onClick={() => navigate("copy")}
           >
-            Texte & Modus
-          </button>
-          <button
+            Website
+          </Button>
+          <Button
+            className={tab === "templates" ? "active" : ""}
+            aria-current={tab === "templates" ? "page" : undefined}
+            onClick={() => navigate("templates")}
+          >
+            Vorlagen
+          </Button>
+          <Button
+            className={tab === "campaigns" ? "active" : ""}
+            aria-current={tab === "campaigns" ? "page" : undefined}
+            onClick={() => navigate("campaigns")}
+          >
+            Versand
+          </Button>
+          <Button
+            className={tab === "signers" ? "active" : ""}
+            aria-current={tab === "signers" ? "page" : undefined}
+            onClick={() => navigate("signers")}
+          >
+            Unterzeichner
+          </Button>
+          <Button
+            className={tab === "zoom" ? "active" : ""}
+            aria-current={tab === "zoom" ? "page" : undefined}
+            onClick={() => navigate("zoom")}
+          >
+            Zoom
+          </Button>
+          <Button
             className={tab === "settings" ? "active" : ""}
             aria-current={tab === "settings" ? "page" : undefined}
-            onClick={() => setTab("settings")}
+            onClick={() => navigate("settings")}
           >
             Einstellungen
-          </button>
+          </Button>
         </nav>
       </header>
-
-      {tab === "templates" && (
-        <section className="section">
-          <div className="section-inner admin-layout">
-            <aside className="admin-sidebar">
-              <form className="admin-card" onSubmit={createTemplate}>
-                <label>Neue Newsletter-Vorlage</label>
-                <input
-                  value={newName}
-                  onChange={(e) => setNewName(e.target.value)}
-                  placeholder="Name"
-                />
-                <button className="cta" type="submit">
-                  Anlegen
-                </button>
-              </form>
-
-              <div className="admin-list">
-                {templates.map((template) => (
-                  <button
-                    type="button"
-                    key={template.id}
-                    className={template.id === selectedId ? "active" : ""}
-                    onClick={() => setSelectedId(template.id)}
-                  >
-                    <strong>{template.name}</strong>
-                    <span>{template.system ? "System" : template.slug}</span>
-                  </button>
-                ))}
-              </div>
-            </aside>
-
-            <TemplateEditor
-              token={token}
-              template={selectedTemplate}
-              onSaved={(updated) => {
-                setSelectedTemplate(updated);
-                setTemplates((prev) =>
-                  prev.map((template) =>
-                    template.id === updated.id
-                      ? { ...template, ...updated }
-                      : template,
-                  ),
-                );
-              }}
-              onDeleted={deleteTemplate}
-            />
-          </div>
-        </section>
+      <h1 className="sr-only" tabIndex={-1} ref={destinationHeading}>
+        {
+          {
+            copy: "Website bearbeiten",
+            templates: "E-Mail-Vorlagen",
+            campaigns: "Versand",
+            signers: "Unterzeichner",
+            zoom: "Zoom-Termin",
+            settings: "Einstellungen",
+          }[tab]
+        }
+      </h1>
+      {bootstrapErrors.length > 0 && (
+        <div className="admin-notice" role="alert">
+          Verwaltungsdaten konnten nicht geladen werden:{" "}
+          {bootstrapErrors.join(", ")}. Bereits geladene Angaben können veraltet
+          sein.
+          <Button disabled={bootstrapLoading} onClick={loadAll}>
+            {bootstrapLoading ? "Wird geladen…" : "Erneut laden"}
+          </Button>
+        </div>
       )}
+      {notice && (
+        <p className="admin-notice" role="status">
+          {notice}
+          <Button
+            type="button"
+            aria-label="Hinweis schließen"
+            onClick={() => setNotice("")}
+          >
+            ×
+          </Button>
+        </p>
+      )}
+      {["campaigns", "signers", "zoom"].includes(tab) &&
+        emailStatus &&
+        !emailStatus.ready && (
+          <Collapsible.Root className="admin-delivery-warning">
+            <div className="admin-delivery-summary">
+              <strong role="status">
+                {emailStatus.unavailable
+                  ? "Versandstatus nicht verfügbar"
+                  : "E-Mail-Versand pausiert"}
+              </strong>
+              <Button
+                type="button"
+                onClick={() => navigate("settings")}
+                aria-label={
+                  emailStatus.unavailable
+                    ? "E-Mail-Versandstatus prüfen"
+                    : "E-Mail-Versand einrichten"
+                }
+              >
+                {emailStatus.unavailable ? "Prüfen" : "Einrichten"}
+              </Button>
+            </div>
+            <Collapsible.Trigger className="admin-delivery-details">
+              Details zum Versand ▾
+            </Collapsible.Trigger>
+            <Collapsible.Panel>
+              <p>
+                {emailStatus.unavailable
+                  ? "Der Versandstatus konnte nicht geladen werden. Prüfe ihn in den E-Mail-Einstellungen. Deine Eingaben und geplanten Nachrichten bleiben erhalten."
+                  : "Der Versand wartet auf ein geprüftes Versandprofil. Richte es in den E-Mail-Einstellungen ein. Erst danach kannst du Tests oder Nachrichten senden. Abgelaufene Links werden nicht gesendet."}
+              </p>
+            </Collapsible.Panel>
+          </Collapsible.Root>
+        )}
+
+      <div hidden={tab !== "copy" && tab !== "templates"}>
+        <AdminPublisher api={api} workspace={tab} />
+      </div>
 
       {tab === "campaigns" && (
         <section className="section">
           <div className="section-inner admin-campaigns">
             <form
               className="admin-card campaign-form"
+              aria-busy={campaignSubmission.pending}
               onSubmit={scheduleCampaign}
             >
-              <div className="admin-card-title">Versand planen</div>
-              <div className="field">
-                <label>Empfängergruppe</label>
-                <select
-                  value={audience}
-                  onChange={(e) => setAudience(e.target.value)}
-                >
-                  <option value="newsletter">Newsletter-Unterschreiber</option>
-                  <option value="email_not_zoom">Newsletter ohne Zoom</option>
-                  <option value="zoom">Zoom-Anmelder (alle)</option>
-                  {zoomShowDelegierter && (
-                    <option value="zoom_delegates">
-                      Nur Delegierte (Zoom)
-                    </option>
-                  )}
-                </select>
-              </div>
-              <div className="field">
-                <label>Vorlage</label>
-                <select
-                  value={scheduleTemplate}
-                  onChange={(e) => {
-                    setScheduleTemplate(e.target.value);
-                    const template = templates.find(
-                      (item) => String(item.id) === e.target.value,
-                    );
-                    if (template) setScheduleSubject(template.subject);
-                  }}
-                >
-                  {templates.map((template) => (
-                    <option key={template.id} value={template.id}>
-                      {template.name}
-                    </option>
-                  ))}
-                </select>
-              </div>
-              <div className="field">
-                <label>Betreff</label>
-                <input
-                  value={scheduleSubject}
-                  onChange={(e) => setScheduleSubject(e.target.value)}
-                />
-              </div>
-              <CampaignLanguages
-                templates={templates}
-                value={scheduleTexts}
-                onChange={setScheduleTexts}
-              />
-              <div className="admin-picker-wrapper">
-                <div className="admin-date-row">
-                  <div className="field">
-                    <label>Datum</label>
-                    <input
-                      type="text"
-                      value={dateInput}
-                      onChange={handleDateInput}
-                      placeholder="TT.MM.JJJJ"
-                      maxLength={10}
-                    />
-                  </div>
-                  <div className="field">
-                    <label>Uhrzeit</label>
-                    <input
-                      type="time"
-                      value={selectedTime}
-                      onChange={(e) => setSelectedTime(e.target.value)}
-                      lang="de"
-                    />
-                  </div>
-                </div>
-                <DayPicker
-                  mode="single"
-                  selected={selectedDate}
-                  onSelect={(date) => {
-                    if (date) {
-                      setSelectedDate(date);
-                      setDateInput(format(date, "dd.MM.yyyy"));
-                    }
-                  }}
-                  locale={de}
-                />
+              <div className="campaign-form-heading">
+                <h2 className="admin-card-title">Versand planen</h2>
                 <p className="admin-muted">
-                  {selectedDate
-                    ? format(selectedDate, "PPPP", { locale: de })
-                    : ""}
+                  Dein Nachrichtenentwurf bleibt beim Neuladen erhalten.
+                </p>
+                <p className="admin-muted">
+                  Der Versand verwendet die dann veröffentlichte Vorlage.
+                  Änderungen an Vorlagen gelten auch für bereits geplante
+                  Nachrichten.
+                </p>
+                {campaignDraft.error && (
+                  <p role="alert">{campaignDraft.error}</p>
+                )}
+                <Button
+                  className="admin-button"
+                  type="button"
+                  disabled={campaignSubmission.pending}
+                  onClick={() => resetCampaignDraft()}
+                >
+                  Entwurf zurücksetzen
+                </Button>
+              </div>
+              <div className="campaign-message">
+                <h3>1. Nachricht</h3>
+                <CampaignMessageFields
+                  templates={templates}
+                  templateId={scheduleTemplate}
+                  subject={scheduleSubject}
+                  onTemplateChange={setScheduleTemplate}
+                  onSubjectChange={setScheduleSubject}
+                  disabled={campaignSubmission.pending}
+                />
+                <CampaignLanguages
+                  templates={templates}
+                  value={scheduleTexts}
+                  onChange={setScheduleTexts}
+                />
+              </div>
+              <div className="campaign-delivery">
+                <h3>2. Empfänger & Zeitpunkt</h3>
+                <div className="field">
+                  <label htmlFor={`${fieldId}-4`}>Empfängergruppe</label>
+                  <SelectControl
+                    id={`${fieldId}-4`}
+                    value={audience}
+                    onChange={(e) => setAudience(e.target.value)}
+                  >
+                    <option value="newsletter">Newsletter-Empfänger</option>
+                    <option value="email_not_zoom">
+                      Newsletter-Empfänger ohne Zoom-Anmeldung
+                    </option>
+                    <option value="zoom">Alle Zoom-Anmeldungen</option>
+                    {zoomShowDelegierter && (
+                      <option value="zoom_delegates">
+                        Delegierte mit Zoom-Anmeldung
+                      </option>
+                    )}
+                  </SelectControl>
+                </div>
+                <div className="admin-picker-wrapper">
+                  <div className="admin-date-row">
+                    <div className="field">
+                      <label htmlFor={`${fieldId}-7`}>Datum</label>
+                      <Input
+                        id={`${fieldId}-7`}
+                        ref={scheduleDateField}
+                        aria-invalid={Boolean(scheduleError)}
+                        aria-describedby={
+                          scheduleError
+                            ? `${fieldId}-schedule-error`
+                            : undefined
+                        }
+                        type="text"
+                        value={dateInput}
+                        onChange={handleDateInput}
+                        onBlur={() => {
+                          if (dateInput && !selectedDate)
+                            setScheduleError(
+                              "Gib ein gültiges Datum als TT.MM.JJJJ ein.",
+                            );
+                        }}
+                        placeholder="TT.MM.JJJJ"
+                        maxLength={10}
+                      />
+                    </div>
+                    <div className="field">
+                      <label htmlFor={`${fieldId}-8`}>Uhrzeit</label>
+                      <Input
+                        id={`${fieldId}-8`}
+                        type="text"
+                        pattern="([01][0-9]|2[0-3]):[0-5][0-9]"
+                        placeholder="HH:MM"
+                        title="Uhrzeit im 24-Stunden-Format, z. B. 18:30"
+                        maxLength={5}
+                        required
+                        value={selectedTime}
+                        onChange={(e) => {
+                          setSelectedTime(e.target.value);
+                          setScheduleError("");
+                        }}
+                      />
+                    </div>
+                  </div>
+                  {scheduleError && (
+                    <p
+                      id={`${fieldId}-schedule-error`}
+                      role="alert"
+                      className="admin-field-error"
+                    >
+                      {scheduleError}
+                    </p>
+                  )}
+                  <ScheduleCalendar
+                    selected={selectedDate}
+                    onSelect={(date) => {
+                      if (date) {
+                        setSelectedDate(date);
+                        setDateInput(format(date, "dd.MM.yyyy"));
+                        setScheduleError("");
+                      }
+                    }}
+                  />
+                  <p className="admin-muted">
+                    {selectedDate
+                      ? format(selectedDate, "PPPP", { locale: de })
+                      : ""}
+                    <br />
+                    Zeitzone: {Intl.DateTimeFormat().resolvedOptions().timeZone}
+                  </p>
+                </div>
+                {campaignSubmission.pending && (
+                  <p role="status">
+                    Der Versandauftrag wird geprüft und gespeichert…
+                  </p>
+                )}
+                {campaignFeedback && (
+                  <p
+                    role={campaignFeedback.success ? "status" : "alert"}
+                    className={`admin-test-feedback ${campaignFeedback.success ? "admin-test-ok" : "admin-test-error"}`}
+                  >
+                    {campaignFeedback.message}
+                  </p>
+                )}
+                <div className="admin-actions">
+                  <Button
+                    className="cta"
+                    type="submit"
+                    disabled={
+                      campaignSubmission.pending ||
+                      !selectedDate ||
+                      !selectedTime ||
+                      !scheduleTemplateAvailable
+                    }
+                  >
+                    Versand einplanen
+                  </Button>
+                  <Button
+                    className="cta"
+                    type="button"
+                    onClick={sendNow}
+                    disabled={
+                      campaignSubmission.pending ||
+                      !emailStatus?.ready ||
+                      !scheduleTemplateAvailable
+                    }
+                  >
+                    Jetzt senden
+                  </Button>
+                </div>
+                <p className="admin-muted">
+                  Empfänger*innen ({AUDIENCE_LABELS[audience]}):{" "}
+                  {audienceCount.toLocaleString("de-DE")}
                 </p>
               </div>
-              <div className="admin-actions">
-                <button className="cta" type="submit">
-                  Termin speichern
-                </button>
-                <button className="cta" type="button" onClick={sendNow}>
-                  Jetzt senden
-                </button>
-              </div>
-              <p className="admin-muted">
-                Empfänger*innen ({AUDIENCE_LABELS[audience]}):{" "}
-                {audienceCount.toLocaleString("de-DE")}
-              </p>
-
               <div className="admin-test-send">
+                <CampaignTestLanguage
+                  api={api}
+                  templates={templates}
+                  language={testLanguage}
+                  onLanguage={setTestLanguage}
+                  templateId={scheduleTemplate}
+                  subject={scheduleSubject}
+                  translations={scheduleTexts}
+                />
                 <div className="field">
-                  <label>Testversand an</label>
-                  <input
+                  <label htmlFor={`${fieldId}-9`}>Testversand an</label>
+                  <Input
+                    id={`${fieldId}-9`}
                     type="email"
                     value={testEmail}
                     onChange={(e) => setTestEmail(e.target.value)}
                     placeholder="test@beispiel.de"
                   />
                 </div>
-                <button
+                <Button
                   className="cta cta--outline"
                   type="button"
                   onClick={sendTest}
-                  disabled={!testEmail || testStatus === "sending"}
+                  disabled={
+                    campaignSubmission.pending ||
+                    !emailStatus?.ready ||
+                    !scheduleTemplateAvailable ||
+                    !testEmail ||
+                    testStatus === "sending"
+                  }
                 >
                   {testStatus === "sending"
                     ? "Wird gesendet\u2026"
                     : "Test senden"}
-                </button>
+                </Button>
                 {testStatus === "ok" && (
                   <p className="admin-test-feedback admin-test-ok">
-                    E-Mail gesendet
+                    Der Anbieter hat die Nachricht angenommen. Prüfe, ob sie im
+                    Postfach angekommen ist.
                   </p>
                 )}
                 {testStatus &&
@@ -1437,49 +1497,113 @@ export default function AdminApp() {
             </form>
 
             <div className="admin-card campaign-list">
-              <div className="admin-card-title">Kampagnen</div>
-              {campaigns.length === 0 && (
-                <p className="admin-muted">Noch keine Kampagnen geplant.</p>
-              )}
+              <h2 className="admin-card-title">Versandverlauf</h2>
+              <AdminReadStatus
+                resource={{ ...campaignRead, reload: reloadCampaigns }}
+                label="Kampagnen"
+              />
+              {campaignRead.data !== null &&
+                !campaignRead.error &&
+                campaigns.length === 0 && (
+                  <p className="admin-muted">Noch keine Kampagnen geplant.</p>
+                )}
               {campaigns.map((campaign) => (
                 <div className="campaign-row" key={campaign.id}>
-                  <div>
-                    <strong>{campaign.subject}</strong>
+                  <div className="campaign-description">
+                    <div className="campaign-heading">
+                      <strong>{campaign.subject}</strong>
+                      <StatusBadge status={campaign.status} />
+                    </div>
                     <span>
                       {campaign.template_name || "Vorlage gelöscht"} ·{" "}
                       {AUDIENCE_LABELS[campaign.audience] || "Newsletter"}
                     </span>
                     <small>
+                      Geplant:{" "}
                       {new Date(campaign.scheduled_at).toLocaleString("de-DE", {
                         hour12: false,
                       })}
                     </small>
-                  </div>
-                  <StatusBadge status={campaign.status} />
-                  {campaign.status === "failed" && (
-                    <small style={{ color: "#b45309" }}>
-                      {campaign.sent_offset} erreicht, wird fortgesetzt
+                    <small>
+                      Kampagne #{campaign.id} ·{" "}
+                      {campaign.recipient_count ?? campaign.sent_offset ?? 0}{" "}
+                      vom Anbieter angenommen
                     </small>
-                  )}
-                  {campaign.status === "aborted" && (
-                    <>
+                    {campaignFeedbackId === campaign.id &&
+                      campaignActionFeedback && (
+                        <p
+                          id={`campaign-feedback-${campaign.id}`}
+                          tabIndex={-1}
+                          role="status"
+                          className="campaign-action-feedback"
+                        >
+                          {campaignActionFeedback}
+                        </p>
+                      )}
+                    {campaign.status === "failed" && (
+                      <small style={{ color: "#b45309" }}>
+                        {campaign.sent_offset} erreicht, wird fortgesetzt
+                      </small>
+                    )}
+                    {campaign.status === "aborted" && (
                       <small style={{ color: "#b45309" }}>
                         {campaign.sent_offset} erreicht, nach{" "}
                         {campaign.attempts} Versuchen abgebrochen
                       </small>
-                      <button
+                    )}
+                    {["failed", "aborted"].includes(campaign.status) && (
+                      <>
+                        <EmailFailure
+                          title="Letzter Versandversuch"
+                          failure={campaign.failure || { category: "unknown" }}
+                        />
+                        <Button
+                          className="admin-button"
+                          type="button"
+                          onClick={() => navigate("settings")}
+                        >
+                          E-Mail-Einstellungen prüfen
+                        </Button>
+                      </>
+                    )}
+                  </div>
+                  <div className="campaign-actions">
+                    {campaign.status === "aborted" && (
+                      <>
+                        <Button
+                          className="admin-button"
+                          type="button"
+                          disabled={
+                            campaignAction !== null ||
+                            campaignRead.loading ||
+                            campaignRead.error
+                          }
+                          onClick={() => retryCampaign(campaign.id)}
+                        >
+                          {campaignAction === campaign.id
+                            ? "Wird angefragt…"
+                            : "Erneut versuchen"}
+                        </Button>
+                      </>
+                    )}
+                    {campaign.status === "scheduled" && (
+                      <Button
+                        className="admin-button"
                         type="button"
-                        onClick={() => retryCampaign(campaign.id)}
+                        disabled={
+                          campaignAction !== null ||
+                          campaignRead.loading ||
+                          campaignRead.error
+                        }
+                        onClick={() => cancel(campaign.id)}
                       >
-                        Erneut versuchen
-                      </button>
-                    </>
-                  )}
-                  {campaign.status === "scheduled" && (
-                    <button type="button" onClick={() => cancel(campaign.id)}>
-                      Absagen
-                    </button>
-                  )}
+                        {campaignAction === campaign.id
+                          ? "Absage wird geprüft…"
+                          : "Absagen"}
+                      </Button>
+                    )}
+                  </div>
+                  <CampaignAudit campaign={campaign} api={api} />
                 </div>
               ))}
             </div>
@@ -1490,111 +1614,323 @@ export default function AdminApp() {
       {tab === "signers" && (
         <section className="section">
           <div className="section-inner">
-            <div className="admin-card" style={{ marginBottom: 16 }}>
-              <div className="admin-card-title">Filter</div>
-              <div className="signer-filter-bar">
-                <div className="field">
-                  <label>Suche (Name, E-Mail, {region.name})</label>
-                  <input
-                    value={signerSearch}
-                    onChange={(e) => setSignerSearch(e.target.value)}
-                    placeholder="Suchen…"
-                  />
-                </div>
-                {STATES_ON && (
-                  <div className="field">
-                    <label>Bundesland</label>
-                    <select
-                      value={signerStateFilter}
-                      onChange={(e) => setSignerStateFilter(e.target.value)}
-                    >
-                      <option value="">Alle</option>
-                      {signerFilterOpts.states.map((s) => (
-                        <option key={s.state} value={s.state}>
-                          {s.state} ({s.count})
-                        </option>
-                      ))}
-                    </select>
-                  </div>
-                )}
-                <div className="field">
-                  <label>{region.name}</label>
-                  <select
-                    value={signerKvFilter}
-                    onChange={(e) => setSignerKvFilter(e.target.value)}
-                  >
-                    <option value="">Alle</option>
-                    {signerFilterOpts.kvs.map((k) => (
-                      <option key={k.kreisverband} value={k.kreisverband}>
-                        {k.kreisverband} ({k.count})
-                      </option>
-                    ))}
-                  </select>
-                </div>
-                <div className="field">
-                  <label>Zeitraum</label>
-                  <select
-                    value={signerDatePreset}
-                    onChange={(e) => setSignerDatePreset(e.target.value)}
-                  >
-                    <option value="alle">Alle</option>
-                    <option value="24h">Letzte 24 Stunden</option>
-                    <option value="7d">Letzte 7 Tage</option>
-                    <option value="custom">Benutzerdefiniert</option>
-                  </select>
-                </div>
-                {signerDatePreset === "custom" && (
-                  <>
-                    <div className="field">
-                      <label>Von</label>
-                      <input
-                        type="date"
-                        value={signerDateFrom}
-                        onChange={(e) => setSignerDateFrom(e.target.value)}
-                      />
-                    </div>
-                    <div className="field">
-                      <label>Bis</label>
-                      <input
-                        type="date"
-                        value={signerDateTo}
-                        onChange={(e) => setSignerDateTo(e.target.value)}
-                      />
-                    </div>
-                  </>
-                )}
+            <div
+              className="admin-card signer-filters"
+              style={{ marginBottom: 16 }}
+            >
+              <h2 className="admin-card-title">Unterzeichner suchen</h2>
+              <div className="field">
+                <label htmlFor={`${fieldId}-10`}>
+                  Suche (Name, E-Mail, {region.name})
+                </label>
+                <Input
+                  id={`${fieldId}-10`}
+                  value={signerSearch}
+                  onChange={(e) => setSignerSearch(e.target.value)}
+                  placeholder="Suchen…"
+                />
               </div>
+              <Collapsible.Root>
+                <div className="signer-filter-actions">
+                  <Collapsible.Trigger>
+                    Weitere Filter
+                    {[
+                      signerStateFilter,
+                      signerKvFilter,
+                      signerDatePreset !== "alle",
+                    ].filter(Boolean).length > 0
+                      ? ` · ${[signerStateFilter, signerKvFilter, signerDatePreset !== "alle"].filter(Boolean).length} aktiv`
+                      : ""}{" "}
+                    ▾
+                  </Collapsible.Trigger>
+                  {(signerStateFilter ||
+                    signerKvFilter ||
+                    signerDatePreset !== "alle") && (
+                    <Button
+                      type="button"
+                      onClick={() => {
+                        setSignerStateFilter("");
+                        setSignerKvFilter("");
+                        setSignerDatePreset("alle");
+                        setSignerDateFrom("");
+                        setSignerDateTo("");
+                      }}
+                    >
+                      Filter zurücksetzen
+                    </Button>
+                  )}
+                </div>
+                {(signerStateFilter ||
+                  signerKvFilter ||
+                  signerDatePreset !== "alle") && (
+                  <p className="signer-active-filters">
+                    {[
+                      signerStateFilter,
+                      signerKvFilter && `${region.name}: ${signerKvFilter}`,
+                      signerDatePreset === "24h"
+                        ? "Letzte 24 Stunden"
+                        : signerDatePreset === "7d"
+                          ? "Letzte 7 Tage"
+                          : signerDatePreset === "custom"
+                            ? `${signerDateFrom || "Beginn offen"} bis ${signerDateTo || "Ende offen"}`
+                            : "",
+                    ]
+                      .filter(Boolean)
+                      .join(" · ")}
+                  </p>
+                )}
+                <Collapsible.Panel>
+                  <div className="signer-filter-bar">
+                    {STATES_ON && (
+                      <div className="field">
+                        <label htmlFor={`${fieldId}-11`}>Bundesland</label>
+                        <SelectControl
+                          id={`${fieldId}-11`}
+                          value={signerStateFilter}
+                          onChange={(e) => setSignerStateFilter(e.target.value)}
+                        >
+                          <option value="">Alle</option>
+                          {signerFilterOpts.states.map((s) => (
+                            <option key={s.state} value={s.state}>
+                              {s.state} ({s.count})
+                            </option>
+                          ))}
+                        </SelectControl>
+                      </div>
+                    )}
+                    <div className="field">
+                      <label htmlFor={`${fieldId}-12`}>{region.name}</label>
+                      <SelectControl
+                        id={`${fieldId}-12`}
+                        value={signerKvFilter}
+                        onChange={(e) => setSignerKvFilter(e.target.value)}
+                      >
+                        <option value="">Alle</option>
+                        {signerFilterOpts.kvs.map((k) => (
+                          <option key={k.kreisverband} value={k.kreisverband}>
+                            {k.kreisverband} ({k.count})
+                          </option>
+                        ))}
+                      </SelectControl>
+                    </div>
+                    <div className="field">
+                      <label htmlFor={`${fieldId}-13`}>Zeitraum</label>
+                      <SelectControl
+                        id={`${fieldId}-13`}
+                        value={signerDatePreset}
+                        onChange={(e) => setSignerDatePreset(e.target.value)}
+                      >
+                        <option value="alle">Alle</option>
+                        <option value="24h">Letzte 24 Stunden</option>
+                        <option value="7d">Letzte 7 Tage</option>
+                        <option value="custom">Benutzerdefiniert</option>
+                      </SelectControl>
+                    </div>
+                    {signerDatePreset === "custom" && (
+                      <>
+                        <div className="field">
+                          <label htmlFor={`${fieldId}-14`}>Von</label>
+                          <Input
+                            id={`${fieldId}-14`}
+                            type="date"
+                            value={signerDateFrom}
+                            max={signerDateTo || undefined}
+                            aria-invalid={Boolean(signerRange.error)}
+                            aria-describedby={
+                              signerRange.error
+                                ? `${fieldId}-date-range-error`
+                                : undefined
+                            }
+                            onChange={(e) => setSignerDateFrom(e.target.value)}
+                          />
+                        </div>
+                        <div className="field">
+                          <label htmlFor={`${fieldId}-15`}>Bis</label>
+                          <Input
+                            id={`${fieldId}-15`}
+                            type="date"
+                            value={signerDateTo}
+                            min={signerDateFrom || undefined}
+                            aria-invalid={Boolean(signerRange.error)}
+                            aria-describedby={
+                              signerRange.error
+                                ? `${fieldId}-date-range-error`
+                                : undefined
+                            }
+                            onChange={(e) => setSignerDateTo(e.target.value)}
+                          />
+                        </div>
+                      </>
+                    )}
+                    {signerRange.error && (
+                      <p
+                        id={`${fieldId}-date-range-error`}
+                        role="alert"
+                        className="signer-date-error"
+                      >
+                        {signerRange.error}
+                      </p>
+                    )}
+                  </div>
+                </Collapsible.Panel>
+              </Collapsible.Root>
             </div>
 
             <div className="admin-signers-layout">
               <div className="admin-card">
                 <div className="admin-card-title">
-                  {signerTotal.toLocaleString("de-DE")} gefiltert &middot;{" "}
-                  {selectedSignerIds.size.toLocaleString("de-DE")} ausgewählt
+                  {signerRange.error
+                    ? "Zeitraum korrigieren"
+                    : signerLoading
+                      ? "Unterzeichner werden geladen…"
+                      : signerError
+                        ? "Unterzeichner nicht verfügbar"
+                        : `${signerTotal.toLocaleString("de-DE")} Unterzeichner im Filter`}
                 </div>
+                {signerError && (
+                  <div className="admin-read-status">
+                    <p role="alert">{signerError}</p>
+                    <Button
+                      type="button"
+                      className="admin-button"
+                      onClick={() => setSignerAttempt((n) => n + 1)}
+                    >
+                      Erneut laden
+                    </Button>
+                  </div>
+                )}
                 <div className="signer-selection-actions">
-                  <button
+                  <Button
                     type="button"
                     onClick={selectAllMatching}
-                    disabled={signerTotal === 0}
+                    disabled={
+                      signerLoading ||
+                      Boolean(signerRange.error) ||
+                      Boolean(signerError) ||
+                      selectingAll ||
+                      signerTotal === 0
+                    }
                   >
-                    Alle {signerTotal.toLocaleString("de-DE")} auswählen
-                  </button>
-                  <button
-                    type="button"
-                    onClick={clearSelection}
-                    disabled={selectedSignerIds.size === 0}
-                  >
-                    Auswahl aufheben
-                  </button>
+                    {selectingAll
+                      ? "Empfänger werden hinzugefügt…"
+                      : signerLoading || signerError || signerRange.error
+                        ? "Alle Treffer hinzufügen"
+                        : `Alle ${signerTotal.toLocaleString("de-DE")} hinzufügen`}
+                  </Button>
                 </div>
-                <div className="admin-table-wrap">
-                  <table className="admin-table">
+                {selectionFeedback && (
+                  <p role="status" className="signer-selection-feedback">
+                    {selectionFeedback}
+                  </p>
+                )}
+                <SelectedRecipients
+                  compose={() => {
+                    const heading = document.getElementById(
+                      "selection-compose-heading",
+                    );
+                    heading?.focus({ preventScroll: true });
+                    heading?.scrollIntoView({
+                      block: "start",
+                      behavior: "smooth",
+                    });
+                  }}
+                  api={api}
+                  ids={[...selectedSignerIds]}
+                  filterQuery={signerRange.error ? null : signerQuery()}
+                  filterError={signerRange.error}
+                  remove={(id) =>
+                    setSelectedSignerIds((ids) => {
+                      const next = new Set(ids);
+                      next.delete(id);
+                      return next;
+                    })
+                  }
+                  clear={clearSelection}
+                  onLoaded={setSelectionAudit}
+                />
+                <div className="signer-mobile-results">
+                  <label className="signer-page-select">
+                    <Checkbox.Root
+                      className="admin-checkbox"
+                      checked={
+                        signerRows.length > 0 &&
+                        signerRows.every((r) => selectedSignerIds.has(r.id))
+                      }
+                      onCheckedChange={(checked) => toggleCurrentPage(checked)}
+                    >
+                      <Checkbox.Indicator aria-hidden="true">
+                        ✓
+                      </Checkbox.Indicator>
+                    </Checkbox.Root>
+                    Diese Seite auswählen
+                  </label>
+                  <ul className="signer-cards" aria-label="Unterzeichner">
+                    {signerRows.map((r) => (
+                      <li
+                        key={r.id}
+                        className={
+                          selectedSignerIds.has(r.id) ? "is-selected" : ""
+                        }
+                      >
+                        <label className="signer-card-identity">
+                          <Checkbox.Root
+                            className="admin-checkbox"
+                            checked={selectedSignerIds.has(r.id)}
+                            onCheckedChange={() => toggleSigner(r.id)}
+                          >
+                            <Checkbox.Indicator aria-hidden="true">
+                              ✓
+                            </Checkbox.Indicator>
+                          </Checkbox.Root>
+                          <span className="signer-card-person">
+                            <strong>{r.name}</strong>
+                            <span>{r.email}</span>
+                          </span>
+                        </label>
+                        <Collapsible.Root>
+                          <Collapsible.Trigger className="signer-card-details">
+                            Details <span aria-hidden="true">▾</span>
+                          </Collapsible.Trigger>
+                          <Collapsible.Panel>
+                            <dl>
+                              <div>
+                                <dt>{region.name}</dt>
+                                <dd>{r.kreisverband || "–"}</dd>
+                              </div>
+                              {STATES_ON && (
+                                <div>
+                                  <dt>Bundesland</dt>
+                                  <dd>{r.state || "–"}</dd>
+                                </div>
+                              )}
+                              {OCCUPATION_ON && (
+                                <div>
+                                  <dt>Tätigkeit</dt>
+                                  <dd>{r.occupation || "–"}</dd>
+                                </div>
+                              )}
+                              <div>
+                                <dt>Unterschrieben</dt>
+                                <dd>
+                                  {new Date(r.created_at).toLocaleDateString(
+                                    "de-DE",
+                                  )}
+                                </dd>
+                              </div>
+                            </dl>
+                          </Collapsible.Panel>
+                        </Collapsible.Root>
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+                <div className="admin-table-wrap signer-desktop-results">
+                  <table className="admin-table signer-table">
                     <thead>
                       <tr>
                         <th>
-                          <input
-                            type="checkbox"
+                          <Checkbox.Root
+                            className="admin-checkbox"
                             aria-label="Seite auswählen"
                             checked={
                               signerRows.length > 0 &&
@@ -1602,10 +1938,14 @@ export default function AdminApp() {
                                 selectedSignerIds.has(r.id),
                               )
                             }
-                            onChange={(e) =>
-                              toggleCurrentPage(e.target.checked)
+                            onCheckedChange={(checked) =>
+                              toggleCurrentPage(checked)
                             }
-                          />
+                          >
+                            <Checkbox.Indicator aria-hidden="true">
+                              ✓
+                            </Checkbox.Indicator>
+                          </Checkbox.Root>
                         </th>
                         <th>Name</th>
                         <th>E-Mail</th>
@@ -1624,13 +1964,17 @@ export default function AdminApp() {
                           aria-selected={selectedSignerIds.has(r.id)}
                         >
                           <td>
-                            <input
-                              type="checkbox"
-                              aria-label={`${r.name} auswählen`}
+                            <Checkbox.Root
+                              className="admin-checkbox"
+                              aria-label={`${r.name}, ${r.email} auswählen`}
                               checked={selectedSignerIds.has(r.id)}
-                              onChange={() => toggleSigner(r.id)}
-                              onClick={(e) => e.stopPropagation()}
-                            />
+                              onCheckedChange={() => toggleSigner(r.id)}
+                              onClick={(event) => event.stopPropagation()}
+                            >
+                              <Checkbox.Indicator aria-hidden="true">
+                                ✓
+                              </Checkbox.Indicator>
+                            </Checkbox.Root>
                           </td>
                           <td>{r.name}</td>
                           <td>{r.email}</td>
@@ -1645,159 +1989,252 @@ export default function AdminApp() {
                     </tbody>
                   </table>
                 </div>
-                {signerLoading && <p className="admin-muted">Lädt…</p>}
-                {!signerLoading && signerRows.length === 0 && (
-                  <p className="admin-muted">Keine Unterzeichner gefunden.</p>
+                {signerLoading && (
+                  <p className="admin-muted" role="status">
+                    Ergebnisse werden geladen…
+                  </p>
                 )}
-                <div className="signer-pagination">
-                  <button
-                    type="button"
-                    disabled={signerPage === 0}
-                    onClick={() => setSignerPage((p) => Math.max(0, p - 1))}
-                  >
-                    Zurück
-                  </button>
-                  <span className="admin-muted">
-                    Seite {signerPage + 1} /{" "}
-                    {Math.max(1, Math.ceil(signerTotal / SIGNER_PAGE_SIZE))}
-                  </span>
-                  <button
-                    type="button"
-                    disabled={
-                      (signerPage + 1) * SIGNER_PAGE_SIZE >= signerTotal
-                    }
-                    onClick={() => setSignerPage((p) => p + 1)}
-                  >
-                    Weiter
-                  </button>
-                </div>
+                {!signerLoading &&
+                  !signerError &&
+                  !signerRange.error &&
+                  signerRows.length === 0 && (
+                    <p className="admin-muted">Keine Unterzeichner gefunden.</p>
+                  )}
+                {!signerLoading && !signerError && !signerRange.error && (
+                  <div className="signer-pagination">
+                    <Button
+                      type="button"
+                      disabled={signerPage === 0}
+                      onClick={() => setSignerPage((p) => Math.max(0, p - 1))}
+                    >
+                      Zurück
+                    </Button>
+                    <span className="admin-muted">
+                      Seite {signerPage + 1} /{" "}
+                      {Math.max(1, Math.ceil(signerTotal / SIGNER_PAGE_SIZE))}
+                    </span>
+                    <Button
+                      type="button"
+                      disabled={
+                        (signerPage + 1) * SIGNER_PAGE_SIZE >= signerTotal
+                      }
+                      onClick={() => setSignerPage((p) => p + 1)}
+                    >
+                      Weiter
+                    </Button>
+                  </div>
+                )}
               </div>
 
               <form
                 className="admin-card campaign-form"
                 onSubmit={scheduleSelection}
+                aria-busy={selectionSubmission.pending}
               >
-                <div className="admin-card-title">An Auswahl senden</div>
-                <p className="admin-muted">
-                  {selectedSignerIds.size.toLocaleString("de-DE")}{" "}
-                  Empfänger*innen ausgewählt
-                </p>
-                <div className="field">
-                  <label>Vorlage</label>
-                  <select
-                    value={selTemplate}
-                    onChange={(e) => {
-                      setSelTemplate(e.target.value);
-                      const t = templates.find(
-                        (x) => String(x.id) === e.target.value,
-                      );
-                      if (t) setSelSubject(t.subject);
-                    }}
+                <div className="campaign-form-heading">
+                  <h2
+                    className="admin-card-title"
+                    id="selection-compose-heading"
+                    tabIndex={-1}
                   >
-                    {templates.map((t) => (
-                      <option key={t.id} value={t.id}>
-                        {t.name}
-                      </option>
-                    ))}
-                  </select>
-                </div>
-                <div className="field">
-                  <label>Betreff</label>
-                  <input
-                    value={selSubject}
-                    onChange={(e) => setSelSubject(e.target.value)}
-                  />
-                </div>
-                <CampaignLanguages
-                  templates={templates}
-                  value={selTexts}
-                  onChange={setSelTexts}
-                />
-                <div className="admin-picker-wrapper">
-                  <div className="admin-date-row">
-                    <div className="field">
-                      <label>Datum</label>
-                      <input
-                        type="text"
-                        value={selDateInput}
-                        onChange={handleSelDateInput}
-                        placeholder="TT.MM.JJJJ"
-                        maxLength={10}
-                      />
-                    </div>
-                    <div className="field">
-                      <label>Uhrzeit</label>
-                      <input
-                        type="time"
-                        value={selTime}
-                        onChange={(e) => setSelTime(e.target.value)}
-                        lang="de"
-                      />
-                    </div>
-                  </div>
-                  <DayPicker
-                    mode="single"
-                    selected={selDate}
-                    onSelect={(date) => {
-                      if (date) {
-                        setSelDate(date);
-                        setSelDateInput(format(date, "dd.MM.yyyy"));
-                      }
-                    }}
-                    locale={de}
-                  />
-                </div>
-                <div className="admin-actions">
-                  <button
-                    className="cta"
-                    type="submit"
-                    disabled={!selTemplate || selectedSignerIds.size === 0}
-                  >
-                    Planen
-                  </button>
-                  <button
-                    className="cta"
+                    An Auswahl senden
+                  </h2>
+                  <p className="admin-muted">
+                    Nachrichtenentwurf und Auswahl bleiben in diesem Browser
+                    gespeichert.
+                  </p>
+                  <p className="admin-muted">
+                    Der Versand verwendet die dann veröffentlichte Vorlage.
+                    Änderungen an Vorlagen gelten auch für bereits geplante
+                    Nachrichten.
+                  </p>
+                  {selectionDraft.error && (
+                    <p role="alert">{selectionDraft.error}</p>
+                  )}
+                  <Button
+                    className="admin-button"
                     type="button"
-                    onClick={sendSelectionNow}
-                    disabled={!selTemplate || selectedSignerIds.size === 0}
+                    disabled={selectionSubmission.pending}
+                    onClick={() => resetCampaignDraft(true)}
                   >
-                    Jetzt senden
-                  </button>
+                    Entwurf zurücksetzen
+                  </Button>
+                  <p className="admin-muted">
+                    {selectedSignerIds.size.toLocaleString("de-DE")}{" "}
+                    Empfänger*innen ausgewählt
+                  </p>
                 </div>
-                {selSendStatus === "ok" && (
-                  <p className="admin-test-feedback admin-test-ok">
-                    Kampagne erstellt
-                  </p>
-                )}
-                {selSendStatus && selSendStatus !== "ok" && (
-                  <p className="admin-test-feedback admin-test-error">
-                    {selSendStatus}
-                  </p>
-                )}
-
+                <div className="campaign-message">
+                  <h3>1. Nachricht</h3>
+                  <CampaignMessageFields
+                    templates={templates}
+                    templateId={selTemplate}
+                    subject={selSubject}
+                    onTemplateChange={setSelTemplate}
+                    onSubjectChange={setSelSubject}
+                    disabled={selectionSubmission.pending}
+                  />
+                  <CampaignLanguages
+                    templates={templates}
+                    value={selTexts}
+                    onChange={setSelTexts}
+                  />
+                </div>
+                <div className="campaign-delivery">
+                  <h3>2. Zeitpunkt</h3>
+                  <div className="admin-picker-wrapper">
+                    <div className="admin-date-row">
+                      <div className="field">
+                        <label htmlFor={`${fieldId}-18`}>Datum</label>
+                        <Input
+                          id={`${fieldId}-18`}
+                          ref={selectionDateField}
+                          aria-invalid={Boolean(selectionScheduleError)}
+                          aria-describedby={
+                            selectionScheduleError
+                              ? `${fieldId}-selection-schedule-error`
+                              : undefined
+                          }
+                          type="text"
+                          value={selDateInput}
+                          onChange={handleSelDateInput}
+                          onBlur={() => {
+                            if (selDateInput && !selDate)
+                              setSelectionScheduleError(
+                                "Gib ein gültiges Datum als TT.MM.JJJJ ein.",
+                              );
+                          }}
+                          placeholder="TT.MM.JJJJ"
+                          maxLength={10}
+                        />
+                      </div>
+                      <div className="field">
+                        <label htmlFor={`${fieldId}-19`}>Uhrzeit</label>
+                        <Input
+                          id={`${fieldId}-19`}
+                          type="text"
+                          pattern="([01][0-9]|2[0-3]):[0-5][0-9]"
+                          placeholder="HH:MM"
+                          title="Uhrzeit im 24-Stunden-Format, z. B. 18:30"
+                          maxLength={5}
+                          required
+                          value={selTime}
+                          onChange={(e) => {
+                            setSelTime(e.target.value);
+                            setSelectionScheduleError("");
+                          }}
+                        />
+                      </div>
+                    </div>
+                    {selectionScheduleError && (
+                      <p
+                        id={`${fieldId}-selection-schedule-error`}
+                        role="alert"
+                        className="admin-field-error"
+                      >
+                        {selectionScheduleError}
+                      </p>
+                    )}
+                    <ScheduleCalendar
+                      selected={selDate}
+                      onSelect={(date) => {
+                        if (date) {
+                          setSelDate(date);
+                          setSelDateInput(format(date, "dd.MM.yyyy"));
+                          setSelectionScheduleError("");
+                        }
+                      }}
+                    />
+                    <p className="admin-muted">
+                      Zeitzone:{" "}
+                      {Intl.DateTimeFormat().resolvedOptions().timeZone}
+                    </p>
+                  </div>
+                  {selectionSubmission.pending && (
+                    <p role="status">
+                      Der Versandauftrag wird geprüft und gespeichert…
+                    </p>
+                  )}
+                  <div className="admin-actions">
+                    <Button
+                      className="cta"
+                      type="submit"
+                      disabled={
+                        selectionSubmission.pending ||
+                        !selectionTemplateAvailable ||
+                        !selDate ||
+                        !selTime ||
+                        selectedSignerIds.size === 0 ||
+                        !selectionAudit ||
+                        selectionAudit.total === 0
+                      }
+                    >
+                      Versand einplanen
+                    </Button>
+                    <Button
+                      className="cta"
+                      type="button"
+                      onClick={sendSelectionNow}
+                      disabled={
+                        !emailStatus?.ready ||
+                        selectionSubmission.pending ||
+                        !selectionTemplateAvailable ||
+                        selectedSignerIds.size === 0 ||
+                        !selectionAudit ||
+                        selectionAudit.total === 0
+                      }
+                    >
+                      Jetzt senden
+                    </Button>
+                  </div>
+                  {selSendStatus && (
+                    <p
+                      role={selSendStatus.success ? "status" : "alert"}
+                      className={`admin-test-feedback ${selSendStatus.success ? "admin-test-ok" : "admin-test-error"}`}
+                    >
+                      {selSendStatus.message}
+                    </p>
+                  )}
+                </div>
                 <div className="admin-test-send">
+                  <CampaignTestLanguage
+                    api={api}
+                    templates={templates}
+                    language={selTestLanguage}
+                    onLanguage={setSelTestLanguage}
+                    templateId={selTemplate}
+                    subject={selSubject}
+                    translations={selTexts}
+                  />
                   <div className="field">
-                    <label>Testversand an</label>
-                    <input
+                    <label htmlFor={`${fieldId}-20`}>Testversand an</label>
+                    <Input
+                      id={`${fieldId}-20`}
                       type="email"
                       value={selTestEmail}
                       onChange={(e) => setSelTestEmail(e.target.value)}
                       placeholder="test@beispiel.de"
                     />
                   </div>
-                  <button
+                  <Button
                     className="cta cta--outline"
                     type="button"
                     onClick={sendSelectionTest}
-                    disabled={!selTestEmail || selTestStatus === "sending"}
+                    disabled={
+                      !emailStatus?.ready ||
+                      !selectionTemplateAvailable ||
+                      !selTestEmail ||
+                      selTestStatus === "sending"
+                    }
                   >
                     {selTestStatus === "sending"
                       ? "Wird gesendet…"
                       : "Test senden"}
-                  </button>
+                  </Button>
                   {selTestStatus === "ok" && (
                     <p className="admin-test-feedback admin-test-ok">
-                      E-Mail gesendet
+                      Der Anbieter hat die Nachricht angenommen. Prüfe, ob sie
+                      im Postfach angekommen ist.
                     </p>
                   )}
                   {selTestStatus &&
@@ -1817,197 +2254,64 @@ export default function AdminApp() {
       {tab === "zoom" && (
         <section className="section">
           <div className="section-inner">
-            <form
-              className="admin-card"
-              style={{ marginBottom: 20 }}
-              onSubmit={saveZoomSettings}
-            >
-              <div className="admin-card-title">Termin & Versand-Timing</div>
-              <div className="field">
-                <label>Termin (Datum & Uhrzeit)</label>
-                <input
-                  type="datetime-local"
-                  value={zoomEventAtInput}
-                  onChange={(e) => setZoomEventAtInput(e.target.value)}
-                />
-              </div>
-              <div className="field">
-                <label>Zoom-Link</label>
-                <input
-                  type="url"
-                  value={zoomLinkInput}
-                  onChange={(e) => setZoomLinkInput(e.target.value)}
-                  placeholder="https://zoom.us/j/..."
-                />
-              </div>
-              <div className="admin-date-row">
-                <div className="field">
-                  <label>Link-Mail: Stunden vor dem Termin</label>
-                  <input
-                    type="number"
-                    min="0"
-                    value={zoomLinkOffset}
-                    onChange={(e) => setZoomLinkOffset(e.target.value)}
-                  />
-                </div>
-                <div className="field">
-                  <label>Erinnerung: Stunden vor dem Termin</label>
-                  <input
-                    type="number"
-                    min="0"
-                    value={zoomReminderOffset}
-                    onChange={(e) => setZoomReminderOffset(e.target.value)}
-                  />
-                </div>
-              </div>
-              <p className="admin-muted">
-                Bei Änderung des Termins wird der Versand-Status zurückgesetzt,
-                sodass Link-Mail und Erinnerung neu ausgelöst werden.
-              </p>
-
-              <div className="admin-card-title">Format & Anzeige</div>
-              <div className="field">
-                <label>Format des Treffens</label>
-                <select
-                  value={zoomMode}
-                  onChange={(e) => setZoomMode(e.target.value)}
-                >
-                  <option value="online">Online (Videocall)</option>
-                  <option value="inperson">Vor Ort (Präsenz)</option>
-                </select>
-              </div>
-              {zoomMode === "inperson" && (
-                <>
-                  <div className="field">
-                    <label>Ort – Name</label>
-                    <input
-                      type="text"
-                      value={zoomLocationName}
-                      onChange={(e) => setZoomLocationName(e.target.value)}
-                      placeholder="z. B. Karl-Liebknecht-Haus"
-                    />
-                  </div>
-                  <div className="field">
-                    <label>Ort – Adresse</label>
-                    <input
-                      type="text"
-                      value={zoomLocationAddress}
-                      onChange={(e) => setZoomLocationAddress(e.target.value)}
-                      placeholder="Straße, PLZ Ort"
-                    />
-                  </div>
-                  <div className="field">
-                    <label>Ort – Karten-Link (optional)</label>
-                    <input
-                      type="url"
-                      value={zoomLocationMapsUrl}
-                      onChange={(e) => setZoomLocationMapsUrl(e.target.value)}
-                      placeholder="https://maps.google.com/..."
-                    />
-                  </div>
-                </>
-              )}
-              <div className="admin-date-row">
-                <div className="field">
-                  <label>Titel/Label (wenn kein Termin gesetzt)</label>
-                  <input
-                    type="text"
-                    value={zoomEventLabel}
-                    onChange={(e) => setZoomEventLabel(e.target.value)}
-                    placeholder="z. B. Termin folgt"
-                  />
-                </div>
-                <div className="field">
-                  <label>Label in Navigation & Button</label>
-                  <input
-                    type="text"
-                    value={zoomNavLabel}
-                    onChange={(e) => setZoomNavLabel(e.target.value)}
-                    placeholder="z. B. Auswertungstreffen"
-                  />
-                </div>
-                <div className="field">
-                  <label>Dauer (Minuten, für Kalendereintrag)</label>
-                  <input
-                    type="number"
-                    min={5}
-                    max={1440}
-                    value={zoomDurationMin}
-                    onChange={(e) => setZoomDurationMin(e.target.value)}
-                  />
-                </div>
-              </div>
-              <label className="check admin-check">
-                <input
-                  type="checkbox"
-                  checked={zoomShowDelegierter}
-                  onChange={(e) => setZoomShowDelegierter(e.target.checked)}
-                />
-                <span>Delegierte*r-Feld anzeigen</span>
-              </label>
-
-              <p className="admin-muted">
-                Einstellungen werden zusammen mit dem Termin gespeichert – bitte
-                oben ein gültiges Datum setzen.
-              </p>
-              <div className="admin-actions">
-                <button
-                  className="cta"
-                  type="submit"
-                  disabled={
-                    !zoomEventAtInput || zoomSettingsStatus === "saving"
-                  }
-                >
-                  {zoomSettingsStatus === "saving"
-                    ? "Wird gespeichert…"
-                    : "Speichern"}
-                </button>
-              </div>
-              {zoomSettingsStatus === "ok" && (
-                <p className="admin-test-feedback admin-test-ok">Gespeichert</p>
-              )}
-              {zoomSettingsStatus === "ok-reset" && (
-                <p className="admin-test-feedback admin-test-ok">
-                  Gespeichert · Versand-Status zurückgesetzt
-                </p>
-              )}
-              {zoomSettingsStatus &&
-                !["ok", "ok-reset", "saving"].includes(zoomSettingsStatus) && (
-                  <p className="admin-test-feedback admin-test-error">
-                    {zoomSettingsStatus}
-                  </p>
-                )}
-            </form>
+            <MeetingSettings
+              form={meetingForm}
+              askConfirmation={askConfirmation}
+            />
 
             {zoomMailings && (
               <div className="admin-card" style={{ marginBottom: 20 }}>
                 <div className="admin-card-title">Automatische E-Mails</div>
                 <p className="admin-muted">
-                  Termin: {zoomMailings.eventLabel} (
+                  Gespeicherter Termin: {zoomMailings.eventLabel} (
                   {new Date(zoomMailings.eventAt).toLocaleString("de-DE")}) ·
-                  Zoom-Link{" "}
-                  {zoomMailings.hasLink ? "gesetzt" : "fehlt noch (ZOOM_LINK)"}
+                  Zoom-Link {zoomMailings.hasLink ? "gesetzt" : "fehlt noch"}
                 </p>
                 <p>
-                  <strong>Link-Mail (1 Tag vorher, mit .ics):</strong>{" "}
-                  {zoomMailingStatus(zoomMailings.mailings, "link")}
+                  <strong>
+                    Link-E-Mail ({zoomMailings.linkOffsetHours} Std. vorher, mit
+                    .ics):
+                  </strong>{" "}
+                  {new Date(
+                    new Date(zoomMailings.eventAt).getTime() -
+                      zoomMailings.linkOffsetHours * 3600000,
+                  ).toLocaleString("de-DE", { timeZoneName: "short" })}{" "}
+                  · {zoomMailingStatus(zoomMailings.mailings, "link")}
                 </p>
                 <p>
-                  <strong>Erinnerung (2 Std. vorher):</strong>{" "}
-                  {zoomMailingStatus(zoomMailings.mailings, "reminder")}
+                  <strong>
+                    Erinnerung ({zoomMailings.reminderOffsetHours} Std. vorher):
+                  </strong>{" "}
+                  {new Date(
+                    new Date(zoomMailings.eventAt).getTime() -
+                      zoomMailings.reminderOffsetHours * 3600000,
+                  ).toLocaleString("de-DE", { timeZoneName: "short" })}{" "}
+                  · {zoomMailingStatus(zoomMailings.mailings, "reminder")}
                 </p>
+                {(zoomMailings.mailings || [])
+                  .filter((mailing) => mailing.status === "aborted")
+                  .map((mailing) => (
+                    <ZoomMailingRecovery
+                      key={mailing.kind}
+                      mailing={mailing}
+                      eventAt={zoomMailings.eventAt}
+                      eventLabel={zoomMailings.eventLabel}
+                      repair={() => navigate("settings")}
+                    />
+                  ))}
               </div>
             )}
 
             <div className="admin-card" style={{ marginBottom: 20 }}>
-              <div className="admin-card-title">Test-Mails</div>
+              <div className="admin-card-title">Testnachrichten</div>
               <p className="admin-muted">
-                Schickt die jeweilige Zoom-Mail an eine einzelne Adresse (ohne
-                die echten Anmeldungen anzurühren).
+                Sende die ausgewählte Zoom-E-Mail an eine Testadresse. Die
+                angemeldeten Personen erhalten diesen Test nicht.
               </p>
               <div className="field">
-                <label>Test-Adresse</label>
-                <input
+                <label htmlFor={`${fieldId}-30`}>Testadresse</label>
+                <Input
+                  id={`${fieldId}-30`}
                   type="email"
                   value={zoomTestEmail}
                   onChange={(e) => setZoomTestEmail(e.target.value)}
@@ -2015,34 +2319,46 @@ export default function AdminApp() {
                 />
               </div>
               <div className="admin-actions">
-                <button
+                <Button
                   type="button"
                   className="cta cta--outline"
                   onClick={() => sendZoomTest("confirmation")}
-                  disabled={!zoomTestEmail || zoomTestStatus === "sending"}
+                  disabled={
+                    !emailStatus?.ready ||
+                    !zoomTestEmail ||
+                    zoomTestStatus === "sending"
+                  }
                 >
                   Bestätigung testen
-                </button>
-                <button
+                </Button>
+                <Button
                   type="button"
                   className="cta cta--outline"
                   onClick={() => sendZoomTest("link")}
-                  disabled={!zoomTestEmail || zoomTestStatus === "sending"}
+                  disabled={
+                    !emailStatus?.ready ||
+                    !zoomTestEmail ||
+                    zoomTestStatus === "sending"
+                  }
                 >
-                  Link-Mail (.ics) testen
-                </button>
-                <button
+                  Link-E-Mail mit Kalendereintrag testen
+                </Button>
+                <Button
                   type="button"
                   className="cta cta--outline"
                   onClick={() => sendZoomTest("reminder")}
-                  disabled={!zoomTestEmail || zoomTestStatus === "sending"}
+                  disabled={
+                    !emailStatus?.ready ||
+                    !zoomTestEmail ||
+                    zoomTestStatus === "sending"
+                  }
                 >
                   Erinnerung testen
-                </button>
+                </Button>
               </div>
               {zoomTestStatus === "ok" && (
                 <p className="admin-test-feedback admin-test-ok">
-                  Test-Mail gesendet
+                  Testnachricht gesendet
                 </p>
               )}
               {zoomTestStatus === "sending" && (
@@ -2069,7 +2385,10 @@ export default function AdminApp() {
               }}
             >
               <span>
-                Zoom-Anmeldungen · {zoomRegs.length} gesamt
+                Zoom-Anmeldungen{" "}
+                {zoomRegistrationRead.data !== null
+                  ? `· ${zoomRegs.length} gesamt`
+                  : ""}
                 {zoomShowDelegierter && (
                   <>
                     {" "}
@@ -2077,23 +2396,30 @@ export default function AdminApp() {
                   </>
                 )}
               </span>
-              <button
+              <Button
                 type="button"
-                className="admin-danger"
+                className="admin-button admin-danger-secondary"
                 onClick={clearZoomRegs}
                 disabled={
-                  zoomRegs.length === 0 || zoomClearStatus === "clearing"
+                  zoomRegs.length === 0 ||
+                  zoomClearStatus === "clearing" ||
+                  zoomRegistrationRead.error ||
+                  zoomRegistrationRead.loading
                 }
               >
                 {zoomClearStatus === "clearing"
                   ? "Wird gelöscht…"
                   : "Alle Zoom-Anmeldungen löschen"}
-              </button>
+              </Button>
             </div>
+            <AdminReadStatus
+              resource={zoomRegistrationRead}
+              label="Anmeldungen"
+            />
             {zoomClearStatus && zoomClearStatus.startsWith("ok:") && (
               <p className="admin-test-feedback admin-test-ok">
-                {zoomClearStatus.slice(3)} Anmeldungen gelöscht. Der Zoom ist
-                jetzt frei für eine neue Runde.
+                {zoomClearStatus.slice(3)} Alle Zoom-Anmeldungen wurden
+                gelöscht.
               </p>
             )}
             {zoomClearStatus &&
@@ -2103,53 +2429,48 @@ export default function AdminApp() {
                   {zoomClearStatus}
                 </p>
               )}
-            {zoomRegs.length === 0 ? (
-              <p>Noch keine Anmeldungen.</p>
+            {zoomRegistrationRead.data === null ? null : zoomRegs.length ===
+              0 ? (
+              !zoomRegistrationRead.error && <p>Noch keine Anmeldungen.</p>
             ) : (
-              <div className="admin-table-wrap">
-                <table className="admin-table">
-                  <thead>
-                    <tr>
-                      <th>Name</th>
-                      <th>{region.name}</th>
-                      {zoomShowDelegierter && <th>Delegierte*r</th>}
-                      <th>E-Mail</th>
-                      <th>Angemeldet</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {zoomRegs.map((r) => (
-                      <tr key={r.email}>
-                        <td>{r.name}</td>
-                        <td>{r.kreisverband || "-"}</td>
-                        {zoomShowDelegierter && (
-                          <td>{r.delegierter ? "Ja" : "-"}</td>
-                        )}
-                        <td>{r.email}</td>
-                        <td>
-                          {new Date(r.created_at).toLocaleString("de-DE", {
-                            day: "2-digit",
-                            month: "2-digit",
-                            year: "numeric",
-                            hour: "2-digit",
-                            minute: "2-digit",
-                          })}
-                        </td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
+              <ZoomRegistrations
+                registrations={zoomRegs}
+                showDelegierter={zoomShowDelegierter}
+                regionLabel={region.name}
+              />
             )}
           </div>
         </section>
       )}
 
-      {tab === "copy" && <AdminCopy api={api} />}
-
+      <ConfirmDialog request={confirmation} resolve={resolveConfirmation} />
+      {sessionStatus === "expired" && (
+        <AdminLogin
+          expired
+          onLogin={(newToken) => {
+            signIn(newToken);
+            setNotice(
+              "Du bist wieder angemeldet. Deine Eingaben bleiben erhalten. Prüfe den gespeicherten Stand, bevor du erneut speicherst.",
+            );
+            requestAnimationFrame(() => destinationHeading.current?.focus());
+          }}
+        />
+      )}
       {tab === "settings" && (
         <section className="section">
           <div className="section-inner settings-grid">
+            <nav
+              className="settings-section-links"
+              aria-label="Einstellungen im Überblick"
+            >
+              {SETTINGS_SECTIONS.map(([id, label]) => (
+                <a key={id} href={`#${id}`}>
+                  {label}
+                </a>
+              ))}
+            </nav>
+            <EmailSetup api={api} onDirty={setEmailDirty} />
+            <AdminStatistics api={api} onDirtyChange={setStatisticsDirty} />
             <div className="admin-card stat-card">
               <span>Mitzeichner*innen</span>
               <strong>{stats.signerCount.toLocaleString("de-DE")}</strong>
@@ -2158,40 +2479,7 @@ export default function AdminApp() {
               <span>Newsletter</span>
               <strong>{stats.subscriberCount.toLocaleString("de-DE")}</strong>
             </div>
-            <form
-              className="admin-card"
-              style={{ gridColumn: "1 / -1" }}
-              onSubmit={saveMilestones}
-            >
-              <div className="admin-card-title">Meilensteine (Ziel)</div>
-              <p className="admin-muted" style={{ marginBottom: 8 }}>
-                Kommagetrennte Zielmarken für den Fortschrittsbalken. Die
-                nächste Marke oberhalb der aktuellen Unterschriftenzahl ist das
-                Ziel.
-              </p>
-              <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
-                <input
-                  type="text"
-                  value={milestonesInput}
-                  onChange={(e) => setMilestonesInput(e.target.value)}
-                  placeholder="1000, 1300, 1600, 2000"
-                  style={{ flex: 1, minWidth: 220 }}
-                  aria-label="Meilensteine, kommagetrennt"
-                />
-                <button type="submit" disabled={milestonesStatus === "saving"}>
-                  {milestonesStatus === "saving" ? "Speichern…" : "Speichern"}
-                </button>
-              </div>
-              {milestonesStatus === "ok" && (
-                <p className="admin-test-feedback admin-test-ok">Gespeichert</p>
-              )}
-              {milestonesStatus &&
-                !["ok", "saving"].includes(milestonesStatus) && (
-                  <p className="admin-test-feedback admin-test-error">
-                    {milestonesStatus}
-                  </p>
-                )}
-            </form>
+            <MilestoneSettings form={milestoneForm} />
 
             {STATES_ON && (
               <div className="admin-card" style={{ gridColumn: "1 / -1" }}>
@@ -2200,8 +2488,7 @@ export default function AdminApp() {
                   <div className="state-resolution-stats">
                     <p>
                       <strong>{stateResolution.resolvedKvs}</strong>{" "}
-                      {region.plural}
-                      zugeordnet,{" "}
+                      {region.plural} zugeordnet,{" "}
                       <strong>{stateResolution.unresolvedKvs}</strong> offen
                     </p>
                     <p>
@@ -2245,7 +2532,7 @@ export default function AdminApp() {
                             {kv.kreisverband}{" "}
                             <span className="admin-muted">({kv.count})</span>
                           </span>
-                          <select
+                          <SelectControl
                             value={kvStateSelections[kv.kreisverband] || ""}
                             onChange={(e) =>
                               setKvStateSelections((prev) => ({
@@ -2261,8 +2548,8 @@ export default function AdminApp() {
                                 {s}
                               </option>
                             ))}
-                          </select>
-                          <button
+                          </SelectControl>
+                          <Button
                             type="button"
                             className="cta cta--outline admin-compact-btn"
                             disabled={
@@ -2300,20 +2587,22 @@ export default function AdminApp() {
                                     setStateResolution(await statusRes.json());
                                 }
                               } catch {
-                                /* ignore */
+                                setNotice(
+                                  "Der Server hat die Aktion nicht bestätigt. Lade den aktuellen Stand, bevor du es erneut versuchst.",
+                                );
                               }
                               setAssigningKv(null);
                             }}
                           >
                             {assigningKv === kv.kreisverband ? "…" : "Zuordnen"}
-                          </button>
+                          </Button>
                         </div>
                       ))}
                     </div>
                   </div>
                 )}
                 <div className="admin-actions">
-                  <button
+                  <Button
                     type="button"
                     className="cta"
                     disabled={resolving}
@@ -2349,8 +2638,8 @@ export default function AdminApp() {
                     }}
                   >
                     {resolving ? "Wird gestartet…" : "Zuordnung starten"}
-                  </button>
-                  <button
+                  </Button>
+                  <Button
                     type="button"
                     className="cta cta--outline"
                     disabled={resolving}
@@ -2386,7 +2675,7 @@ export default function AdminApp() {
                     }}
                   >
                     {resolving ? "Wird gestartet…" : "Alle erneut prüfen"}
-                  </button>
+                  </Button>
                 </div>
                 {resolveMessage && (
                   <p className="admin-muted">{resolveMessage}</p>
@@ -2419,7 +2708,7 @@ export default function AdminApp() {
                             </span>
                           </span>
                           <span className="outlier-actions">
-                            <button
+                            <Button
                               type="button"
                               className="cta cta--outline outlier-merge-btn"
                               disabled={merging === outlier.name}
@@ -2465,7 +2754,9 @@ export default function AdminApp() {
                                       );
                                   }
                                 } catch {
-                                  /* ignore */
+                                  setNotice(
+                                    "Der Server hat die Aktion nicht bestätigt. Lade den aktuellen Stand, bevor du es erneut versuchst.",
+                                  );
                                 }
                                 setMerging(null);
                               }}
@@ -2473,8 +2764,8 @@ export default function AdminApp() {
                               {merging === outlier.name
                                 ? "…"
                                 : `→ ${group.canonical.name}`}
-                            </button>
-                            <button
+                            </Button>
+                            <Button
                               type="button"
                               className="cta cta--outline outlier-merge-btn"
                               disabled={merging === outlier.name}
@@ -2520,7 +2811,9 @@ export default function AdminApp() {
                                       );
                                   }
                                 } catch {
-                                  /* ignore */
+                                  setNotice(
+                                    "Der Server hat die Aktion nicht bestätigt. Lade den aktuellen Stand, bevor du es erneut versuchst.",
+                                  );
                                 }
                                 setMerging(null);
                               }}
@@ -2528,8 +2821,8 @@ export default function AdminApp() {
                               {merging === outlier.name
                                 ? "…"
                                 : `→ ${outlier.name}`}
-                            </button>
-                            <button
+                            </Button>
+                            <Button
                               type="button"
                               className="outlier-dismiss"
                               disabled={merging === outlier.name}
@@ -2565,13 +2858,15 @@ export default function AdminApp() {
                                     );
                                   }
                                 } catch {
-                                  /* ignore */
+                                  setNotice(
+                                    "Der Server hat die Aktion nicht bestätigt. Lade den aktuellen Stand, bevor du es erneut versuchst.",
+                                  );
                                 }
                                 setMerging(null);
                               }}
                             >
-                              Stimmt so
-                            </button>
+                              Schreibweise beibehalten
+                            </Button>
                           </span>
                         </div>
                       ))}
@@ -2606,7 +2901,7 @@ export default function AdminApp() {
                             </span>
                           </span>
                           <span className="outlier-actions">
-                            <button
+                            <Button
                               type="button"
                               className="cta cta--outline outlier-merge-btn"
                               disabled={occMerging === outlier.name}
@@ -2648,7 +2943,9 @@ export default function AdminApp() {
                                     );
                                   }
                                 } catch {
-                                  /* ignore */
+                                  setNotice(
+                                    "Der Server hat die Aktion nicht bestätigt. Lade den aktuellen Stand, bevor du es erneut versuchst.",
+                                  );
                                 }
                                 setOccMerging(null);
                               }}
@@ -2656,8 +2953,8 @@ export default function AdminApp() {
                               {occMerging === outlier.name
                                 ? "…"
                                 : `→ ${group.canonical.name}`}
-                            </button>
-                            <button
+                            </Button>
+                            <Button
                               type="button"
                               className="cta cta--outline outlier-merge-btn"
                               disabled={occMerging === outlier.name}
@@ -2699,7 +2996,9 @@ export default function AdminApp() {
                                     );
                                   }
                                 } catch {
-                                  /* ignore */
+                                  setNotice(
+                                    "Der Server hat die Aktion nicht bestätigt. Lade den aktuellen Stand, bevor du es erneut versuchst.",
+                                  );
                                 }
                                 setOccMerging(null);
                               }}
@@ -2707,8 +3006,8 @@ export default function AdminApp() {
                               {occMerging === outlier.name
                                 ? "…"
                                 : `→ ${outlier.name}`}
-                            </button>
-                            <button
+                            </Button>
+                            <Button
                               type="button"
                               className="outlier-dismiss"
                               disabled={occMerging === outlier.name}
@@ -2744,13 +3043,15 @@ export default function AdminApp() {
                                     );
                                   }
                                 } catch {
-                                  /* ignore */
+                                  setNotice(
+                                    "Der Server hat die Aktion nicht bestätigt. Lade den aktuellen Stand, bevor du es erneut versuchst.",
+                                  );
                                 }
                                 setOccMerging(null);
                               }}
                             >
-                              Stimmt so
-                            </button>
+                              Schreibweise beibehalten
+                            </Button>
                           </span>
                         </div>
                       ))}
@@ -2761,9 +3062,9 @@ export default function AdminApp() {
             )}
             <div className="admin-card">
               <div className="admin-card-title">Sitzung</div>
-              <button className="admin-danger" type="button" onClick={logout}>
+              <Button className="admin-danger" type="button" onClick={logout}>
                 Abmelden
-              </button>
+              </Button>
             </div>
           </div>
         </section>

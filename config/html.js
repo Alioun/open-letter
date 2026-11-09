@@ -71,9 +71,10 @@ export function renderHead(
     ],
   };
 
-  const analytics = withAnalytics && m.analytics?.src
-    ? `\n    <script\n      defer\n      src="${esc(m.analytics.src)}"\n      data-website-id="${esc(m.analytics.websiteId || "")}"\n    ></script>`
-    : "";
+  const analytics =
+    withAnalytics && m.analytics?.src
+      ? `\n    <script\n      defer\n      src="${esc(m.analytics.src)}"\n      data-website-id="${esc(m.analytics.websiteId || "")}"\n    ></script>`
+      : "";
 
   return `    <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width,initial-scale=1" />${
@@ -116,7 +117,7 @@ export function renderHead(
     <meta name="twitter:image" content="${esc(m.ogImage)}" />
 
     <script type="application/ld+json">
-${JSON.stringify(jsonLd, null, 6).replace(/^/gm, "      ").trimStart()}
+${JSON.stringify(jsonLd, null, 6).replace(/</g, "\\u003c").replace(/^/gm, "      ").trimStart()}
     </script>${analytics}${
       // The letter's own stylesheet (config/letters/<name>/letter.css), bundled
       // by Bun's HTML bundler. Its rules scope to <html data-letter="<name>">.

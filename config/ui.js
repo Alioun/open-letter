@@ -4,6 +4,23 @@
 // filled with fillText(). UI_DEFAULTS is the German table; UI_TRANSLATIONS
 // holds the other languages with the same keys (uiDefaults(lang) picks one).
 export const UI_DEFAULTS = {
+  privacy: {
+    title: "Datenschutzerklärung",
+    deletionSent:
+      "Wenn deine E-Mail-Adresse bei uns hinterlegt ist, haben wir dir einen Löschlink geschickt. Bitte prüfe auch deinen Spam-Ordner.",
+    deletionPlaceholder: "deine@email.de",
+    deletionLabel: "E-Mail-Adresse für Löschanfrage",
+    deletionSending: "Wird gesendet…",
+    deletionSubmit: "Löschlink anfordern",
+    emailProcessing:
+      "E-Mails werden über {processor} versendet. Verarbeitungsregion: {region}. Die E-Mail-Adresse wird für die Zustellung an diesen Anbieter übermittelt.",
+    unknownRegion: "Bitte beim Verantwortlichen erfragen",
+    builtinProcessing:
+      "Wir erfassen öffentliche Seitenaufrufe, ungefähre tägliche Besucher, verweisende Domains, Seite und Sprache mit Analytik auf unserem Server. Monatliche pseudonyme Kennungen und Datensätze werden nach 30 Tagen gelöscht. Wir speichern weder rohe IP-Adressen noch rohe User-Agent-Zeichenfolgen, Standort- oder Bildschirmdaten und verknüpfen die Daten nicht mit Unterschriften. DNT/GPC, private Links, Admin, Vorschauen, APIs, Assets und erkannte Bots werden ausgeschlossen. Die Verarbeitung ist nicht anonym; eine Befreiung von Einwilligungserfordernissen wird nicht zugesichert.",
+    externalProcessing:
+      "Ein externer Analysedienst ist eingerichtet. Auskunft zu Anbieter, Verarbeitung und Rechtsgrundlage erteilt der Verantwortliche.",
+    analyticsDisabled: "Die Reichweitenmessung ist deaktiviert.",
+  },
   // Topbar, navigation, footer.
   chrome: {
     skipLink: "Zum Inhalt springen",
@@ -95,14 +112,15 @@ export const UI_DEFAULTS = {
     emailHint: "nur zur Verifizierung, nicht öffentlich",
     emailPlaceholder: "anna@example.org",
     // {fields}: " (und ggf. Kreisverband/Beruf)" when those fields are on.
-    publicLabel: "Mein Name{fields} darf öffentlich auf dieser Seite angezeigt werden.",
+    publicLabel:
+      "Mein Name{fields} darf öffentlich auf dieser Seite angezeigt werden.",
     publicFieldsExtra: " (und ggf. {fields})",
     optional: "(optional)",
     newsletterLabel:
       "Haltet mich zur Initiative auf dem Laufenden (gelegentliche E-Mails, jederzeit abbestellbar).",
     submitting: "Wird gesendet…",
     legal:
-      "Mit Klick auf „Mitzeichnen\" schicken wir dir einen Bestätigungslink an deine E-Mail. Erst danach zählt deine Unterschrift.",
+      'Mit Klick auf „Mitzeichnen" schicken wir dir einen Bestätigungslink an deine E-Mail. Erst danach zählt deine Unterschrift.',
     errName: "Bitte gib deinen vollständigen Namen an.",
     errEmail: "Bitte gib eine gültige E-Mail-Adresse an.",
   },
@@ -113,7 +131,8 @@ export const UI_DEFAULTS = {
     explain:
       "Erst nach dem Klick auf den Link in dieser E-Mail wird deine Unterschrift gezählt und öffentlich gelistet.",
     spamHint: "Keine E-Mail erhalten? Schau in den Spam-Ordner.",
-    delayHint: "E-Mails können manchmal ein paar Minuten auf sich warten lassen.",
+    delayHint:
+      "E-Mails können manchmal ein paar Minuten auf sich warten lassen.",
     resendSent: "E-Mail gesendet ✓ nochmal in {seconds}s",
     resendWait: "Erneut senden in {seconds}s",
     resend: "Link erneut anfordern",
@@ -133,6 +152,8 @@ export const UI_DEFAULTS = {
   },
   // Error texts users see. The server's public errors are here too.
   errors: {
+    emailUnavailable:
+      "Der E-Mail-Versand ist vorübergehend nicht verfügbar. Bitte versuche es später erneut.",
     generic: "Ein Fehler ist aufgetreten.",
     network: "Verbindung fehlgeschlagen. Bitte versuche es erneut.",
     resendFailed: "Senden fehlgeschlagen. Bitte versuche es später erneut.",
@@ -158,7 +179,8 @@ export const UI_DEFAULTS = {
   settings: {
     title: "E-Mail-Einstellungen",
     checking: "Link wird geprüft …",
-    offline: "Du bist offline. Bitte prüfe deine Verbindung und lade die Seite neu.",
+    offline:
+      "Du bist offline. Bitte prüfe deine Verbindung und lade die Seite neu.",
     invalidLink: "Dieser Link ist nicht mehr gültig.",
     connectionFailed: "Die Verbindung ist fehlgeschlagen.",
     useNewestLink: "Bitte nutze den neuesten Link aus einer unserer E-Mails.",
@@ -190,9 +212,11 @@ export const UI_DEFAULTS = {
       "Die Aktion konnte nicht abgeschlossen werden. Bitte prüfe deine Verbindung.",
     doneNewsletter:
       "Du erhältst keine Newsletter-Updates mehr. Deine Unterschrift bleibt bestehen.",
-    doneZoom: "Du erhältst keine Zoom-Mails mehr. Deine Anmeldung wurde entfernt.",
+    doneZoom:
+      "Du erhältst keine Zoom-Mails mehr. Deine Anmeldung wurde entfernt.",
     doneAll: "Du bist von allem abgemeldet.",
-    doneDelete: "Deine Unterschrift und die damit verbundenen Daten wurden gelöscht.",
+    doneDelete:
+      "Deine Unterschrift und die damit verbundenen Daten wurden gelöscht.",
     done: "Erledigt.",
     chooseUnsubscribe: "Wähle, wovon du dich abmelden möchtest:",
     unsubscribingAll: "Wird abgemeldet …",
@@ -241,18 +265,36 @@ export const UI_DEFAULTS = {
     // Calendar file (.ics).
     icsSummary: "Treffen - {brand}",
     icsPlace: "Treffen der {brand}.\nOrt: {where}",
-    icsPlaceLater: "Treffen der {brand}.\nDen genauen Ort bekommst du per E-Mail.",
+    icsPlaceLater:
+      "Treffen der {brand}.\nDen genauen Ort bekommst du per E-Mail.",
     icsInPerson: "Vor Ort",
     icsOnlineLocation: "Online",
     icsOnline: "Online-Treffen der {brand}.\nEinwahl: {link}",
-    icsOnlineLater: "Online-Treffen der {brand}.\nDen Einwahllink bekommst du per E-Mail.",
+    icsOnlineLater:
+      "Online-Treffen der {brand}.\nDen Einwahllink bekommst du per E-Mail.",
   },
 };
-
 
 // The same table in English. Every key of UI_DEFAULTS, with the same
 // {placeholders} (test/ui-parity.test.js checks both).
 const UI_EN = {
+  privacy: {
+    title: "Privacy policy",
+    deletionSent:
+      "If we have your email address, we have sent you an erasure link. Please check your spam folder too.",
+    deletionPlaceholder: "you@example.org",
+    deletionLabel: "Email address for erasure request",
+    deletionSending: "Sending…",
+    deletionSubmit: "Request erasure link",
+    emailProcessing:
+      "Email is delivered through {processor}. Processing region: {region}. The recipient email address is provided to this processor for delivery.",
+    unknownRegion: "Please ask the controller",
+    builtinProcessing:
+      "We use Analytik on our server for public page views, approximate daily visitors, referring domains, pages and languages. Monthly pseudonymous identifiers and records are retained for 30 days. We store no raw IP addresses, raw user agents, location or screen data, and never link statistics to signers. DNT/GPC, private links, admin, previews, APIs, assets and recognised bots are excluded. This processing is not anonymous, and no automatic exemption from consent requirements is claimed.",
+    externalProcessing:
+      "External analytics is configured. Ask the controller about its provider, processing and legal basis.",
+    analyticsDisabled: "Analytics is disabled.",
+  },
   chrome: {
     skipLink: "Skip to content",
     toTop: "Back to top",
@@ -368,6 +410,8 @@ const UI_EN = {
     body: "Your signature and all data connected to it have been deleted for good.",
   },
   errors: {
+    emailUnavailable:
+      "Email delivery is temporarily unavailable. Please try again later.",
     generic: "Something went wrong.",
     network: "Connection failed. Please try again.",
     resendFailed: "Sending failed. Please try again later.",
@@ -391,7 +435,8 @@ const UI_EN = {
   settings: {
     title: "Email settings",
     checking: "Checking link …",
-    offline: "You're offline. Please check your connection and reload the page.",
+    offline:
+      "You're offline. Please check your connection and reload the page.",
     invalidLink: "This link is no longer valid.",
     connectionFailed: "The connection failed.",
     useNewestLink: "Please use the latest link from one of our emails.",
@@ -413,7 +458,8 @@ const UI_EN = {
     save: "Save details",
     errNameLong: "Please shorten the name to 100 characters or fewer.",
     errKvLong: "Please shorten the {region} to 80 characters or fewer.",
-    errOccupationLong: "Please shorten the occupation to 80 characters or fewer.",
+    errOccupationLong:
+      "Please shorten the occupation to 80 characters or fewer.",
     errFields: "Please correct the highlighted fields.",
     offlineShort: "You're offline. Please check your connection.",
     saveFailed: "Saving failed.",
@@ -421,7 +467,8 @@ const UI_EN = {
     actionFailedConnection: "That didn't work. Please check your connection.",
     doneNewsletter:
       "You won't get any more newsletter updates. Your signature stays.",
-    doneZoom: "You won't get any more Zoom emails. Your registration was removed.",
+    doneZoom:
+      "You won't get any more Zoom emails. Your registration was removed.",
     doneAll: "You're unsubscribed from everything.",
     doneDelete: "Your signature and all related data have been deleted.",
     done: "Done.",

@@ -14,7 +14,8 @@ import process from "node:process";
 import { db } from "./connection.js";
 
 function defaultExt() {
-  if (process.env.HONKER_EXTENSION_PATH) return process.env.HONKER_EXTENSION_PATH;
+  if (process.env.HONKER_EXTENSION_PATH)
+    return process.env.HONKER_EXTENSION_PATH;
   if (process.platform === "darwin") return "./vendor/libhonker_ext.dylib";
   return "/app/vendor/libhonker_ext.so";
 }
@@ -24,6 +25,7 @@ const WORKER_ID = `w-${process.pid}`;
 
 let started = false;
 const timers = new Set();
+const runningLoops = new Set();
 let booted = false;
 
 // Load the extension into the keyed connection and create Honker's tables.
@@ -39,11 +41,26 @@ export async function initJobs() {
 export async function enqueue(
   queue,
   payload,
-  { runAt = null, delay = null, priority = 0, maxAttempts = 5, expires = null } = {},
+  {
+    runAt = null,
+    delay = null,
+    priority = 0,
+    maxAttempts = 5,
+    expires = null,
+    connection = db,
+  } = {},
 ) {
-  const row = await db
+  const row = await connection
     .query("SELECT honker_enqueue(?, ?, ?, ?, ?, ?, ?) AS id")
-    .get(queue, JSON.stringify(payload), delay, runAt, priority, maxAttempts, expires);
+    .get(
+      queue,
+      JSON.stringify(payload),
+      delay,
+      runAt,
+      priority,
+      maxAttempts,
+      expires,
+    );
   return row.id;
 }
 
@@ -93,35 +110,36 @@ export async function deleteJobsByPayload(queue, field, value) {
 
 // Register an idempotent recurring task (cron or `@every Ns`) that enqueues
 // `payload` into `queue` when due.
-export async function registerSchedule(name, queue, expr, payload = {}, { priority = 0, expires = null } = {}) {
-  await db.query("SELECT honker_scheduler_register(?, ?, ?, ?, ?, ?) AS v").get(
-    name,
-    queue,
-    expr,
-    JSON.stringify(payload),
-    priority,
-    expires,
-  );
+export async function registerSchedule(
+  name,
+  queue,
+  expr,
+  payload = {},
+  { priority = 0, expires = null } = {},
+) {
+  await db
+    .query("SELECT honker_scheduler_register(?, ?, ?, ?, ?, ?) AS v")
+    .get(name, queue, expr, JSON.stringify(payload), priority, expires);
 }
 
 // Start the poll loop. `handlers` maps queue name -> async (payload, job) => {}.
 // `concurrency` (per queue, default 1) is how many claimed jobs run at once.
-// Transactional email needs more than 1: a provider round-trip is ~100-300ms,
-// so strictly sequential sends would cap the queue at a handful per second and
-// a sign-up burst would take minutes to drain.
 //
 // `isolated` queues get a poll loop of their own. The main loop awaits each
 // handler before moving to the next queue, so a long handler (a campaign send
 // runs for many minutes) would otherwise hold up every queue after it,
 // including the verification mail of someone signing up during the send.
-export function startWorker(handlers, {
-  queues = Object.keys(handlers),
-  intervalMs = 1000,
-  batch = 5,
-  visibilityS = 1800,
-  concurrency = {},
-  isolated = [],
-} = {}) {
+export function startWorker(
+  handlers,
+  {
+    queues = Object.keys(handlers),
+    intervalMs = 1000,
+    batch = 5,
+    visibilityS = 1800,
+    concurrency = {},
+    isolated = [],
+  } = {},
+) {
   if (started) return;
   started = true;
 
@@ -151,8 +169,22 @@ export function startWorker(handlers, {
             await handlers[queue](payload, job);
             await ack.get(job.id, WORKER_ID);
           } catch (err) {
-            const backoff = Math.min(600, 5 * (job.attempts || 1));
-            await retry.get(job.id, WORKER_ID, backoff, String(err?.message || err));
+            // Quota/cooldown is scheduling, and does not consume the permanent-error budget.
+            if (err.defer)
+              await db
+                .query(
+                  "UPDATE _honker_live /* public-neutral */ SET attempts = MAX(0, attempts - 1) WHERE id = ?",
+                )
+                .run(job.id);
+            const backoff = err.defer
+              ? err.retryAfterS
+              : Math.min(600, 5 * (job.attempts || 1));
+            await retry.get(
+              job.id,
+              WORKER_ID,
+              backoff,
+              String(err?.message || err),
+            );
             console.error(
               `[jobs] ${queue}#${job.id} failed (attempt ${job.attempts}): ${err?.message || err}`,
             );
@@ -172,16 +204,22 @@ export function startWorker(handlers, {
       if (started) {
         const t = setTimeout(() => {
           timers.delete(t);
-          loop(loopQueues, withTick);
+          runLoop(loopQueues, withTick);
         }, intervalMs);
         timers.add(t);
       }
     }
   }
 
+  function runLoop(loopQueues, withTick) {
+    const work = loop(loopQueues, withTick);
+    runningLoops.add(work);
+    work.finally(() => runningLoops.delete(work)).catch(() => {});
+  }
   const shared = queues.filter((q) => !isolated.includes(q));
-  loop(shared, true);
-  for (const q of queues.filter((q) => isolated.includes(q))) loop([q], false);
+  runLoop(shared, true);
+  for (const q of queues.filter((q) => isolated.includes(q)))
+    runLoop([q], false);
   console.log(`[jobs] worker started (queues: ${queues.join(", ")})`);
 }
 
@@ -189,4 +227,5 @@ export function stopWorker() {
   started = false;
   for (const t of timers) clearTimeout(t);
   timers.clear();
+  return Promise.allSettled([...runningLoops]);
 }

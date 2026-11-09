@@ -1,3 +1,10 @@
+import { Popover } from "@base-ui/react/popover";
+import {
+  CampaignConfig,
+  useCampaignConfig,
+  CampaignApi,
+  useCampaignApi,
+} from "./CampaignConfig.jsx";
 import {
   useState,
   useEffect,
@@ -7,11 +14,16 @@ import {
   memo,
   Fragment,
 } from "react";
-import cfg, {
+import bundledConfig, {
   LANG,
   DEFAULT_LANG,
   LANGUAGES,
 } from "../config/letter.config.js";
+import Headline from "./Headline.jsx";
+import { Section, layoutFor, RichLetter, RichFaq } from "./SectionRenderer.jsx";
+import { fixtureFetch, fixtureBoot } from "./preview-fixtures.js";
+import { Modal, FreeTextChoice, Choice } from "./ui.jsx";
+import { renderPrivacy } from "../config/public-privacy.js";
 import { resolvePrivacy } from "../config/privacy.js";
 import { resolveInvite } from "../config/invite.js";
 import { LetterArticle, FaqContent } from "../config/content.jsx";
@@ -29,7 +41,7 @@ import {
   inviteOptInLabel,
 } from "./Invite";
 
-const INVITES = Boolean(cfg.features.inviteLinks);
+const cfg = bundledConfig;
 
 // Read while rendering, so admin text overrides applied after load count.
 const region = () => regionLabels(cfg);
@@ -137,42 +149,6 @@ function scrollTo(id) {
   }
 }
 
-function useFocusTrap(active) {
-  const ref = useRef(null);
-
-  useEffect(() => {
-    if (!active || !ref.current) return;
-    const el = ref.current;
-    const focusable = el.querySelectorAll(
-      'a[href], button:not([disabled]), input:not([disabled]), textarea:not([disabled]), select:not([disabled]), [tabindex]:not([tabindex="-1"])',
-    );
-    const first = focusable[0];
-    const last = focusable[focusable.length - 1];
-
-    first?.focus();
-
-    function trap(e) {
-      if (e.key !== "Tab") return;
-      if (e.shiftKey) {
-        if (document.activeElement === first) {
-          e.preventDefault();
-          last?.focus();
-        }
-      } else {
-        if (document.activeElement === last) {
-          e.preventDefault();
-          first?.focus();
-        }
-      }
-    }
-
-    el.addEventListener("keydown", trap);
-    return () => el.removeEventListener("keydown", trap);
-  }, [active]);
-
-  return ref;
-}
-
 // Public API session token. The public read endpoints (/api/stats, /api/signers,
 // /api/zoom-count, …) require a short-lived token minted by GET /api/session and
 // sent back via the X-Api-Token header (see server/index.js `denyPublic`). We
@@ -208,7 +184,7 @@ function getApiToken() {
 // fetch() wrapper that attaches the public API token and retries once on 401
 // (token expired, or the server restarted with a new secret).
 // Off the default language, X-Lang asks for error messages in the page's.
-async function apiFetch(path, opts = {}) {
+async function liveApiFetch(path, opts = {}) {
   if (LANG !== DEFAULT_LANG) {
     opts = { ...opts, headers: { ...(opts.headers || {}), "X-Lang": LANG } };
   }
@@ -277,7 +253,18 @@ function LanguageSwitch() {
 // `boot` is the live initial state from /api/boot (loaded in main.jsx before
 // the first render), so the counter and Treffen date never flash. null if it
 // failed or timed out.
-export default function App({ boot = null }) {
+export default function App({
+  boot = null,
+  preview = false,
+  previewConfig,
+  onlySection,
+  previewState,
+}) {
+  const cfg = previewConfig || bundledConfig;
+  const INVITES = Boolean(cfg.features.inviteLinks);
+  const region = () => regionLabels(cfg);
+  const apiFetch = preview ? fixtureFetch : liveApiFetch;
+  boot = preview ? boot || fixtureBoot : boot;
   const [signers, setSigners] = useState([]);
   const [stats, setStats] = useState(
     boot?.stats ?? {
@@ -302,14 +289,18 @@ export default function App({ boot = null }) {
   const [resendCooldown, setResendCooldown] = useState(0);
   const [resendSent, setResendSent] = useState(false);
   const [resendError, setResendError] = useState(null);
-  const [showSuccess, setShowSuccess] = useState(false);
+  const [showSuccess, setShowSuccess] = useState(
+    preview && previewState === "confirmation",
+  );
   // Own invite code, shown in the success modal after confirming.
   const [ownInviteCode, setOwnInviteCode] = useState(null);
   // Landing on someone's invite link: { firstName } for the modal.
   const [invitedBy, setInvitedBy] = useState(null);
   // Private stats link: { count } | { below } | { invalid }.
   const [inviteStats, setInviteStats] = useState(null);
-  const [submitError, setSubmitError] = useState(null);
+  const [submitError, setSubmitError] = useState(
+    preview && previewState === "error" ? cfg.ui.errors.network : null,
+  );
   const [navOpen, setNavOpen] = useState(false);
   const [showImpressum, setShowImpressum] = useState(false);
   const [showDatenschutz, setShowDatenschutz] = useState(false);
@@ -346,19 +337,6 @@ export default function App({ boot = null }) {
   const [zoomNavLabelRt, setZoomNavLabelRt] = useState(
     bootZoom?.navLabel || cfg.zoom?.navLabel || "Treffen",
   );
-
-  const emailTrapRef = useFocusTrap(!!emailModal);
-  const successTrapRef = useFocusTrap(showSuccess);
-  const deletedTrapRef = useFocusTrap(showDeleted);
-  const mobileNavRef = useRef(null);
-
-  useEffect(() => {
-    if (navOpen && mobileNavRef.current) {
-      const firstLink = mobileNavRef.current.querySelector("a");
-      firstLink?.focus();
-    }
-  }, [navOpen]);
-
   const fetchStats = useCallback(async () => {
     try {
       const res = await apiFetch("/api/stats");
@@ -442,6 +420,7 @@ export default function App({ boot = null }) {
   }, []);
 
   useEffect(() => {
+    if (preview) return;
     const interval = setInterval(async () => {
       if (document.hidden) return;
       fetchStats();
@@ -781,9 +760,7 @@ export default function App({ boot = null }) {
       });
       const result = await res.json();
       if (!res.ok) {
-        setResendError(
-          result.error || cfg.ui.errors.resendFailed,
-        );
+        setResendError(result.error || cfg.ui.errors.resendFailed);
         return;
       }
     } catch {
@@ -797,29 +774,6 @@ export default function App({ boot = null }) {
   function closeSuccess() {
     setShowSuccess(false);
   }
-
-  useEffect(() => {
-    function onKey(e) {
-      if (e.key === "Escape") {
-        if (showSuccess) closeSuccess();
-        else if (emailModal) closeModal();
-        else if (showImpressum) setShowImpressum(false);
-        else if (showDatenschutz) setShowDatenschutz(false);
-        else if (showDeleted) setShowDeleted(false);
-        else if (showMap) setShowMap(false);
-        else if (navOpen) setNavOpen(false);
-      }
-    }
-    window.addEventListener("keydown", onKey);
-    return () => window.removeEventListener("keydown", onKey);
-  }, [
-    showSuccess,
-    emailModal,
-    showImpressum,
-    showDatenschutz,
-    showDeleted,
-    navOpen,
-  ]);
 
   const locale = cfg.brand.locale;
   const total = stats.total;
@@ -861,7 +815,8 @@ export default function App({ boot = null }) {
               )}
               {zoomInPerson && zoomLocationText && (
                 <p className="zoom-where">
-                  <strong>{cfg.ui.zoomForm.locationLabel}</strong> {zoomLocationText}
+                  <strong>{cfg.ui.zoomForm.locationLabel}</strong>{" "}
+                  {zoomLocationText}
                   {zoomLocation?.mapsUrl && (
                     <>
                       {" · "}
@@ -890,6 +845,7 @@ export default function App({ boot = null }) {
               onSubmit={handleZoomSubmit}
               serverError={zoomError}
               kvNames={signFormKvNames}
+              config={cfg}
               showDelegierter={zoomShowDelegierter}
             />
           </div>
@@ -905,7 +861,11 @@ export default function App({ boot = null }) {
   // them splits the group.
   const briefBody = (
     <div className="section-inner">
-      <LetterArticle total={total} />
+      <RichLetter
+        config={cfg}
+        total={total}
+        fallback={<LetterArticle total={total} />}
+      />
     </div>
   );
 
@@ -925,7 +885,12 @@ export default function App({ boot = null }) {
 
         <SignForm
           onSubmit={handleSubmit}
-          serverError={submitError}
+          serverError={
+            submitError ||
+            (!preview && boot?.email?.ready === false
+              ? cfg.ui.errors.emailUnavailable
+              : null)
+          }
           kvNames={signFormKvNames}
           occNames={signFormOccNames}
         />
@@ -1157,7 +1122,7 @@ export default function App({ boot = null }) {
 
   const faqBody = (
     <div className="section-inner">
-      <FaqContent />
+      <RichFaq config={cfg} fallback={<FaqContent />} />
     </div>
   );
 
@@ -1192,183 +1157,137 @@ export default function App({ boot = null }) {
     },
   ];
 
-  const contentSections = (() => {
-    const out = [];
-    let run = [];
-    const flushRun = () => {
-      if (run.length === 0) return;
-      out.push(
-        <section className="section" key={"collapsed-" + run[0].id}>
-          <div className="section-collapse-group">
-            {run.map((s) => (
-              <details className="section-collapse" id={s.id} key={s.id}>
-                <summary className="section-collapse-summary">
-                  {navLabel(s.id)}
-                </summary>
-                {s.body}
-              </details>
-            ))}
-          </div>
-        </section>,
-      );
-      run = [];
-    };
-    for (const s of contentSectionDefs) {
-      if (!s.shouldRender) continue;
-      if (isCollapsed(s.id)) {
-        run.push(s);
-      } else {
-        flushRun();
-        out.push(
-          <section
-            className={"section" + (s.sectionClass ? " " + s.sectionClass : "")}
-            id={s.id}
-            aria-label={s.ariaLabel}
-            key={s.id}
-          >
-            {s.body}
-          </section>,
-        );
-      }
-    }
-    flushRun();
-    return out;
-  })();
-
-  return (
-    <>
-      <a href="#main" className="skip-link">
-        {cfg.ui.chrome.skipLink}
-      </a>
-
-      <div
-        role="status"
-        aria-live="polite"
-        aria-atomic="true"
-        className="sr-only"
-      >
-        {total.toLocaleString(locale)} {cfg.hero.counterLabel}
-      </div>
-
-      <header
-        className={
-          "topbar" +
-          (showCta ? "" : " topbar--no-cta") +
-          (LANGUAGES.length > 1 ? " topbar--langs" : "")
-        }
-      >
-        <a
-          href="#main"
-          className="wordmark"
-          aria-label={cfg.ui.chrome.toTop}
-          onClick={(e) => {
-            e.preventDefault();
-            scrollTo("main");
-          }}
+  const layout = layoutFor(cfg);
+  const runtimeSections = {
+    header: (
+      <Popover.Root open={navOpen} onOpenChange={setNavOpen}>
+        <header
+          className={
+            "topbar" +
+            (showCta ? "" : " topbar--no-cta") +
+            (LANGUAGES.length > 1 ? " topbar--langs" : "")
+          }
         >
-          <span className="dot" aria-hidden="true"></span> {cfg.brand.wordmark}
-        </a>
-        <nav aria-label={cfg.ui.chrome.mainNav}>
-          {navItems.map((n) => (
-            <a
-              key={n.id}
-              href={`#${n.id}`}
-              onClick={(e) => {
-                e.preventDefault();
-                scrollTo(n.id);
-              }}
-            >
-              {n.label}
-            </a>
-          ))}
-          {
-            /* zoom module: toggle via features.zoomEvent */ showZoomNav && (
+          <a
+            href="#main"
+            className="wordmark"
+            aria-label={cfg.ui.chrome.toTop}
+            onClick={(e) => {
+              e.preventDefault();
+              scrollTo("main");
+            }}
+          >
+            <span className="dot" aria-hidden="true"></span>{" "}
+            {cfg.brand.wordmark}
+          </a>
+          <nav aria-label={cfg.ui.chrome.mainNav}>
+            {navItems.map((n) => (
               <a
-                href="#zoom"
+                key={n.id}
+                href={`#${n.id}`}
                 onClick={(e) => {
                   e.preventDefault();
-                  scrollTo("zoom");
+                  scrollTo(n.id);
                 }}
               >
-                {zoomNavLabel}
+                {n.label}
               </a>
-            )
-          }
-        </nav>
-        <LanguageSwitch />
-        {showCta && (
-          <button
-            className="cta topbar-cta"
-            onClick={() => scrollTo(ctaToZoom ? "zoom" : "unterzeichnen")}
-          >
-            {ctaToZoom ? ctaLabel : cfg.navCta}{" "}
-            <span aria-hidden="true">→</span>
-          </button>
-        )}
-        <button
-          className={"hamburger" + (navOpen ? " open" : "")}
-          aria-label={navOpen ? cfg.ui.chrome.menuClose : cfg.ui.chrome.menuOpen}
-          aria-expanded={navOpen}
-          aria-controls="mobile-nav"
-          onClick={() => setNavOpen((v) => !v)}
-        >
-          <span></span>
-          <span></span>
-          <span></span>
-        </button>
-      </header>
-      <nav
-        id="mobile-nav"
-        ref={mobileNavRef}
-        className={"mobile-nav" + (navOpen ? " open" : "")}
-        aria-label={cfg.ui.chrome.mobileNav}
-        aria-hidden={!navOpen}
-      >
-        {navItems.map((n) => (
-          <a
-            key={n.id}
-            href={`#${n.id}`}
-            onClick={(e) => {
-              e.preventDefault();
-              setNavOpen(false);
-              scrollTo(n.id);
-            }}
-          >
-            {n.label}
-          </a>
-        ))}
-        {
-          /* zoom module: toggle via features.zoomEvent */ showZoomNav && (
-            <a
-              href="#zoom"
-              onClick={(e) => {
-                e.preventDefault();
-                setNavOpen(false);
-                scrollTo("zoom");
-              }}
+            ))}
+            {
+              /* zoom module: toggle via features.zoomEvent */ showZoomNav && (
+                <a
+                  href="#zoom"
+                  onClick={(e) => {
+                    e.preventDefault();
+                    scrollTo("zoom");
+                  }}
+                >
+                  {zoomNavLabel}
+                </a>
+              )
+            }
+          </nav>
+          <LanguageSwitch />
+          {showCta && (
+            <button
+              className="cta topbar-cta"
+              onClick={() => scrollTo(ctaToZoom ? "zoom" : "unterzeichnen")}
             >
-              {zoomNavLabel}
-            </a>
-          )
-        }
-        {showCta && (
-          <a
-            href={ctaToZoom ? "#zoom" : "#unterzeichnen"}
-            className="mobile-nav-cta"
-            onClick={(e) => {
-              e.preventDefault();
-              setNavOpen(false);
-              scrollTo(ctaToZoom ? "zoom" : "unterzeichnen");
-            }}
+              {ctaToZoom ? ctaLabel : cfg.navCta}{" "}
+              <span aria-hidden="true">→</span>
+            </button>
+          )}
+          <Popover.Trigger
+            className={"hamburger" + (navOpen ? " open" : "")}
+            aria-label={
+              navOpen ? cfg.ui.chrome.menuClose : cfg.ui.chrome.menuOpen
+            }
+            aria-expanded={navOpen}
+            aria-controls="mobile-nav"
           >
-            {ctaToZoom ? ctaLabel : cfg.hero.ctaPrimary}{" "}
-            <span aria-hidden="true">→</span>
-          </a>
-        )}
-        <LanguageSwitch />
-      </nav>
-
-      <main id="main">
+            <span></span>
+            <span></span>
+            <span></span>
+          </Popover.Trigger>
+        </header>
+        <Popover.Portal>
+          <Popover.Positioner className="mobile-nav-positioner" sideOffset={8}>
+            <Popover.Popup
+              render={<nav />}
+              id="mobile-nav"
+              className={"mobile-nav" + (navOpen ? " open" : "")}
+              aria-label={cfg.ui.chrome.mobileNav}
+              aria-hidden={!navOpen}
+            >
+              {navItems.map((n) => (
+                <a
+                  key={n.id}
+                  href={`#${n.id}`}
+                  onClick={(e) => {
+                    e.preventDefault();
+                    setNavOpen(false);
+                    scrollTo(n.id);
+                  }}
+                >
+                  {n.label}
+                </a>
+              ))}
+              {
+                /* zoom module: toggle via features.zoomEvent */ showZoomNav && (
+                  <a
+                    href="#zoom"
+                    onClick={(e) => {
+                      e.preventDefault();
+                      setNavOpen(false);
+                      scrollTo("zoom");
+                    }}
+                  >
+                    {zoomNavLabel}
+                  </a>
+                )
+              }
+              {showCta && (
+                <a
+                  href={ctaToZoom ? "#zoom" : "#unterzeichnen"}
+                  className="mobile-nav-cta"
+                  onClick={(e) => {
+                    e.preventDefault();
+                    setNavOpen(false);
+                    scrollTo(ctaToZoom ? "zoom" : "unterzeichnen");
+                  }}
+                >
+                  {ctaToZoom ? ctaLabel : cfg.hero.ctaPrimary}{" "}
+                  <span aria-hidden="true">→</span>
+                </a>
+              )}
+              <LanguageSwitch />
+            </Popover.Popup>
+          </Popover.Positioner>
+        </Popover.Portal>
+      </Popover.Root>
+    ),
+    hero: (
+      <>
         <section
           className="hero"
           aria-label={
@@ -1381,16 +1300,10 @@ export default function App({ boot = null }) {
                 {cfg.success?.kicker && (
                   <span className="success-kicker">{cfg.success.kicker}</span>
                 )}
-                <h1 className="headline">
-                  {cfg.success?.headlineLines
-                    ? cfg.success.headlineLines.map((line, i) => (
-                        <Fragment key={i}>
-                          {i > 0 && <br />}
-                          <span className={line.style}>{line.text}</span>
-                        </Fragment>
-                      ))
-                    : cfg.success?.headline}
-                </h1>
+                <Headline
+                  lines={cfg.success?.headlineLines}
+                  text={cfg.success?.headline}
+                />
                 {cfg.success?.countLabel && (
                   <div
                     className="counter-card hero-success-card"
@@ -1421,7 +1334,8 @@ export default function App({ boot = null }) {
                         target="_blank"
                         rel="noopener noreferrer"
                       >
-                        {cfg.success?.antragLabel || cfg.ui.hero.successAntragFallback}{" "}
+                        {cfg.success?.antragLabel ||
+                          cfg.ui.hero.successAntragFallback}{" "}
                         <span aria-hidden="true">→</span>
                       </a>
                     )}
@@ -1436,14 +1350,7 @@ export default function App({ boot = null }) {
               </div>
             ) : (
               <>
-                <h1 className="headline">
-                  {cfg.hero.headlineLines.map((line, i) => (
-                    <Fragment key={i}>
-                      {i > 0 && <br />}
-                      <span className={line.style}>{line.text}</span>
-                    </Fragment>
-                  ))}
-                </h1>
+                <Headline lines={cfg.hero.headlineLines} />
 
                 <div className="hero-row">
                   <div className="counter-wrap">
@@ -1501,7 +1408,10 @@ export default function App({ boot = null }) {
                           >
                             <span className="stoerer-head">
                               {fillText(cfg.ui.stoerer.head, {
-                                count: cfg.ui.stoerer.showFrom.toLocaleString(locale),
+                                count:
+                                  cfg.ui.stoerer.showFrom.toLocaleString(
+                                    locale,
+                                  ),
                               })}
                             </span>
                             <span className="stoerer-body">
@@ -1535,227 +1445,278 @@ export default function App({ boot = null }) {
             )}
           </div>
         </section>
-
-        {/* Success mode: signup is the first thing, right after the hero. */}
-        {successMode && zoomSection}
-
-        {contentSections}
-
-        {/* In the live campaign the signup stays at the bottom; in success
-            mode it is moved up right after the hero (see above). */}
-        {!successMode && zoomSection}
-      </main>
-
-      <footer>
-        <div className="footer-inner">
-          <div className="footer-top">
-            <div>
-              <h3>{cfg.footer.heading}</h3>
-              <p>{cfg.footer.blurb}</p>
-            </div>
-            <div>
-              <h3>{cfg.ui.chrome.footerContact}</h3>
-              <a href={`mailto:${cfg.footer.contactEmail}`}>
-                {cfg.footer.contactEmail}
-              </a>
-            </div>
-            <div>
-              <h3>{cfg.ui.chrome.footerLegal}</h3>
-              <button
-                type="button"
-                className="footer-link"
-                onClick={() => setShowImpressum(true)}
-              >
-                {cfg.ui.chrome.impressum}
-              </button>
-              <button
-                type="button"
-                className="footer-link"
-                onClick={() => setShowDatenschutz(true)}
-              >
-                {cfg.ui.chrome.datenschutz}
-              </button>
+      </>
+    ),
+    footer: (
+      <>
+        <footer>
+          <div className="footer-inner">
+            <div className="footer-top">
+              <div>
+                <h3>{cfg.footer.heading}</h3>
+                <p>{cfg.footer.blurb}</p>
+              </div>
+              <div>
+                <h3>{cfg.ui.chrome.footerContact}</h3>
+                <a href={`mailto:${cfg.footer.contactEmail}`}>
+                  {cfg.footer.contactEmail}
+                </a>
+              </div>
+              <div>
+                <h3>{cfg.ui.chrome.footerLegal}</h3>
+                <button
+                  type="button"
+                  className="footer-link"
+                  onClick={() => setShowImpressum(true)}
+                >
+                  {cfg.ui.chrome.impressum}
+                </button>
+                <button
+                  type="button"
+                  className="footer-link"
+                  onClick={() => setShowDatenschutz(true)}
+                >
+                  {cfg.ui.chrome.datenschutz}
+                </button>
+              </div>
             </div>
           </div>
+        </footer>
+      </>
+    ),
+    zoom: zoomSection,
+    ...Object.fromEntries(
+      contentSectionDefs.map((s) => [
+        s.id,
+        s.shouldRender ? (
+          isCollapsed(s.id) ? (
+            <section className="section">
+              <details className="section-collapse" id={s.id}>
+                <summary className="section-collapse-summary">
+                  {navLabel(s.id)}
+                </summary>
+                {s.body}
+              </details>
+            </section>
+          ) : (
+            <section
+              className={`section ${s.sectionClass}`}
+              id={s.id}
+              aria-label={s.ariaLabel}
+            >
+              {s.body}
+            </section>
+          )
+        ) : null,
+      ]),
+    ),
+  };
+  const renderBlock = (block) => (
+    <Section
+      key={block.props.id}
+      block={block}
+      config={cfg}
+      body={runtimeSections[block.props.id]}
+    />
+  );
+  if (onlySection) {
+    const block = layout.content.find((b) => b.props.id === onlySection);
+    return block ? (
+      <CampaignConfig.Provider value={cfg}>
+        <CampaignApi.Provider value={apiFetch}>
+          {renderBlock(block)}
+        </CampaignApi.Provider>
+      </CampaignConfig.Provider>
+    ) : null;
+  }
+
+  return (
+    <CampaignConfig.Provider value={cfg}>
+      <CampaignApi.Provider value={apiFetch}>
+        <a href="#main" className="skip-link">
+          {cfg.ui.chrome.skipLink}
+        </a>
+
+        <div
+          role="status"
+          aria-live="polite"
+          aria-atomic="true"
+          className="sr-only"
+        >
+          {total.toLocaleString(locale)} {cfg.hero.counterLabel}
         </div>
-      </footer>
 
-      {emailModal && (
-        <div className="modal-overlay" onClick={closeModal} role="presentation">
-          <div
-            className="modal"
-            role="dialog"
-            aria-modal="true"
-            aria-labelledby="email-modal-title"
-            onClick={(e) => e.stopPropagation()}
-            ref={emailTrapRef}
-          >
-            <div className="modal-head">
-              <h3 id="email-modal-title">{cfg.ui.emailModal.title}</h3>
-              <button onClick={closeModal} aria-label={cfg.ui.chrome.close}>
-                ×
-              </button>
-            </div>
-            <div className="modal-body">
-              <p>
-                {fillText(cfg.ui.emailModal.sent, { name: emailModal.name })}
-              </p>
-              <div className="email-pill">{emailModal.email}</div>
+        {renderBlock(layout.content[0])}
 
-              <p>{cfg.ui.emailModal.explain}</p>
-              <p className="hint">{cfg.ui.emailModal.spamHint}</p>
-              <p className="hint">{cfg.ui.emailModal.delayHint}</p>
-              {resendError && <p className="hint hint--error">{resendError}</p>}
-              <button
-                className="resend-btn"
-                onClick={handleResend}
-                disabled={resendCooldown > 0}
-              >
-                {resendSent && resendCooldown > 0
-                  ? fillText(cfg.ui.emailModal.resendSent, {
-                      seconds: resendCooldown,
-                    })
-                  : resendCooldown > 0
-                    ? fillText(cfg.ui.emailModal.resendWait, {
+        <main id="main">{layout.content.slice(1, -1).map(renderBlock)}</main>
+
+        {renderBlock(layout.content.at(-1))}
+
+        {emailModal && (
+          <Modal onClose={closeModal} labelledBy="email-modal-title">
+            <div
+              className="modal"
+              aria-labelledby="email-modal-title"
+              onClick={(e) => e.stopPropagation()}
+            >
+              <div className="modal-head">
+                <h3 id="email-modal-title">{cfg.ui.emailModal.title}</h3>
+                <button onClick={closeModal} aria-label={cfg.ui.chrome.close}>
+                  ×
+                </button>
+              </div>
+              <div className="modal-body">
+                <p>
+                  {fillText(cfg.ui.emailModal.sent, { name: emailModal.name })}
+                </p>
+                <div className="email-pill">{emailModal.email}</div>
+
+                <p>{cfg.ui.emailModal.explain}</p>
+                <p className="hint">{cfg.ui.emailModal.spamHint}</p>
+                <p className="hint">{cfg.ui.emailModal.delayHint}</p>
+                {resendError && (
+                  <p className="hint hint--error">{resendError}</p>
+                )}
+                <button
+                  className="resend-btn"
+                  onClick={handleResend}
+                  disabled={resendCooldown > 0}
+                >
+                  {resendSent && resendCooldown > 0
+                    ? fillText(cfg.ui.emailModal.resendSent, {
                         seconds: resendCooldown,
                       })
-                    : cfg.ui.emailModal.resend}
-              </button>
-              <button className="confirm-btn" onClick={closeModal}>
-                {cfg.ui.emailModal.ok}
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {showSuccess && (
-        <div
-          className="modal-overlay"
-          onClick={closeSuccess}
-          role="presentation"
-        >
-          <div
-            className="modal success"
-            role="dialog"
-            aria-modal="true"
-            aria-labelledby="success-modal-title"
-            onClick={(e) => e.stopPropagation()}
-            ref={successTrapRef}
-          >
-            <div className="modal-head">
-              <h3 id="success-modal-title">{cfg.ui.successModal.title}</h3>
-              <button onClick={closeSuccess} aria-label={cfg.ui.chrome.close}>
-                ×
-              </button>
-            </div>
-            <div className="modal-body">
-              <div className="check-anim">
-                <svg
-                  viewBox="0 0 24 24"
-                  fill="none"
-                  stroke="currentColor"
-                  strokeWidth="3.5"
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                  aria-hidden="true"
-                >
-                  <polyline points="20 6 9 17 4 12"></polyline>
-                </svg>
+                    : resendCooldown > 0
+                      ? fillText(cfg.ui.emailModal.resendWait, {
+                          seconds: resendCooldown,
+                        })
+                      : cfg.ui.emailModal.resend}
+                </button>
+                <button className="confirm-btn" onClick={closeModal}>
+                  {cfg.ui.emailModal.ok}
+                </button>
               </div>
-              <p className="success-title">{cfg.ui.successModal.heading}</p>
-              <p>
-                {fillText(cfg.ui.successModal.body, {
-                  goal: ZIEL.toLocaleString(locale),
-                })}
-              </p>
-              {ownInviteCode && <InviteShare code={ownInviteCode} />}
-              <button
-                className="confirm-btn confirm-btn--accent"
-                onClick={() => {
-                  closeSuccess();
-                  scrollTo("liste");
-                }}
-              >
-                {cfg.ui.successModal.showMe} <span aria-hidden="true">→</span>
-              </button>
             </div>
-          </div>
-        </div>
-      )}
+          </Modal>
+        )}
 
-      {invitedBy && (
-        <InviteModal
-          firstName={invitedBy.firstName}
-          onClose={() => setInvitedBy(null)}
-        />
-      )}
-
-      {inviteStats && (
-        <InviteStatsModal
-          result={inviteStats}
-          onClose={() => setInviteStats(null)}
-        />
-      )}
-
-      {showDeleted && (
-        <div
-          className="modal-overlay"
-          onClick={() => setShowDeleted(false)}
-          role="presentation"
-        >
-          <div
-            className="modal success"
-            role="dialog"
-            aria-modal="true"
-            aria-labelledby="deleted-modal-title"
-            onClick={(e) => e.stopPropagation()}
-            ref={deletedTrapRef}
-          >
-            <div className="modal-head">
-              <h3 id="deleted-modal-title">{cfg.ui.deletedModal.title}</h3>
-              <button
-                onClick={() => setShowDeleted(false)}
-                aria-label={cfg.ui.chrome.close}
-              >
-                ×
-              </button>
-            </div>
-            <div className="modal-body">
-              <div className="check-anim">
-                <svg
-                  viewBox="0 0 24 24"
-                  fill="none"
-                  stroke="currentColor"
-                  strokeWidth="3.5"
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                  aria-hidden="true"
-                >
-                  <polyline points="20 6 9 17 4 12"></polyline>
-                </svg>
+        {showSuccess && (
+          <Modal onClose={closeSuccess} labelledBy="success-modal-title">
+            <div
+              className="modal success"
+              aria-labelledby="success-modal-title"
+              onClick={(e) => e.stopPropagation()}
+            >
+              <div className="modal-head">
+                <h3 id="success-modal-title">{cfg.ui.successModal.title}</h3>
+                <button onClick={closeSuccess} aria-label={cfg.ui.chrome.close}>
+                  ×
+                </button>
               </div>
-              <p className="success-title">{cfg.ui.deletedModal.heading}</p>
-              <p>{cfg.ui.deletedModal.body}</p>
-              <button
-                className="confirm-btn"
-                onClick={() => setShowDeleted(false)}
-              >
-                {cfg.ui.chrome.close}
-              </button>
+              <div className="modal-body">
+                <div className="check-anim">
+                  <svg
+                    viewBox="0 0 24 24"
+                    fill="none"
+                    stroke="currentColor"
+                    strokeWidth="3.5"
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                    aria-hidden="true"
+                  >
+                    <polyline points="20 6 9 17 4 12"></polyline>
+                  </svg>
+                </div>
+                <p className="success-title">{cfg.ui.successModal.heading}</p>
+                <p>
+                  {fillText(cfg.ui.successModal.body, {
+                    goal: ZIEL.toLocaleString(locale),
+                  })}
+                </p>
+                {ownInviteCode && <InviteShare code={ownInviteCode} />}
+                <button
+                  className="confirm-btn confirm-btn--accent"
+                  onClick={() => {
+                    closeSuccess();
+                    scrollTo("liste");
+                  }}
+                >
+                  {cfg.ui.successModal.showMe} <span aria-hidden="true">→</span>
+                </button>
+              </div>
             </div>
-          </div>
-        </div>
-      )}
+          </Modal>
+        )}
 
-      {showImpressum && (
-        <ImpressumModal onClose={() => setShowImpressum(false)} />
-      )}
+        {invitedBy && (
+          <InviteModal
+            firstName={invitedBy.firstName}
+            onClose={() => setInvitedBy(null)}
+          />
+        )}
 
-      {showDatenschutz && (
-        <DatenschutzModal onClose={() => setShowDatenschutz(false)} />
-      )}
-    </>
+        {inviteStats && (
+          <InviteStatsModal
+            result={inviteStats}
+            onClose={() => setInviteStats(null)}
+          />
+        )}
+
+        {showDeleted && (
+          <Modal
+            onClose={() => setShowDeleted(false)}
+            labelledBy="deleted-modal-title"
+          >
+            <div
+              className="modal success"
+              aria-labelledby="deleted-modal-title"
+              onClick={(e) => e.stopPropagation()}
+            >
+              <div className="modal-head">
+                <h3 id="deleted-modal-title">{cfg.ui.deletedModal.title}</h3>
+                <button
+                  onClick={() => setShowDeleted(false)}
+                  aria-label={cfg.ui.chrome.close}
+                >
+                  ×
+                </button>
+              </div>
+              <div className="modal-body">
+                <div className="check-anim">
+                  <svg
+                    viewBox="0 0 24 24"
+                    fill="none"
+                    stroke="currentColor"
+                    strokeWidth="3.5"
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                    aria-hidden="true"
+                  >
+                    <polyline points="20 6 9 17 4 12"></polyline>
+                  </svg>
+                </div>
+                <p className="success-title">{cfg.ui.deletedModal.heading}</p>
+                <p>{cfg.ui.deletedModal.body}</p>
+                <button
+                  className="confirm-btn"
+                  onClick={() => setShowDeleted(false)}
+                >
+                  {cfg.ui.chrome.close}
+                </button>
+              </div>
+            </div>
+          </Modal>
+        )}
+
+        {showImpressum && (
+          <ImpressumModal onClose={() => setShowImpressum(false)} />
+        )}
+
+        {showDatenschutz && (
+          <DatenschutzModal onClose={() => setShowDatenschutz(false)} />
+        )}
+      </CampaignApi.Provider>
+    </CampaignConfig.Provider>
   );
 }
 
@@ -1785,6 +1746,9 @@ const SignForm = memo(function SignForm({
   kvNames,
   occNames,
 }) {
+  const cfg = useCampaignConfig();
+  const INVITES = Boolean(cfg.features.inviteLinks);
+  const region = () => regionLabels(cfg);
   const [name, setName] = useState("");
   const [email, setEmail] = useState("");
   const [kv, setKv] = useState("");
@@ -1792,33 +1756,11 @@ const SignForm = memo(function SignForm({
   const [agree, setAgree] = useState(false);
   const [newsletter, setNewsletter] = useState(false);
   const [inviteShowName, setInviteShowName] = useState(false);
-  const [showSuggest, setShowSuggest] = useState(false);
-  const [showOccSuggest, setShowOccSuggest] = useState(false);
-  const [kvActiveIndex, setKvActiveIndex] = useState(-1);
-  const [occActiveIndex, setOccActiveIndex] = useState(-1);
   const [errors, setErrors] = useState({});
   const [submitting, setSubmitting] = useState(false);
   const nameRef = useRef(null);
   const emailRef = useRef(null);
-  const kvInputRef = useRef(null);
-  const occInputRef = useRef(null);
 
-  const occMatches = useMemo(() => {
-    if (!occupation) return [];
-    const q = occupation.toLowerCase();
-    return occNames
-      .filter((o) => o.toLowerCase().includes(q) && o.toLowerCase() !== q)
-      .slice(0, 6);
-  }, [occupation, occNames]);
-
-  const kvMatches = useMemo(() => {
-    if (!kv) return [];
-    const q = kv.toLowerCase();
-    return kvNames.filter((k) => k.toLowerCase().includes(q)).slice(0, 6);
-  }, [kv, kvNames]);
-
-  // "(und ggf. <Feld>/<Feld>)" for the public-visibility checkbox; only names
-  // the optional fields that are actually enabled.
   const visibilityFields = [
     cfg.features.kreisverbandField && cfg.sign.fields.kreisverband.label,
     cfg.features.occupationField && cfg.sign.fields.occupation.label,
@@ -1831,8 +1773,7 @@ const SignForm = memo(function SignForm({
 
   function validate() {
     const e = {};
-    if (name.trim().length < 2)
-      e.name = cfg.ui.signForm.errName;
+    if (name.trim().length < 2) e.name = cfg.ui.signForm.errName;
     if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email))
       e.email = cfg.ui.signForm.errEmail;
     setErrors(e);
@@ -1871,7 +1812,8 @@ const SignForm = memo(function SignForm({
       <span className="badge">{cfg.ui.signForm.badge}</span>
       <h3>{cfg.sign.formTitle || "Unterschreiben in 30 Sekunden"}</h3>
       <div className="sub2">
-        {cfg.sign.formSubtitle || "Felder ausfüllen, bestätigen per E-Mail. Fertig."}
+        {cfg.sign.formSubtitle ||
+          "Felder ausfüllen, bestätigen per E-Mail. Fertig."}
       </div>
 
       {serverError && (
@@ -1937,95 +1879,23 @@ const SignForm = memo(function SignForm({
             </span>
           </label>
           {region().options ? (
-            <select
-              id="sign-kv"
+            <Choice
+              label={cfg.sign.fields.kreisverband.label}
               value={kv}
-              onChange={(e) => setKv(e.target.value)}
-            >
-              <option value="">{region().selectPlaceholder}</option>
-              {region().options.map((o) => (
-                <option key={o} value={o}>
-                  {o}
-                </option>
-              ))}
-            </select>
-          ) : (
-            <input
-              id="sign-kv"
-              ref={kvInputRef}
-              type="text"
-              value={kv}
-              onChange={(e) => {
-                setKv(e.target.value);
-                setShowSuggest(true);
-                setKvActiveIndex(-1);
-              }}
-              onFocus={() => setShowSuggest(true)}
-              onBlur={() => {
-                setTimeout(() => {
-                  setShowSuggest(false);
-                  setKvActiveIndex(-1);
-                }, 150);
-                setKv((v) => v.replace(/^KV\s*/i, ""));
-              }}
-              onKeyDown={(e) => {
-                if (!showSuggest || !kvMatches.length) return;
-                if (e.key === "ArrowDown") {
-                  e.preventDefault();
-                  setKvActiveIndex((i) =>
-                    Math.min(i + 1, kvMatches.length - 1),
-                  );
-                } else if (e.key === "ArrowUp") {
-                  e.preventDefault();
-                  setKvActiveIndex((i) => Math.max(i - 1, 0));
-                } else if (e.key === "Enter" && kvActiveIndex >= 0) {
-                  e.preventDefault();
-                  setKv(kvMatches[kvActiveIndex]);
-                  setShowSuggest(false);
-                  setKvActiveIndex(-1);
-                } else if (e.key === "Escape") {
-                  setShowSuggest(false);
-                  setKvActiveIndex(-1);
-                  kvInputRef.current?.focus();
-                }
-              }}
-              placeholder={cfg.sign.fields.kreisverband.placeholder}
-              autoComplete="off"
-              role="combobox"
-              aria-expanded={showSuggest && kv && kvMatches.length > 0}
-              aria-autocomplete="list"
-              aria-controls="kv-listbox"
-              aria-activedescendant={
-                kvActiveIndex >= 0 ? `kv-option-${kvActiveIndex}` : undefined
-              }
+              onChange={setKv}
+              options={[
+                ["", region().selectPlaceholder],
+                ...region().options.map((v) => [v, v]),
+              ]}
             />
-          )}
-          {!region().options && showSuggest && kv && kvMatches.length > 0 && (
-            <div
-              id="kv-listbox"
-              role="listbox"
-              className="autocomplete-dropdown"
-            >
-              {kvMatches.map((k, i) => (
-                <div
-                  key={k}
-                  id={`kv-option-${i}`}
-                  role="option"
-                  aria-selected={i === kvActiveIndex}
-                  onMouseDown={() => {
-                    setKv(k);
-                    setShowSuggest(false);
-                    setKvActiveIndex(-1);
-                  }}
-                  className={
-                    "autocomplete-option" +
-                    (i === kvActiveIndex ? " active" : "")
-                  }
-                >
-                  {k}
-                </div>
-              ))}
-            </div>
+          ) : (
+            <FreeTextChoice
+              id="sign-kv"
+              value={kv}
+              onChange={setKv}
+              items={kvNames}
+              placeholder={cfg.sign.fields.kreisverband.placeholder}
+            />
           )}
         </div>
       )}
@@ -2038,83 +1908,13 @@ const SignForm = memo(function SignForm({
               {cfg.sign.fields.occupation.optionalLabel}
             </span>
           </label>
-          <input
+          <FreeTextChoice
             id="sign-occupation"
-            ref={occInputRef}
-            type="text"
             value={occupation}
-            onChange={(e) => {
-              setOccupation(e.target.value);
-              setShowOccSuggest(true);
-              setOccActiveIndex(-1);
-            }}
-            onFocus={() => setShowOccSuggest(true)}
-            onBlur={() => {
-              setTimeout(() => {
-                setShowOccSuggest(false);
-                setOccActiveIndex(-1);
-              }, 150);
-            }}
-            onKeyDown={(e) => {
-              if (!showOccSuggest || !occMatches.length) return;
-              if (e.key === "ArrowDown") {
-                e.preventDefault();
-                setOccActiveIndex((i) =>
-                  Math.min(i + 1, occMatches.length - 1),
-                );
-              } else if (e.key === "ArrowUp") {
-                e.preventDefault();
-                setOccActiveIndex((i) => Math.max(i - 1, 0));
-              } else if (e.key === "Enter" && occActiveIndex >= 0) {
-                e.preventDefault();
-                setOccupation(occMatches[occActiveIndex]);
-                setShowOccSuggest(false);
-                setOccActiveIndex(-1);
-              } else if (e.key === "Escape") {
-                setShowOccSuggest(false);
-                setOccActiveIndex(-1);
-                occInputRef.current?.focus();
-              }
-            }}
+            onChange={setOccupation}
+            items={occNames}
             placeholder={cfg.sign.fields.occupation.placeholder}
-            autoComplete="off"
-            role="combobox"
-            aria-expanded={
-              showOccSuggest && occupation && occMatches.length > 0
-            }
-            aria-autocomplete="list"
-            aria-controls="occ-listbox"
-            aria-activedescendant={
-              occActiveIndex >= 0 ? `occ-option-${occActiveIndex}` : undefined
-            }
           />
-          {showOccSuggest && occupation && occMatches.length > 0 && (
-            <div
-              id="occ-listbox"
-              role="listbox"
-              className="autocomplete-dropdown"
-            >
-              {occMatches.map((o, i) => (
-                <div
-                  key={o}
-                  id={`occ-option-${i}`}
-                  role="option"
-                  aria-selected={i === occActiveIndex}
-                  onMouseDown={() => {
-                    setOccupation(o);
-                    setShowOccSuggest(false);
-                    setOccActiveIndex(-1);
-                  }}
-                  className={
-                    "autocomplete-option" +
-                    (i === occActiveIndex ? " active" : "")
-                  }
-                >
-                  {o}
-                </div>
-              ))}
-            </div>
-          )}
         </div>
       )}
 
@@ -2159,9 +1959,7 @@ const SignForm = memo(function SignForm({
           →
         </span>
       </button>
-      <p className="form-legal">
-        {cfg.ui.signForm.legal}
-      </p>
+      <p className="form-legal">{cfg.ui.signForm.legal}</p>
     </form>
   );
 });
@@ -2276,6 +2074,8 @@ function nudgeChips(chips, maxNudge = 150) {
 }
 
 function KreisverbandMap({ kvGroups }) {
+  const cfg = useCampaignConfig();
+  const region = () => regionLabels(cfg);
   const mapData = useMemo(() => {
     const stateCounts = {};
     const stateKvs = {};
@@ -2302,26 +2102,8 @@ function KreisverbandMap({ kvGroups }) {
 
   const [popup, setPopup] = useState(null);
   const [popupAtBottom, setPopupAtBottom] = useState(false);
-  const popupCloseRef = useRef(null);
-  const lastFocusedRef = useRef(null);
-
   useEffect(() => {
-    if (popup && popupCloseRef.current) {
-      popupCloseRef.current.focus();
-    } else if (!popup && lastFocusedRef.current) {
-      lastFocusedRef.current.focus();
-      lastFocusedRef.current = null;
-    }
     setPopupAtBottom(false);
-  }, [popup]);
-
-  useEffect(() => {
-    if (!popup) return;
-    function onKey(e) {
-      if (e.key === "Escape") setPopup(null);
-    }
-    document.addEventListener("keydown", onKey);
-    return () => document.removeEventListener("keydown", onKey);
   }, [popup]);
 
   const wrapRef = useRef(null);
@@ -2356,7 +2138,6 @@ function KreisverbandMap({ kvGroups }) {
   function handleClusterClick(chip, triggerEl) {
     const cl = clusterData.find((c) => c.id === chip.id);
     if (!cl) return;
-    if (triggerEl) lastFocusedRef.current = triggerEl;
     // Anchor to the rendered chip rect (chipPos offsets + nudgeChips shifts),
     // not the raw state center. Chips in the upper part of the map open the
     // popup below themselves so it can't escape the scroll container.
@@ -2375,129 +2156,139 @@ function KreisverbandMap({ kvGroups }) {
   }
 
   return (
-    <div className="kv-map-wrap">
-      <div className="kv-map-scroll" ref={wrapRef}>
-        <div className="kv-map-content" onClick={() => setPopup(null)}>
-          <svg
-            viewBox={`${MAP_VB.x} ${MAP_VB.y} ${MAP_VB.w} ${MAP_VB.h}`}
-            className="kv-map"
-            aria-hidden="true"
-            onClick={() => setPopup(null)}
-          >
-            <path d={GERMANY_PATH} className="kv-map-outline" />
-            {chips.map((chip) => (
-              <g key={chip.id} className="kv-map-marker">
-                <foreignObject
-                  x={chip.x}
-                  y={chip.y}
-                  width={chip.w + 8}
-                  height={chip.h + 8}
-                  className="kv-map-foreign"
-                >
-                  <button
-                    type="button"
-                    className={
-                      "occupation-chip occupation-chip--map occupation-chip--cluster" +
-                      (popup && popup.id === chip.id
-                        ? " occupation-chip--active"
-                        : "")
-                    }
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      handleClusterClick(chip, e.currentTarget);
-                    }}
-                    aria-label={fillText(cfg.ui.list.mapChipAria, {
-                      name: chip.name,
-                      count: chip.count,
-                    })}
-                    aria-expanded={popup ? popup.id === chip.id : false}
-                  >
-                    <span className="occupation-name">{chip.name}</span>
-                    <span className="occupation-count">{chip.count}</span>
-                  </button>
-                </foreignObject>
-              </g>
-            ))}
-          </svg>
-          {popup && (
-            <div
-              className={
-                "kv-map-popup" + (popup.below ? " kv-map-popup--below" : "")
-              }
-              style={{ "--popup-x": popup.x, "--popup-y": popup.y }}
-              onClick={(e) => e.stopPropagation()}
-              role="dialog"
-              aria-label={fillText(cfg.ui.list.mapPopupAria, {
-                name: popup.label,
-                count: popup.total,
-              })}
+    <Popover.Root
+      open={Boolean(popup)}
+      onOpenChange={(open) => {
+        if (!open) setPopup(null);
+      }}
+    >
+      <div className="kv-map-wrap">
+        <div className="kv-map-scroll" ref={wrapRef}>
+          <div className="kv-map-content" onClick={() => setPopup(null)}>
+            <svg
+              viewBox={`${MAP_VB.x} ${MAP_VB.y} ${MAP_VB.w} ${MAP_VB.h}`}
+              className="kv-map"
+              role="group"
+              aria-label={cfg.ui.list.showMap || cfg.ui.list.mapPopupAria}
+              onClick={() => setPopup(null)}
             >
-              <div className="kv-map-popup-head">
-                <span>{popup.label}</span>
-                <button
-                  ref={popupCloseRef}
-                  onClick={() => setPopup(null)}
-                  aria-label={cfg.ui.chrome.close}
+              <path d={GERMANY_PATH} className="kv-map-outline" />
+              {chips.map((chip) => (
+                <g key={chip.id} className="kv-map-marker">
+                  <foreignObject
+                    x={chip.x}
+                    y={chip.y}
+                    width={chip.w + 8}
+                    height={chip.h + 8}
+                    className="kv-map-foreign"
+                  >
+                    <Popover.Trigger
+                      type="button"
+                      className={
+                        "occupation-chip occupation-chip--map occupation-chip--cluster" +
+                        (popup && popup.id === chip.id
+                          ? " occupation-chip--active"
+                          : "")
+                      }
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        handleClusterClick(chip, e.currentTarget);
+                      }}
+                      aria-label={fillText(cfg.ui.list.mapChipAria, {
+                        name: chip.name,
+                        count: chip.count,
+                      })}
+                      aria-expanded={popup ? popup.id === chip.id : false}
+                    >
+                      <span className="occupation-name">{chip.name}</span>
+                      <span className="occupation-count">{chip.count}</span>
+                    </Popover.Trigger>
+                  </foreignObject>
+                </g>
+              ))}
+            </svg>
+            {popup && (
+              <Popover.Portal>
+                <Popover.Positioner
+                  sideOffset={8}
+                  className="map-popup-positioner"
                 >
-                  ×
-                </button>
-              </div>
-              <div
-                className="kv-map-popup-body"
-                onScroll={(e) => {
-                  const el = e.currentTarget;
-                  setPopupAtBottom(
-                    el.scrollHeight - el.scrollTop <= el.clientHeight + 4,
-                  );
-                }}
-              >
-                {popup.members.map((m) => (
-                  <div key={m.city} className="kv-map-popup-row">
-                    <span>{m.city}</span>
-                    <span className="occupation-count">{m.count}</span>
-                  </div>
-                ))}
-              </div>
-              {popup.members.length > 5 && !popupAtBottom && (
-                <div className="kv-map-popup-scroll-hint" aria-hidden="true">
-                  ▾
-                </div>
-              )}
-            </div>
-          )}
+                  <Popover.Popup
+                    className="kv-map-popup base-map-popup"
+                    aria-label={fillText(cfg.ui.list.mapPopupAria, {
+                      name: popup.label,
+                      count: popup.total,
+                    })}
+                  >
+                    <div className="kv-map-popup-head">
+                      <span>{popup.label}</span>
+                      <button
+                        onClick={() => setPopup(null)}
+                        aria-label={cfg.ui.chrome.close}
+                      >
+                        ×
+                      </button>
+                    </div>
+                    <div
+                      className="kv-map-popup-body"
+                      onScroll={(e) => {
+                        const el = e.currentTarget;
+                        setPopupAtBottom(
+                          el.scrollHeight - el.scrollTop <= el.clientHeight + 4,
+                        );
+                      }}
+                    >
+                      {popup.members.map((m) => (
+                        <div key={m.city} className="kv-map-popup-row">
+                          <span>{m.city}</span>
+                          <span className="occupation-count">{m.count}</span>
+                        </div>
+                      ))}
+                    </div>
+                    {popup.members.length > 5 && !popupAtBottom && (
+                      <div
+                        className="kv-map-popup-scroll-hint"
+                        aria-hidden="true"
+                      >
+                        ▾
+                      </div>
+                    )}
+                  </Popover.Popup>
+                </Popover.Positioner>
+              </Popover.Portal>
+            )}
+          </div>
         </div>
+        {(mapData.unmapped.length > 0 || mapData.ohneCount > 0) && (
+          <div className="kv-map-extras">
+            {mapData.unmapped.map((g) => (
+              <div key={g.kreisverband} className="occupation-chip">
+                <span className="occupation-name">{g.kreisverband}</span>
+                <span className="occupation-count">{g.count}</span>
+              </div>
+            ))}
+            {mapData.ohneCount > 0 && (
+              <div className="occupation-chip">
+                <span className="occupation-name">{region().none}</span>
+                <span className="occupation-count">{mapData.ohneCount}</span>
+              </div>
+            )}
+          </div>
+        )}
       </div>
-      {(mapData.unmapped.length > 0 || mapData.ohneCount > 0) && (
-        <div className="kv-map-extras">
-          {mapData.unmapped.map((g) => (
-            <div key={g.kreisverband} className="occupation-chip">
-              <span className="occupation-name">{g.kreisverband}</span>
-              <span className="occupation-count">{g.count}</span>
-            </div>
-          ))}
-          {mapData.ohneCount > 0 && (
-            <div className="occupation-chip">
-              <span className="occupation-name">{region().none}</span>
-              <span className="occupation-count">{mapData.ohneCount}</span>
-            </div>
-          )}
-        </div>
-      )}
-    </div>
+    </Popover.Root>
   );
 }
 
 function ImpressumModal({ onClose }) {
-  const trapRef = useFocusTrap(true);
+  const cfg = useCampaignConfig();
+  const region = () => regionLabels(cfg);
   return (
-    <div className="modal-overlay" onClick={onClose} role="presentation">
+    <Modal onClose={onClose} labelledBy="impressum-title">
       <div
         className="modal modal-legal"
-        role="dialog"
-        aria-modal="true"
         aria-labelledby="impressum-title"
         onClick={(e) => e.stopPropagation()}
-        ref={trapRef}
       >
         <div className="modal-head">
           <h3 id="impressum-title">{cfg.ui.chrome.impressum}</h3>
@@ -2525,44 +2316,17 @@ function ImpressumModal({ onClose }) {
           <p className="modal-disclaimer">{cfg.legal.disclaimer}</p>
         </div>
       </div>
-    </div>
+    </Modal>
   );
 }
 
 // Retention periods and link lifetimes quoted in the privacy policy: the same
 // values the server enforces (config/privacy.js).
-const privacy = resolvePrivacy(cfg);
-
-// Optional sections of "2. Welche Daten werden verarbeitet?" get consecutive
-// letters after the fixed a)–c), in the order they render.
-function sectionLetter(id) {
-  const order = [
-    cfg.features.zoomEvent && "zoom",
-    cfg.email?.provider === "resend" && "resend",
-    cfg.features.inviteLinks && "invite",
-    cfg.features.stateResolution && "state",
-    cfg.meta.analytics?.src && "analytics",
-  ].filter(Boolean);
-  return String.fromCharCode("d".charCodeAt(0) + order.indexOf(id));
-}
-
-// How exact the invite stats are, and what that lets an inviter infer.
-function inviteStatsPrivacy(invite) {
-  const risk =
-    "lässt sich an einer Änderung erkennen, ob eine bestimmte Person unterschrieben hat – etwa wenn der Link zuletzt nur an diese Person ging.";
-  if (invite.statsMode === "exact") {
-    return `Der Statistik-Link zeigt die genaue Zahl. Daran ${risk}`;
-  }
-  if (invite.statsMode === "threshold") {
-    const t = invite.statsThreshold;
-    return `Solange die Anzahl unter ${t} liegt, zeigt der Statistik-Link keine genaue Zahl, danach die genaue. Liegt sie bereits bei ${t - 1} oder mehr, ${risk}`;
-  }
-  const bounds = [...invite.statsRanges].sort((a, b) => a - b);
-  return `Der Statistik-Link zeigt keine genaue Zahl, sondern nur einen Bereich (Grenzen: ${bounds.join(", ")}). Nur wenn die Anzahl gerade eine dieser Grenzen erreicht, ${risk}`;
-}
 
 function DatenschutzModal({ onClose }) {
-  const trapRef = useFocusTrap(true);
+  const apiFetch = useCampaignApi();
+  const cfg = useCampaignConfig();
+  const region = () => regionLabels(cfg);
   const [deletionEmail, setDeletionEmail] = useState("");
   const [deletionStatus, setDeletionStatus] = useState("idle");
 
@@ -2583,328 +2347,23 @@ function DatenschutzModal({ onClose }) {
   }
 
   return (
-    <div className="modal-overlay" onClick={onClose} role="presentation">
+    <Modal onClose={onClose} labelledBy="datenschutz-title">
       <div
         className="modal modal-legal"
-        role="dialog"
-        aria-modal="true"
         aria-labelledby="datenschutz-title"
         onClick={(e) => e.stopPropagation()}
-        ref={trapRef}
       >
         <div className="modal-head">
-          <h3 id="datenschutz-title">Datenschutzerklärung</h3>
+          <h3 id="datenschutz-title">{cfg.ui.privacy.title}</h3>
           <button onClick={onClose} aria-label={cfg.ui.chrome.close}>
             ×
           </button>
         </div>
         <div className="modal-body modal-legal-body">
-          <h4>I. Informationen gemäß Art. 13 DS-GVO</h4>
-
-          <h5>1. Verantwortliche</h5>
-          <p>
-            Verantwortlich für diese Website ist:
-            <br />
-            <strong>{cfg.legal.entityName}</strong>
-            <br />
-            {cfg.legal.contactName}
-            <br />
-            {cfg.legal.addressInline}
-            <br />
-            <a href={`mailto:${cfg.legal.contactEmail}`}>
-              {cfg.legal.contactEmail}
-            </a>
-          </p>
-          <p>
-            Ein Datenschutzbeauftragter ist nicht zu benennen, da es sich um
-            eine private Initiative handelt.
-          </p>
-
-          <h5>2. Welche Daten werden verarbeitet?</h5>
-          <p>
-            <strong>a) Server-Protokolldateien</strong>
-            <br />
-            Bei jedem Zugriff werden vorübergehend Daten gespeichert:
-            IP-Adresse, Datum und Uhrzeit, aufgerufene Seite, Browser und
-            Betriebssystem sowie Referrer-URL. Rechtsgrundlage ist Art. 6 Abs. 1
-            lit. f DS-GVO (berechtigtes Interesse am sicheren Betrieb). Die
-            Protokolldateien werden spätestens nach 7 Tagen gelöscht.
-          </p>
-          <p>
-            <strong>b) Unterschriften</strong>
-            <br />
-            Beim Mitzeichnen werden Name und E-Mail-Adresse
-            {[
-              cfg.features.kreisverbandField && region().name,
-              cfg.features.occupationField && "Beruf",
-            ].filter(Boolean).length > 0 &&
-              ` sowie optional ${[cfg.features.kreisverbandField && region().name, cfg.features.occupationField && "Beruf"].filter(Boolean).join(" und ")}`}{" "}
-            gespeichert. Rechtsgrundlage ist deine ausdrückliche Einwilligung
-            (Art. 6 Abs. 1 lit. a DS-GVO). Die Daten werden{" "}
-            <strong>ausschließlich für diese Petition verwendet</strong> und –
-            mit Ausnahme der in dieser Erklärung genannten Dienstleister (siehe
-            unten) – nicht an unbeteiligte Dritte weitergegeben oder für andere
-            Zwecke genutzt. Sie werden für die Dauer der Initiative gespeichert
-            und bei Beendigung der Kampagne vollständig gelöscht, spätestens
-            jedoch {privacy.signerRetentionYears} Jahre nach Unterzeichnung (§
-            195 BGB) oder auf frühere Anfrage. Nicht bestätigte Eintragungen –
-            bei denen der Bestätigungslink nicht angeklickt wurde – werden
-            automatisch gelöscht, sobald der {privacy.confirmationLinkHours}{" "}
-            Stunden gültige Bestätigungslink abgelaufen ist.
-          </p>
-          <p>
-            Wenn du zustimmst, dass dein Name öffentlich angezeigt wird,
-            erscheinen dein Name
-            {cfg.features.kreisverbandField && `, dein ${region().name}`}
-            {cfg.features.stateResolution &&
-              " und das daraus ermittelte Bundesland"}{" "}
-            sowie das Datum der Unterzeichnung in der Liste auf dieser Website.
-            {cfg.features.occupationField &&
-              " Berufsangaben dieser Unterschriften werden nur als Anzahl je Beruf veröffentlicht, nicht zusammen mit dem Namen."}{" "}
-            Ohne diese Zustimmung wird deine Unterschrift nur mitgezählt. Du
-            kannst das über den Link in unseren E-Mails jederzeit ändern.
-          </p>
-          <p>
-            <strong>c) Newsletter / Kampagnen-Updates</strong>
-            <br />
-            Kampagnen-E-Mails werden{" "}
-            <strong>
-              ausschließlich versendet, wenn du beim Unterschreiben die
-              entsprechende Checkbox aktiviert hast
-            </strong>
-            . Du kannst diese Einwilligung jederzeit widerrufen – über den
-            Abmeldelink in jeder E-Mail oder durch eine Nachricht an{" "}
-            <a href={`mailto:${cfg.legal.contactEmail}`}>
-              {cfg.legal.contactEmail}
-            </a>
-            . Deine Unterschrift bleibt davon unberührt. Über den Link in
-            unseren E-Mails zu deiner Unterschrift und in Kampagnen-E-Mails
-            kannst du außerdem deine Angaben ändern oder deine Unterschrift
-            löschen; dafür gilt er {privacy.settingsLinkDays} Tage ab der
-            letzten E-Mail, die ihn enthielt. Abmelden kannst du dich damit
-            unbegrenzt.
-          </p>
-          <p>
-            Damit bei einer unterbrochenen Sendung niemand eine E-Mail doppelt
-            oder gar nicht bekommt, speichern wir zu jeder Kampagnen-E-Mail
-            {cfg.features.zoomEvent && " und jeder E-Mail zum Treffen"}, an
-            welche E-Mail-Adresse sie wann verschickt wurde. Diese Einträge
-            löschen wir {privacy.deliveryLogDays} Tage nach dem Versand, und
-            sofort, wenn du deine Daten löschen lässt.
-          </p>
-          {cfg.features.zoomEvent && (
-            <p>
-              <strong>
-                {sectionLetter("zoom")}) Anmeldung zum{" "}
-                {cfg.zoom?.navLabel || "Treffen"}
-              </strong>
-              <br />
-              Wenn du dich zum {cfg.zoom?.navLabel || "Treffen"} anmeldest,
-              speichern wir deinen Namen, deine E-Mail-Adresse, optional deinen
-              Kreisverband und gegebenenfalls die Angabe, ob du Delegierte*r
-              bist. Die Anmeldung wird erst wirksam, wenn du sie über den Link
-              in einer unserer E-Mails bestätigst; nicht bestätigte Anmeldungen
-              löschen wir nach {privacy.confirmationLinkHours} Stunden. Wir
-              nutzen die Daten ausschließlich, um dir Informationen,
-              Zugangsdaten und eine Erinnerung zum Treffen zu schicken
-              {cfg.email?.provider === "resend" &&
-                " (Versand über Resend, siehe unten)"}
-              . Rechtsgrundlage ist deine Einwilligung (Art. 6 Abs. 1 lit. a
-              DS-GVO), die du jederzeit über den Abmeldelink in jeder dieser
-              E-Mails widerrufen kannst. Die Anmeldungen werden{" "}
-              {privacy.treffenRetentionDays} Tage nach dem Treffen gelöscht. Mit
-              dem Link in den E-Mails zum Treffen kannst du, solange deine
-              Anmeldung besteht, deine Angaben ändern, dich abmelden oder alle
-              zu deiner E-Mail-Adresse gespeicherten Daten löschen. An Anbieter
-              von Videokonferenzen geben wir deine Daten nicht weiter.
-            </p>
-          )}
-          {cfg.email?.provider === "resend" && (
-            <p>
-              <strong>
-                {sectionLetter("resend")}) E-Mail-Versand über Resend
-              </strong>
-              <br />
-              Für den Versand von E-Mails (Bestätigungs-, Lösch- und
-              Kampagnen-E-Mails
-              {cfg.features.zoomEvent && " sowie E-Mails zum Treffen"}) nutzen
-              wir den Dienst Resend der Resend, Inc. Dabei werden deine
-              E-Mail-Adresse und der Inhalt der jeweiligen E-Mail an Resend
-              übermittelt und auf Servern in Irland (EU) zum Zweck des Versands
-              verarbeitet und gespeichert. Resend ist als Auftragsverarbeiter
-              nach Art. 28 DS-GVO vertraglich gebunden (
-              <a
-                href="https://resend.com/legal/dpa"
-                target="_blank"
-                rel="noopener noreferrer"
-              >
-                Auftragsverarbeitungsvertrag
-              </a>
-              ).
-              {cfg.email.providerRetentionDays &&
-                ` Resend speichert die versendeten E-Mails einschließlich Inhalt, Zustellstatus und Protokollen ${cfg.email.providerRetentionDays} Tage und löscht sie danach.`}{" "}
-              Die Verarbeitung erfolgt auf Servern innerhalb der EU. Soweit es
-              im Einzelfall dennoch zu einem Zugriff aus einem Drittland (z. B.
-              durch die US-Muttergesellschaft) kommen kann, ist dieser durch
-              geeignete Garantien abgesichert (Art. 44 ff. DS-GVO). Weitere
-              Informationen findest du in der{" "}
-              <a
-                href="https://resend.com/legal/privacy-policy"
-                target="_blank"
-                rel="noopener noreferrer"
-              >
-                Datenschutzerklärung von Resend
-              </a>{" "}
-              sowie in der{" "}
-              <a
-                href="https://resend.com/legal/subprocessors"
-                target="_blank"
-                rel="noopener noreferrer"
-              >
-                Liste der Unterauftragsverarbeiter
-              </a>
-              . Rechtsgrundlage ist Art. 6 Abs. 1 lit. a und lit. f DS-GVO.
-            </p>
-          )}
-          {cfg.features.inviteLinks && (
-            <p>
-              <strong>{sectionLetter("invite")}) Persönlicher Einladungslink</strong>
-              <br />
-              Nach der Bestätigung deiner Unterschrift erhältst du einen
-              persönlichen Einladungslink, den du teilen kannst, und per E-Mail
-              einen privaten Statistik-Link. Dafür speichern wir zu deiner
-              Unterschrift einen zufälligen Code, einen Prüfwert des
-              Statistik-Links (nicht den Link selbst) und die Anzahl der
-              Unterschriften, die über deinen Link bestätigt wurden. Wer über
-              deinen Link unterschrieben hat, speichern wir nicht: Der Code der
-              Einladung wird bei einer Unterschrift nur bis zu ihrer Bestätigung
-              aufbewahrt und dann gelöscht; nur die Anzahl steigt.{" "}
-              {inviteStatsPrivacy(resolveInvite(cfg))} Dein Vorname
-              erscheint auf deinem Einladungslink nur, wenn du das beim
-              Unterschreiben ausdrücklich ausgewählt hast – wer den Link
-              öffnet, erfährt dann, dass du den Brief unterschrieben hast.
-              Rechtsgrundlage dafür ist deine ausdrückliche Einwilligung (Art. 6
-              Abs. 1 lit. a, Art. 9 Abs. 2 lit. a DS-GVO), die du jederzeit über
-              deine E-Mail-Einstellungen oder per E-Mail an{" "}
-              <a href={`mailto:${cfg.legal.contactEmail}`}>
-                {cfg.legal.contactEmail}
-              </a>{" "}
-              widerrufen kannst. Die Angaben werden mit deiner Unterschrift
-              gelöscht. Die Seiten der Einladungslinks werden nicht in der
-              Reichweitenmessung erfasst. Die Teilen-Buttons sind einfache
-              Links; erst wenn du einen anklickst, öffnet sich der jeweilige
-              Messenger.
-            </p>
-          )}
-          {cfg.features.stateResolution && (
-            <p>
-              <strong>
-                {sectionLetter("state")}) Ermittlung des Bundeslandes
-              </strong>
-              <br />
-              Sofern du einen Kreisverband angibst, wird dieser zur Zuordnung
-              des Bundeslandes einmalig an den Dienst Nominatim der
-              OpenStreetMap Foundation (Server in der EU / im Vereinigten
-              Königreich) übermittelt. Dein Name und deine E-Mail-Adresse werden
-              dabei nicht übertragen. Rechtsgrundlage ist Art. 6 Abs. 1 lit. f
-              DS-GVO (berechtigtes Interesse an einer regionalen Auswertung).
-            </p>
-          )}
-          {cfg.meta.analytics?.src && (
-            <p>
-              <strong>{sectionLetter("analytics")}) Reichweitenmessung</strong>
-              <br />
-              Um die Reichweite dieser Website zu messen, nutzen wir die
-              Open-Source-Software Umami, die wir auf einem eigenen Server
-              betreiben; die Daten werden nicht an Dritte weitergegeben. Es
-              werden keine Cookies gesetzt und keine Profile über mehrere
-              Websites gebildet. Verarbeitet werden die aufgerufene Seite
-              (einschließlich URL-Parametern), die Referrer-URL, Browser,
-              Betriebssystem, Gerätetyp, Bildschirmgröße und Sprache sowie Land,
-              Region und Stadt, die aus deiner IP-Adresse abgeleitet werden. Die
-              IP-Adresse selbst wird nicht gespeichert. Seiten mit persönlichen
-              Links (E-Mail-Einstellungen, Bestätigungs- und Löschseiten) werden
-              nicht erfasst. Rechtsgrundlage ist Art. 6 Abs. 1 lit. f DS-GVO
-              (berechtigtes Interesse daran, die Reichweite der Kampagne zu
-              kennen). Die Daten werden nach{" "}
-              {cfg.meta.analytics.retentionMonths} Monaten gelöscht. Du kannst
-              der Verarbeitung jederzeit widersprechen (Art. 21 DS-GVO), z. B.
-              per E-Mail an{" "}
-              <a href={`mailto:${cfg.legal.contactEmail}`}>
-                {cfg.legal.contactEmail}
-              </a>
-              .
-            </p>
-          )}
-          <p>
-            <strong>Speicherung und Sicherungskopien</strong>
-            <br />
-            Die Datenbank und ihre Sicherungskopien sind verschlüsselt
-            gespeichert. Das schützt die Daten bei Verlust oder Diebstahl der
-            Datenträger oder Sicherungskopien. Sicherungskopien werden stündlich
-            erstellt und nach {privacy.backupRetentionHours} Stunden gelöscht.
-            Gelöschte Daten – etwa nach einer Löschanfrage oder einer
-            abgelaufenen Bestätigung – können bis dahin noch in Sicherungskopien
-            enthalten sein. Sicherungskopien werden ausschließlich zur
-            Wiederherstellung nach einem technischen Ausfall verwendet. Damit
-            eine Wiederherstellung gelöschte Daten nicht zurückbringt, vermerken
-            wir Löschungen, Abmeldungen und das Ausblenden deines Namens aus der
-            öffentlichen Liste für {privacy.erasureLogDays} Tage – nur als nicht
-            umkehrbarer Prüfwert deiner E-Mail-Adresse, nicht die Adresse selbst
-            – und wenden sie nach einer Wiederherstellung erneut an.
-          </p>
-
-          <h5>3. Deine Rechte</h5>
-          <p>
-            Du hast das Recht auf Auskunft (Art. 15), Berichtigung (Art. 16),
-            Löschung (Art. 17), Einschränkung der Verarbeitung (Art. 18) sowie
-            Datenübertragbarkeit (Art. 20 DS-GVO). Für Anfragen wende dich an{" "}
-            <a href={`mailto:${cfg.legal.contactEmail}`}>
-              {cfg.legal.contactEmail}
-            </a>
-            .
-          </p>
-          <p>
-            Du hast außerdem das Recht, aus Gründen deiner besonderen Situation
-            jederzeit Widerspruch gegen die Verarbeitung einzulegen (Art. 21
-            Abs. 1 DS-GVO).
-          </p>
-
-          <h5>4. Beschwerderecht</h5>
-          <p>
-            Wenn du der Ansicht bist, dass die Verarbeitung deiner Daten gegen
-            Datenschutzrecht verstößt, kannst du dich bei einer
-            Datenschutz-Aufsichtsbehörde beschweren. Für private Verantwortliche
-            ist die Landesdatenschutzbehörde des Bundeslandes zuständig, in dem
-            die verantwortliche Stelle ihren Sitz hat. Eine Übersicht aller
-            deutschen Aufsichtsbehörden findest du hier:{" "}
-            <a
-              href="https://www.bfdi.bund.de/DE/Service/Anschriften/Laender/Laender-node.html"
-              target="_blank"
-              rel="noopener noreferrer"
-            >
-              Liste der Datenschutz-Aufsichtsbehörden
-            </a>
-            .
-          </p>
-
-          <hr />
-
-          <h5>Daten löschen</h5>
-          <p>
-            Du kannst alle Daten, die wir zu deiner E-Mail-Adresse gespeichert
-            haben – deine Unterschrift
-            {cfg.features.zoomEvent && " und deine Anmeldung zum Treffen"} –
-            jederzeit löschen lassen. Gib dazu deine E-Mail-Adresse ein – wir
-            schicken dir einen Löschlink, der {privacy.confirmationLinkHours}{" "}
-            Stunden gültig ist.
-          </p>
+          <div dangerouslySetInnerHTML={{ __html: renderPrivacy(cfg) }} />
 
           {deletionStatus === "sent" ? (
-            <p className="deletion-sent">
-              Wenn deine E-Mail-Adresse bei uns hinterlegt ist, haben wir dir
-              einen Löschlink geschickt. Bitte prüfe auch deinen Spam-Ordner.
-            </p>
+            <p className="deletion-sent">{cfg.ui.privacy.deletionSent}</p>
           ) : (
             <form
               className="deletion-form"
@@ -2915,25 +2374,25 @@ function DatenschutzModal({ onClose }) {
                 type="email"
                 value={deletionEmail}
                 onChange={(e) => setDeletionEmail(e.target.value)}
-                placeholder="deine@email.de"
+                placeholder={cfg.ui.privacy.deletionPlaceholder}
                 required
                 disabled={deletionStatus === "submitting"}
-                aria-label="E-Mail-Adresse für Löschanfrage"
+                aria-label={cfg.ui.privacy.deletionLabel}
               />
               <button type="submit" disabled={deletionStatus === "submitting"}>
                 {deletionStatus === "submitting"
-                  ? "Wird gesendet…"
-                  : "Löschlink anfordern"}
+                  ? cfg.ui.privacy.deletionSending
+                  : cfg.ui.privacy.deletionSubmit}
               </button>
               {deletionStatus === "error" && (
                 <p className="err" role="alert">
-                  Verbindungsfehler. Bitte versuche es erneut.
+                  {cfg.ui.errors.network}
                 </p>
               )}
             </form>
           )}
         </div>
       </div>
-    </div>
+    </Modal>
   );
 }

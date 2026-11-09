@@ -1,4 +1,3 @@
-// Data access layer: bun:sqlite over a SQLCipher-encrypted database.
 //
 // Migrated from postgres.js. Key translation rules applied throughout:
 //   * Timestamps are ISO-8601 UTC TEXT. Bind Dates via `iso()`, compare against
@@ -6,14 +5,28 @@
 //   * Booleans are stored as 0/1; response-facing rows are coerced back to JS
 //     booleans via `boolify`.
 //   * `campaigns.recipient_ids` is a JSON-array TEXT column (Postgres INTEGER[]).
-//   * The Postgres `fuzzystrmatch` search (levenshtein / regexp_split_to_table)
-//     is reimplemented in JS (`fuzzyMatch`), since bun:sqlite has no custom
-//     SQL functions.
-import { db, nowIso, isoAgo, onMutation } from "../db/connection.js";
+import {
+  db,
+  nowIso,
+  isoAgo,
+  onMutation,
+  openEncrypted,
+  DB_PATH,
+  inDatabaseTransaction,
+} from "../db/connection.js";
+import { createHash } from "node:crypto";
+import {
+  createMeetingRepository,
+  MAILING_LEASE_MS,
+  MAX_MAILING_ATTEMPTS,
+  meetingMailing,
+} from "./meeting-repository.js";
 import { cached, invalidate } from "./cache.js";
-import { copyKey, parseCopyKey } from "../config/editable.js";
+import { parseCopyKey } from "../config/editable.js";
+import { isCampaignTemplate } from "../config/campaign-templates.js";
 import { deleteJobsByPayload } from "../db/jobs.js";
 import {
+  emailHmac,
   recordErasure,
   forgetErasure,
   purgeErasureLog,
@@ -23,8 +36,13 @@ import {
   HIDE_PUBLICLY,
   HIDE_INVITE_NAME,
 } from "../db/erasure-log.js";
+import { eraseSubject, erasureTables } from "../db/erasure.js";
 import cfg from "../config/letter.config.js";
+import { normalizeLang } from "../config/i18n.js";
 import { resolvePrivacy } from "../config/privacy.js";
+
+export { MAILING_LEASE_MS, MAX_MAILING_ATTEMPTS };
+export const meetingRepository = createMeetingRepository(db);
 
 const DAY = 24 * 60 * 60 * 1000;
 
@@ -159,10 +177,11 @@ function caselessGlob(term) {
       out += "[]]";
       continue;
     }
-    const variants = [...new Set([ch, ch.toLowerCase(), ch.toUpperCase()])].filter(
-      (c) => [...c].length === 1,
-    );
-    out += variants.length > 1 || "*?[".includes(ch) ? `[${variants.join("")}]` : ch;
+    const variants = [
+      ...new Set([ch, ch.toLowerCase(), ch.toUpperCase()]),
+    ].filter((c) => [...c].length === 1);
+    out +=
+      variants.length > 1 || "*?[".includes(ch) ? `[${variants.join("")}]` : ch;
   }
   return `${out}*`;
 }
@@ -170,7 +189,13 @@ function caselessGlob(term) {
 // ---- public signers list ---------------------------------------------------
 
 export async function getSigners(opts) {
-  const { filter = "alle", search = "", limit = 18, offset = 0, sort = "desc" } = opts;
+  const {
+    filter = "alle",
+    search = "",
+    limit = 18,
+    offset = 0,
+    sort = "desc",
+  } = opts;
   return cached(
     `signers:${filter}:${search.trim().toLowerCase()}:${limit}:${offset}:${sort}`,
     () => querySigners({ filter, search, limit, offset, sort }),
@@ -304,6 +329,51 @@ function newsletterBase({
 function matchesAdminSearch(row, q) {
   if ((row.email || "").toLowerCase().includes(q)) return true;
   return fuzzyMatch(row.name, row.kreisverband, q).match;
+}
+
+export async function selectedNewsletterSigners(
+  ids,
+  filters = {},
+  { limit = 25, offset = 0 } = {},
+) {
+  const selected = new Set(ids);
+  const matching = await listNewsletterSignerIds({
+    ...filters,
+    cap: Number.MAX_SAFE_INTEGER,
+  });
+  const matchingCount = matching.filter((id) => selected.has(id)).length;
+  const { whereSql, params } = newsletterBase({});
+  if (!ids.length)
+    return {
+      signers: [],
+      total: 0,
+      byLanguage: {},
+      outsideFilter: 0,
+      unavailable: 0,
+    };
+  const condition = `${whereSql} AND s.id IN (${ids.map(() => "?").join(",")})`;
+  const byLanguage = await getCampaignLanguageCounts("selection", ids);
+  const total = Object.values(byLanguage).reduce(
+    (sum, count) => sum + count,
+    0,
+  );
+  const signers = await db
+    .query(
+      `SELECT s.id, s.name, s.email FROM signers s WHERE ${condition} ORDER BY s.name, s.id LIMIT ? OFFSET ?`,
+    )
+    .all(
+      ...params,
+      ...ids,
+      Math.min(100, Math.max(1, limit)),
+      Math.max(0, offset),
+    );
+  return {
+    signers,
+    total,
+    byLanguage,
+    outsideFilter: Math.max(0, total - matchingCount),
+    unavailable: ids.length - total,
+  };
 }
 
 export async function listNewsletterSigners({
@@ -553,7 +623,9 @@ export function isInviteCode(value) {
 // name field. Shown to the signer on the confirm page before they agree, since
 // "Berger, Anna" would otherwise put a surname on the link.
 export function inviteDisplayName(name) {
-  return String(name || "").trim().split(/\s/)[0];
+  return String(name || "")
+    .trim()
+    .split(/\s/)[0];
 }
 
 export function hashStatsToken(token) {
@@ -563,9 +635,6 @@ export function hashStatsToken(token) {
 export async function confirmSigner(token) {
   // The row's inviter is read first, since SQLite's RETURNING only sees the new
   // values. The UPDATE is what claims the token, so only the request that
-  // confirms credits the inviter; pending_ref is cleared by it, leaving no link
-  // between the two people. (No transaction: the connection is shared with
-  // concurrent requests.)
   const pending = await db
     .query(`SELECT pending_ref FROM signers WHERE verification_token = ?`)
     .get(token);
@@ -577,7 +646,11 @@ export async function confirmSigner(token) {
        WHERE verification_token = ? AND verified = 0 AND token_expires_at > ?
        RETURNING id, kreisverband, invite_code, lang`,
     )
-    .get(cfg.features.inviteLinks ? generateInviteCode() : null, token, nowIso());
+    .get(
+      cfg.features.inviteLinks ? generateInviteCode() : null,
+      token,
+      nowIso(),
+    );
   if (!row) return null;
   const ref = pending?.pending_ref;
   if (ref && ref !== row.invite_code) {
@@ -612,10 +685,10 @@ export async function getInviteByCode(code) {
   };
 }
 
-// Issue a fresh stats token for the invite mail. Only its hash is stored, so a
-// re-sent mail invalidates the previous stats link.
-export async function issueInviteStatsToken(id) {
-  const token = crypto.randomUUID().replaceAll("-", "");
+export async function issueInviteStatsToken(
+  id,
+  token = crypto.randomUUID().replaceAll("-", ""),
+) {
   const row = await db
     .query(
       `UPDATE signers /* public-neutral */ SET invite_stats_hash = ?
@@ -640,14 +713,30 @@ export async function getInviteStats(code, token) {
 // Start a deletion for an address we hold data for: a signature, a Treffen
 // registration, or both. Returns the request id, or null when the address is
 // unknown (the caller answers the same either way).
-export async function createDeletionRequest(email, token, expiresAt, lang = null) {
+export async function createDeletionRequest(
+  email,
+  token,
+  expiresAt,
+  lang = null,
+) {
   const known = await db
     .query(
       `SELECT 1 FROM signers WHERE email = ?
-       UNION ALL SELECT 1 FROM zoom_registrations WHERE email = ? LIMIT 1`,
+       UNION ALL SELECT 1 FROM zoom_registrations WHERE email = ?
+       UNION ALL SELECT 1 FROM zoom_pending WHERE email = ?
+       UNION ALL SELECT 1 FROM mailing_deliveries WHERE email = ? LIMIT 1`,
     )
-    .get(email, email);
-  if (!known) return null;
+    .get(email, email, email, email);
+  if (!known) {
+    const tables = await erasureTables(db);
+    if (!tables.has("email_attempts")) return null;
+    const columns = await db.query("PRAGMA table_info(email_attempts)").all();
+    if (!columns.some((column) => column.name === "subject_hmac")) return null;
+    const attempt = await db
+      .query("SELECT 1 FROM email_attempts WHERE subject_hmac=? LIMIT 1")
+      .get(emailHmac(email));
+    if (!attempt) return null;
+  }
   const row = await db
     .query(
       `INSERT INTO deletion_requests /* public-neutral */ (email, token, expires_at, lang)
@@ -665,7 +754,7 @@ export async function getDeletionRequestForMail(id) {
   return (
     (await db
       .query(
-        `SELECT id, email, token, expires_at, lang FROM deletion_requests WHERE id = ?`,
+        `SELECT id, email, token, expires_at, lang, created_at FROM deletion_requests WHERE id = ?`,
       )
       .get(id)) || null
   );
@@ -673,29 +762,14 @@ export async function getDeletionRequestForMail(id) {
 
 // Erase everything stored for an address: signature, Treffen registration,
 // pending deletion request and any queued mail about them.
+async function eraseAuthorizedEmail(email) {
+  const changes = await eraseSubject(db, { email });
+  await recordErasure(db, email, ERASE);
+  return changes > 0;
+}
+
 export async function eraseEmail(email) {
-  const signer = await db
-    .query(`DELETE FROM signers WHERE email = ? RETURNING id`)
-    .get(email);
-  const zoom = await db
-    .query(`DELETE FROM zoom_registrations WHERE email = ? RETURNING id`)
-    .get(email);
-  const request = await db
-    .query(
-      `DELETE FROM deletion_requests /* public-neutral */ WHERE email = ? RETURNING id`,
-    )
-    .get(email);
-  const pending = await db
-    .query(`DELETE FROM zoom_pending /* public-neutral */ WHERE email = ? RETURNING id`)
-    .get(email);
-  await db
-    .query(`DELETE FROM mailing_deliveries /* public-neutral */ WHERE email = ?`)
-    .run(email);
-  if (pending) await deleteJobsByPayload("emails", "pendingId", pending.id);
-  if (signer) await deleteEmailJobsForSigner(signer.id);
-  if (request) await deleteJobsByPayload("emails", "requestId", request.id);
-  if (signer || zoom) await recordErasure(db, email, ERASE);
-  return Boolean(signer || zoom);
+  return db.transaction(() => eraseAuthorizedEmail(email), { immediate: true });
 }
 
 // The language of a deletion request (for its link page), or null.
@@ -707,14 +781,19 @@ export async function getDeletionRequestLang(token) {
 }
 
 export async function deleteByDeletionToken(token) {
-  const req = await db
-    .query(
-      `SELECT email FROM deletion_requests WHERE token = ? AND expires_at > ?`,
-    )
-    .get(token, nowIso());
-  if (!req) return false;
-  await eraseEmail(req.email);
-  return true;
+  return db.transaction(
+    async () => {
+      const req = await db
+        .query(
+          `SELECT email FROM deletion_requests WHERE token=? AND expires_at>?`,
+        )
+        .get(token, nowIso());
+      if (!req) return false;
+      await eraseAuthorizedEmail(req.email);
+      return true;
+    },
+    { immediate: true },
+  );
 }
 
 export async function deleteExpiredDeletionRequests() {
@@ -727,18 +806,17 @@ export async function deleteExpiredDeletionRequests() {
 }
 
 export async function getSignerIdByEmail(email) {
-  const row = await db.query(`SELECT id FROM signers WHERE email = ?`).get(email);
+  const row = await db
+    .query(`SELECT id FROM signers WHERE email = ?`)
+    .get(email);
   return row ? row.id : null;
 }
 
-// Everything a queued transactional mail needs, read when it is sent, so the
-// job payload holds only the signer id, and a mail for a row that has since
-// been deleted is simply not sent.
 export async function getSignerForMail(id) {
   return (
     (await db
       .query(
-        `SELECT id, name, email, verified, verification_token, token_expires_at, invite_code, lang
+        `SELECT id, name, email, verified, verification_token, token_expires_at, invite_code, lang, created_at
          FROM signers WHERE id = ?`,
       )
       .get(id)) || null
@@ -769,6 +847,7 @@ export async function insertZoomRegistration({
   delegierter,
   lang = null,
 }) {
+  const current = await getCurrentZoomRegistrationByEmail(email);
   const row = await db
     .query(
       `INSERT INTO zoom_registrations (name, email, kreisverband, delegierter, lang)
@@ -778,12 +857,11 @@ export async function insertZoomRegistration({
              lang = excluded.lang,
              kreisverband = excluded.kreisverband,
              delegierter = excluded.delegierter,
-             -- Every caller proved the address; a renewed registration counts
-             -- as made now, so a previous event's purge leaves it alone.
-             created_at = strftime('%Y-%m-%dT%H:%M:%fZ','now')
+             created_at = CASE WHEN ? THEN zoom_registrations.created_at
+               ELSE strftime('%Y-%m-%dT%H:%M:%fZ','now') END
        RETURNING id`,
     )
-    .get(name, email, kv || "", B(delegierter), lang);
+    .get(name, email, kv || "", B(delegierter), lang, B(Boolean(current)));
   // Registering again reverses an earlier Treffen opt-out.
   await forgetErasure(db, email, TREFFEN_OPT_OUT);
   return { ok: true, id: row.id };
@@ -821,14 +899,14 @@ export async function getZoomRecipients({ delegatesOnly = false } = {}) {
   if (delegatesOnly) {
     return await db
       .query(
-        `SELECT id, name, email, unsubscribe_token, lang FROM zoom_registrations
+        `SELECT id, name, email, unsubscribe_token, lang, created_at FROM zoom_registrations
          WHERE delegierter = 1 ORDER BY created_at ASC`,
       )
       .all();
   }
   return await db
     .query(
-      `SELECT id, name, email, unsubscribe_token, lang FROM zoom_registrations
+      `SELECT id, name, email, unsubscribe_token, lang, created_at FROM zoom_registrations
        ORDER BY created_at ASC`,
     )
     .all();
@@ -911,23 +989,23 @@ export async function insertZoomPending(args, attempt = 0) {
 }
 
 export async function getZoomPendingForMail(id) {
-  return (
-    boolify(
-      (await db
-        .query(
-          `SELECT id, name, email, kreisverband, delegierter, token, expires_at, lang
+  return boolify(
+    (await db
+      .query(
+        `SELECT id, name, email, kreisverband, delegierter, token, expires_at, lang, created_at
            FROM zoom_pending WHERE id = ?`,
-        )
-        .get(id)) || null,
-      ["delegierter"],
-    )
+      )
+      .get(id)) || null,
+    ["delegierter"],
   );
 }
 
 export async function getZoomRegistrationForMail(id) {
   return (
     (await db
-      .query(`SELECT id, name, email, lang FROM zoom_registrations WHERE id = ?`)
+      .query(
+        `SELECT id, name, email, lang, created_at FROM zoom_registrations WHERE id = ?`,
+      )
       .get(id)) || null
   );
 }
@@ -948,8 +1026,8 @@ export async function getZoomPendingByToken(token) {
 // Overwriting an existing registration is fine here: the request proved it
 // controls the address. Returns the registration, or null for a bad link.
 export async function confirmZoomPending(token) {
-  // No transaction: the connection is shared with concurrent requests. The
-  // DELETE … RETURNING claims the link atomically, so it works exactly once.
+  if (!inDatabaseTransaction())
+    throw new Error("Confirm meeting registration inside durableWork.run");
   const pending = await db
     .query(
       `DELETE FROM zoom_pending /* public-neutral */
@@ -1081,8 +1159,6 @@ export async function getZoomRegistrationByEmail(email) {
 // (mailing_deliveries) makes the resumed send skip everyone already reached.
 // Each claim counts as an attempt; a failure at MAX_MAILING_ATTEMPTS marks the
 // mailing 'aborted' instead of 'failed', so a permanent error stops retrying.
-export const MAILING_LEASE_MS = 10 * 60 * 1000;
-export const MAX_MAILING_ATTEMPTS = 5;
 // Wait after the Nth failed attempt before retrying, so a provider outage of a
 // few minutes doesn't use up every attempt (~81 min from first failure to abort).
 const RETRY_BACKOFF_MS = [60_000, 5 * 60_000, 15 * 60_000, 60 * 60_000];
@@ -1151,105 +1227,159 @@ export async function countDelivered(mailing) {
   return row?.n ?? 0;
 }
 
-// Race-safe claim: true when newly inserted, previously failed, or 'sending'
-// with a stale heartbeat.
-export async function claimZoomMailing(kind) {
-  const now = nowIso();
-  const inserted = await db
-    .query(
-      `INSERT INTO zoom_event_mailings (kind, status, attempts, updated_at)
-       VALUES (?, 'sending', 1, ?)
-       ON CONFLICT (kind) DO NOTHING
-       RETURNING kind`,
-    )
-    .get(kind, now);
-  if (inserted) return true;
-  const retry = retryableMailing("updated_at");
-  const row = await db
-    .query(
-      `UPDATE zoom_event_mailings
-       SET status = 'sending', attempts = attempts + 1, updated_at = ?
-       WHERE kind = ? AND ${retry.sql}
-       RETURNING kind`,
-    )
-    .get(now, kind, ...retry.params);
-  return Boolean(row);
+export async function claimZoomMailing(kind, generation) {
+  return meetingRepository.claim(
+    kind,
+    generation ?? (await meetingRepository.generation()),
+  );
 }
 
-export async function touchZoomMailing(kind) {
+export async function touchZoomMailing(kind, generation) {
+  return meetingRepository.touch(
+    kind,
+    generation ?? (await meetingRepository.generation()),
+  );
+}
+
+export async function markZoomMailing(
+  kind,
+  status,
+  count = null,
+  failure = null,
+  generation,
+) {
+  return meetingRepository.mark(
+    kind,
+    generation ?? (await meetingRepository.generation()),
+    status,
+    count,
+    failure,
+  );
+}
+
+export async function listZoomMailings(generation) {
+  return meetingRepository.list(generation);
+}
+
+async function advanceZoomGeneration() {
+  const generation = await meetingRepository.generation();
   await db
     .query(
-      `UPDATE zoom_event_mailings /* public-neutral */ SET updated_at = ? WHERE kind = ?`,
+      `INSERT INTO app_settings (key,value,updated_at) VALUES ('zoom_generation',?,?)
+    ON CONFLICT(key) DO UPDATE SET value=excluded.value,updated_at=excluded.updated_at`,
     )
-    .run(nowIso(), kind);
-}
-
-export async function markZoomMailing(kind, status, count = null) {
-  const setSent = status === "sent" ? "sent_at = ?, " : "";
-  const params = [status, MAX_MAILING_ATTEMPTS, status, count];
-  if (status === "sent") params.push(nowIso());
-  params.push(nowIso(), kind);
-  await db
-    .query(
-      `UPDATE zoom_event_mailings
-     SET status = CASE WHEN ? = 'failed' AND attempts >= ? THEN 'aborted' ELSE ? END,
-         recipient_count = ?, ${setSent}updated_at = ?
-     WHERE kind = ?`,
-    )
-    .run(...params);
-}
-
-export async function listZoomMailings() {
-  return await db
-    .query(
-      `SELECT kind, status, recipient_count, sent_at, updated_at
-       FROM zoom_event_mailings ORDER BY kind ASC`,
-    )
-    .all();
+    .run(String(generation + 1), nowIso());
+  for (const kind of ["link", "reminder", "confirmation"])
+    await db
+      .query("DELETE FROM mailing_deliveries WHERE mailing=?")
+      .run(meetingMailing(kind, generation));
+  return generation + 1;
 }
 
 export async function resetZoomMailings() {
-  await db.query(`DELETE FROM zoom_event_mailings`).run();
-  await db
-    .query(
-      `DELETE FROM mailing_deliveries WHERE mailing IN ('zoom-link', 'zoom-reminder')`,
-    )
-    .run();
+  return db.transaction(
+    async () => {
+      const generation = await advanceZoomGeneration();
+      const settings = await getZoomSettings();
+      await saveZoomSetting(
+        "zoom_revision",
+        Number(settings.zoom_revision || 0) + 1,
+      );
+      return generation;
+    },
+    { immediate: true },
+  );
 }
 
-// Wipes all Zoom registrations and resets the mailing state, so the same Zoom
-// event/list can be reused for a fresh round of signups (e.g. repurposing the
-// original meeting for an Auswertungszoom). Returns the number of rows removed.
 export async function clearZoomRegistrations() {
-  const { count } = await db
-    .query(`SELECT COUNT(*) AS count FROM zoom_registrations`)
-    .get();
-  await db.query(`DELETE FROM zoom_registrations`).run();
-  await resetZoomMailings();
-  return count;
+  return db.transaction(
+    async () => {
+      const { count } = await db
+        .query("SELECT COUNT(*) AS count FROM zoom_registrations")
+        .get();
+      await db.query("DELETE FROM zoom_registrations").run();
+      await advanceZoomGeneration();
+      const settings = await getZoomSettings();
+      await saveZoomSetting(
+        "zoom_revision",
+        Number(settings.zoom_revision || 0) + 1,
+      );
+      return count;
+    },
+    { immediate: true },
+  );
 }
 
 export async function getZoomSettings() {
-  return cached("zoom-settings", async () => {
-    const rows = await db
-      .query(`SELECT key, value FROM app_settings WHERE key LIKE 'zoom_%'`)
-      .all();
-    const out = {};
-    for (const row of rows) out[row.key] = row.value;
-    return out;
-  });
+  const rows = await db
+    .query("SELECT key,value FROM app_settings WHERE key LIKE 'zoom_%'")
+    .all();
+  return Object.fromEntries(rows.map((row) => [row.key, row.value]));
 }
 
-export async function setZoomSettings(partial) {
-  const entries = Object.entries(partial).filter(([, v]) => v != null);
-  for (const [key, value] of entries) {
-    await db
-      .query(
-        `INSERT INTO app_settings (key, value, updated_at) VALUES (?, ?, ?)
-       ON CONFLICT (key) DO UPDATE SET value = excluded.value, updated_at = ?`,
+async function saveZoomSetting(key, value) {
+  await db
+    .query(
+      `INSERT INTO app_settings (key,value,updated_at) VALUES (?,?,?)
+    ON CONFLICT(key) DO UPDATE SET value=excluded.value,updated_at=excluded.updated_at`,
+    )
+    .run(key, String(value), nowIso());
+}
+
+export async function setZoomSettings(
+  partial,
+  expectedRevision,
+  { resetMailings = false } = {},
+) {
+  if (!Number.isInteger(expectedRevision) || expectedRevision < 0)
+    throw Object.assign(
+      new Error("Die geladene Terminrevision fehlt. Bitte neu laden."),
+      { status: 400 },
+    );
+  return db.transaction(
+    async () => {
+      const settings = await getZoomSettings();
+      const current = Number(settings.zoom_revision || 0);
+      if (current !== expectedRevision)
+        throw Object.assign(
+          new Error(
+            "Der Termin wurde inzwischen geändert. Deine Eingaben bleiben erhalten. Vergleiche den aktuellen Stand.",
+          ),
+          { status: 409 },
+        );
+      const previousAt =
+        settings.zoom_event_at ||
+        process.env.ZOOM_EVENT_AT ||
+        cfg.zoom?.eventAt ||
+        "";
+      const dateChanged =
+        partial.zoom_event_at != null &&
+        new Date(partial.zoom_event_at || 0).getTime() !==
+          new Date(previousAt || 0).getTime();
+      if (
+        dateChanged &&
+        previousAt &&
+        new Date(previousAt).getTime() <= Date.now()
       )
-      .run(key, String(value), nowIso(), nowIso());
-  }
+        await scheduleTreffenPurge(
+          new Date(
+            new Date(previousAt).getTime() +
+              resolvePrivacy(cfg).treffenRetentionMs,
+          ),
+        );
+      if (dateChanged || resetMailings) await advanceZoomGeneration();
+      for (const [key, value] of Object.entries(partial))
+        if (
+          key !== "zoom_revision" &&
+          key !== "zoom_generation" &&
+          value != null
+        )
+          await saveZoomSetting(key, value);
+      await saveZoomSetting("zoom_revision", current + 1);
+      return current + 1;
+    },
+    { immediate: true },
+  );
 }
 
 // ---- editable texts & mode (admin "Texte & Modus", config/editable.js) -----
@@ -1276,23 +1406,6 @@ export async function getCopyOverrides(lang = null) {
     return out;
   });
   return { ...(all[lang ?? ""] || {}) };
-}
-
-// changes: { path: value | null }; null removes that language's override.
-export async function setCopyOverrides(changes, lang = null) {
-  for (const [path, value] of Object.entries(changes)) {
-    const key = copyKey(path, lang);
-    if (value === null) {
-      await db.query(`DELETE FROM app_settings WHERE key = ?`).run(key);
-    } else {
-      await db
-        .query(
-          `INSERT INTO app_settings (key, value, updated_at) VALUES (?, ?, ?)
-           ON CONFLICT (key) DO UPDATE SET value = excluded.value, updated_at = excluded.updated_at`,
-        )
-        .run(key, JSON.stringify(value), nowIso());
-    }
-  }
 }
 
 // ---- milestones (admin-editable goal thresholds) ---------------------------
@@ -1346,7 +1459,9 @@ export async function setMilestones(arr) {
 export async function getShowDelegierter() {
   return cached("show-delegierter", async () => {
     const row = await db
-      .query(`SELECT value FROM app_settings WHERE key = 'zoom_show_delegierter'`)
+      .query(
+        `SELECT value FROM app_settings WHERE key = 'zoom_show_delegierter'`,
+      )
       .get();
     if (row?.value != null) return row.value === "1";
     return Boolean(cfg.zoom?.form?.showDelegierter);
@@ -1392,51 +1507,6 @@ export async function getEmailTemplateBySlug(slug) {
   );
 }
 
-export async function createEmailTemplate({ name, subject, htmlBody }) {
-  const slugBase = name
-    .toLowerCase()
-    .normalize("NFD")
-    .replace(/[̀-ͯ]/g, "")
-    .replace(/[^a-z0-9]+/g, "-")
-    .replace(/^-|-$/g, "")
-    .slice(0, 48);
-  const reserved = ["verification", "deletion", "open-letter-update", "invite"];
-  const safeSlugBase = reserved.some((prefix) => slugBase.startsWith(prefix))
-    ? `newsletter-${slugBase || "template"}`
-    : slugBase || "newsletter";
-  const slug = `${safeSlugBase}-${crypto.randomUUID().slice(0, 8)}`;
-  const row = await db
-    .query(
-      `INSERT INTO email_templates (slug, name, subject, html_body)
-       VALUES (?, ?, ?, ?)
-       RETURNING id, slug, name, subject, html_body, updated_at, 0 AS system`,
-    )
-    .get(slug, name, subject, htmlBody);
-  return boolify(row, ["system"]);
-}
-
-export async function updateEmailTemplate(id, { subject, htmlBody }) {
-  const row = await db
-    .query(
-      `UPDATE email_templates SET subject = ?, html_body = ?, updated_at = ?
-       WHERE id = ?
-       RETURNING id, slug, name, subject, html_body, updated_at, ${SYSTEM_SLUGS_SQL} AS system`,
-    )
-    .get(subject, htmlBody, nowIso(), id);
-  return boolify(row || null, ["system"]);
-}
-
-export async function deleteEmailTemplate(id) {
-  const row = await db
-    .query(
-      `DELETE FROM email_templates
-       WHERE id = ? AND slug NOT IN ('verification', 'deletion', 'open-letter-update', 'invite')
-       RETURNING id`,
-    )
-    .get(id);
-  return Boolean(row);
-}
-
 // ---- campaigns -------------------------------------------------------------
 
 // Campaign texts in further languages (multiLanguage only), stored as JSON
@@ -1460,7 +1530,7 @@ export async function listCampaigns() {
   const rows = await db
     .query(
       `SELECT c.id, c.template_id, t.name AS template_name, c.subject,${CAMPAIGN_I18N ? " c.i18n," : ""} c.scheduled_at,
-              c.sent_at, c.status, c.recipient_count, c.sent_offset, c.attempts, c.audience,
+              c.sent_at, c.status, c.recipient_count, c.sent_offset, c.attempts, c.audience, c.failure,
               COALESCE(json_array_length(c.recipient_ids), 0) AS selection_count, c.created_at
        FROM campaigns c
        LEFT JOIN email_templates t ON t.id = c.template_id
@@ -1470,6 +1540,7 @@ export async function listCampaigns() {
   if (CAMPAIGN_I18N) {
     for (const row of rows) row.i18n = parseCampaignI18n(row.i18n);
   }
+  for (const row of rows) row.failure = parseCampaignI18n(row.failure);
   return rows;
 }
 
@@ -1480,15 +1551,47 @@ export async function createCampaign({
   audience = "newsletter",
   recipientIds = null,
   i18n = null,
+  requestKey = null,
+  sendNow = false,
 }) {
+  for (const id of [
+    templateId,
+    ...Object.values(i18n || {})
+      .map((entry) => entry.templateId)
+      .filter(Boolean),
+  ])
+    if (!isCampaignTemplate(await getEmailTemplate(id))) return null;
   const ids =
     audience === "selection" && Array.isArray(recipientIds)
       ? JSON.stringify(recipientIds)
       : null;
+  const requestHash = requestKey
+    ? createHash("sha256")
+        .update(
+          JSON.stringify([
+            templateId,
+            subject,
+            sendNow ? "immediate" : iso(scheduledAt),
+            audience,
+            recipientIds
+              ? [...new Set(recipientIds)].sort((a, b) => a - b)
+              : null,
+            Object.entries(i18n || {})
+              .sort(([a], [b]) => a.localeCompare(b))
+              .map(([lang, entry]) => [
+                lang,
+                entry.templateId || null,
+                entry.subject || null,
+              ]),
+          ]),
+        )
+        .digest("hex")
+    : null;
   const row = await db
     .query(
-      `INSERT INTO campaigns (template_id, subject, scheduled_at, audience, recipient_ids, i18n)
-       SELECT id, ?, ?, ?, ?, ? FROM email_templates WHERE id = ?
+      `INSERT INTO campaigns (template_id, subject, scheduled_at, audience, recipient_ids, i18n, request_key, request_hash)
+       SELECT id, ?, ?, ?, ?, ?, ?, ? FROM email_templates WHERE id = ?
+       ON CONFLICT(request_key) WHERE request_key IS NOT NULL DO NOTHING
        RETURNING id, template_id, subject,${CAMPAIGN_I18N ? " i18n," : ""} scheduled_at, sent_at, status, recipient_count, audience, created_at`,
     )
     .get(
@@ -1497,8 +1600,30 @@ export async function createCampaign({
       audience,
       ids,
       i18n && Object.keys(i18n).length ? JSON.stringify(i18n) : null,
+      requestKey,
+      requestHash,
       templateId,
     );
+  if (!row && requestKey) {
+    const previous = await db
+      .query(
+        "SELECT id, template_id, subject, i18n, scheduled_at, sent_at, status, recipient_count, audience, created_at, request_hash FROM campaigns WHERE request_key=?",
+      )
+      .get(requestKey);
+    if (previous && previous.request_hash !== requestHash) {
+      const error = new Error(
+        "Diese Anfragekennung wurde bereits für eine andere Nachricht verwendet. Bitte den Nachrichtenentwurf prüfen und erneut vorbereiten.",
+      );
+      error.status = 409;
+      throw error;
+    }
+    if (previous) {
+      delete previous.request_hash;
+      if (CAMPAIGN_I18N) previous.i18n = parseCampaignI18n(previous.i18n);
+      else delete previous.i18n;
+      return { ...previous, replayed: true };
+    }
+  }
   if (row && CAMPAIGN_I18N) row.i18n = parseCampaignI18n(row.i18n);
   return row || null;
 }
@@ -1507,20 +1632,21 @@ export async function createCampaign({
 export async function getCampaignById(id) {
   const row = await db
     .query(
-      `SELECT id, template_id, subject, scheduled_at, sent_at, status,
+      `SELECT id, template_id, subject,${CAMPAIGN_I18N ? " i18n," : ""} scheduled_at, sent_at, status,
               recipient_count, audience, sent_offset, recipient_ids, created_at
        FROM campaigns WHERE id = ?`,
     )
     .get(id);
   if (!row) return null;
   row.recipient_ids = parseIds(row.recipient_ids);
+  if (CAMPAIGN_I18N) row.i18n = parseCampaignI18n(row.i18n);
   return row;
 }
 
 export async function cancelCampaign(id) {
   const row = await db
     .query(
-      `DELETE FROM campaigns WHERE id = ? AND status = 'scheduled' RETURNING id`,
+      `UPDATE campaigns SET status = 'cancelled' WHERE id = ? AND status = 'scheduled' RETURNING id`,
     )
     .get(id);
   return Boolean(row);
@@ -1530,24 +1656,49 @@ export async function cancelCampaign(id) {
 // went stale. Shared by the claim and the reconciler.
 function claimableCampaign() {
   const retry = retryableMailing("heartbeat_at");
-  return { sql: `(status = 'scheduled' OR ${retry.sql})`, params: retry.params };
+  return {
+    sql: `(status = 'scheduled' OR ${retry.sql})`,
+    params: retry.params,
+  };
 }
 
 // Claim a single campaign for sending (used by the Honker job handler).
 // Returns the row (recipient_ids parsed) or null if it isn't due/claimable.
 export async function claimCampaignById(id) {
   const claimable = claimableCampaign();
+  const now = nowIso();
+  await db
+    .query(
+      `UPDATE campaigns SET status='aborted', failure='{"category":"delivery-tracking-expired"}' WHERE id=? AND delivery_expires_at <= ? AND status NOT IN ('sent','aborted')`,
+    )
+    .run(id, now);
   const row = await db
     .query(
-      `UPDATE campaigns SET status = 'sending', attempts = attempts + 1, heartbeat_at = ?
+      `UPDATE campaigns SET status = 'sending', attempts = attempts + 1, heartbeat_at = ?,
+         delivery_expires_at = COALESCE(delivery_expires_at, ?)
        WHERE id = ? AND ${claimable.sql}
+         AND (delivery_expires_at IS NULL OR delivery_expires_at > ?)
        RETURNING id, template_id, subject, i18n, scheduled_at, audience, sent_offset, recipient_ids, attempts`,
     )
-    .get(nowIso(), id, ...claimable.params);
+    .get(
+      now,
+      new Date(Date.now() + DELIVERY_LOG_MS).toISOString(),
+      id,
+      ...claimable.params,
+      now,
+    );
   if (!row) return null;
   row.recipient_ids = parseIds(row.recipient_ids);
   row.i18n = parseCampaignI18n(row.i18n);
   return row;
+}
+
+export async function deferCampaign(id, retryAfterS) {
+  await db
+    .query(
+      "UPDATE campaigns /* public-neutral */ SET status='scheduled', attempts=MAX(0,attempts-1), scheduled_at=? WHERE id=? AND status='sending'",
+    )
+    .run(new Date(Date.now() + retryAfterS * 1000).toISOString(), id);
 }
 
 // Ids of campaigns whose send time has arrived (for the reconciler).
@@ -1575,20 +1726,23 @@ export async function setCampaignProgress(id, deliveredCount) {
 export async function markCampaignSent(id, recipientCount) {
   await db
     .query(
-      `UPDATE campaigns SET status = 'sent', sent_at = ?, recipient_count = ?, sent_offset = ? WHERE id = ?`,
+      `UPDATE campaigns SET status = 'sent', sent_at = ?, recipient_count = ?, sent_offset = ?, failure = NULL WHERE id = ?`,
     )
     .run(nowIso(), recipientCount, recipientCount, id);
 }
 
-export async function markCampaignFailed(id) {
+export async function markCampaignFailed(
+  id,
+  failure = { category: "unknown" },
+) {
   await db
     .query(
       `UPDATE campaigns
        SET status = CASE WHEN attempts >= ? THEN 'aborted' ELSE 'failed' END,
-           heartbeat_at = ?
+           heartbeat_at = ?, failure = ?
        WHERE id = ?`,
     )
-    .run(MAX_MAILING_ATTEMPTS, nowIso(), id);
+    .run(MAX_MAILING_ATTEMPTS, nowIso(), JSON.stringify(failure), id);
 }
 
 // Admin: give an aborted campaign a fresh set of attempts. Already-reached
@@ -1600,22 +1754,138 @@ export async function retryAbortedCampaign(id) {
     .query(
       `UPDATE campaigns SET status = 'failed', attempts = 0
        WHERE id = ? AND status = 'aborted'
+         AND (delivery_expires_at IS NULL OR delivery_expires_at > ?)
          AND NOT EXISTS (
            SELECT 1 FROM mailing_deliveries d
            WHERE d.mailing = 'campaign:' || campaigns.id AND d.sent_at < ?)
        RETURNING id`,
     )
-    .get(id, isoAgo(DELIVERY_LOG_MS));
+    .get(id, nowIso(), isoAgo(DELIVERY_LOG_MS));
   return Boolean(row);
 }
 
 // ---- newsletter / zoom recipients ------------------------------------------
 
+const RECIPIENT_TABLES = new Map([
+  ["signer", "signers"],
+  ["meeting", "zoom_registrations"],
+  ["pending", "zoom_pending"],
+  ["deletion", "deletion_requests"],
+]);
+
+function recipientIdentity(recipient) {
+  const table = RECIPIENT_TABLES.get(recipient?.source);
+  const createdAt = recipient?.createdAt ?? recipient?.created_at;
+  if (!table || !recipient.id || !recipient.email || !createdAt) return null;
+  return { table, args: [recipient.id, recipient.email, createdAt] };
+}
+
+export async function getRecipientIdentity(
+  source,
+  id,
+  { connection = db } = {},
+) {
+  const table = RECIPIENT_TABLES.get(source);
+  if (!table) return null;
+  const row = await connection
+    .query(`SELECT id,email,created_at FROM ${table} WHERE id=?`)
+    .get(id);
+  return row
+    ? {
+        source,
+        id: row.id,
+        email: row.email,
+        createdAt: row.created_at,
+        subjectHmac: emailHmac(row.email),
+      }
+    : null;
+}
+
+export async function authorizeRecipient(
+  recipient,
+  { audience, kind, token, connection = db } = {},
+) {
+  const identity = recipientIdentity(recipient);
+  if (!identity) return false;
+  const { table, args } = identity;
+  let consent = "1=1";
+  const extra = [];
+  if (audience) {
+    if (["newsletter", "selection", "email_not_zoom"].includes(audience)) {
+      if (recipient.source !== "signer") return false;
+      consent = "verified=1 AND newsletter=1";
+      if (audience === "email_not_zoom")
+        consent +=
+          " AND NOT EXISTS (SELECT 1 FROM zoom_registrations z WHERE z.email=signers.email)";
+    } else if (["zoom", "zoom_delegates"].includes(audience)) {
+      if (recipient.source !== "meeting") return false;
+      if (audience === "zoom_delegates") consent = "delegierter=1";
+    } else return false;
+  } else if (kind === "verification") {
+    if (recipient.source !== "signer" || !token) return false;
+    consent = "verified=0 AND verification_token=? AND token_expires_at>?";
+    extra.push(token, nowIso());
+  } else if (
+    recipient.source === "pending" ||
+    recipient.source === "deletion"
+  ) {
+    if (!token) return false;
+    consent = "token=? AND expires_at>?";
+    extra.push(token, nowIso());
+  } else if (recipient.source === "signer") {
+    consent =
+      kind === "invite"
+        ? "verified=1 AND invite_code IS NOT NULL"
+        : "verified=1";
+  }
+  const row = await connection
+    .query(
+      `SELECT 1 FROM ${table} WHERE id=? AND email=? AND created_at=? AND ${consent}`,
+    )
+    .get(...args, ...extra);
+  return Boolean(row);
+}
+
+export async function markDeliveredForRecipient(
+  mailing,
+  recipient,
+  { connection = db } = {},
+) {
+  const identity = recipientIdentity(recipient);
+  if (!identity) return false;
+  const result = await connection
+    .query(
+      `INSERT INTO mailing_deliveries /* public-neutral */ (mailing,email,sent_at)
+    SELECT ?,email,? FROM ${identity.table} WHERE id=? AND email=? AND created_at=?
+    ON CONFLICT(mailing,email) DO NOTHING`,
+    )
+    .run(mailing, nowIso(), ...identity.args);
+  return result.changes > 0;
+}
+
+export async function issueUnsubscribeTokenForRecipient(
+  recipient,
+  { connection = db } = {},
+) {
+  const identity = recipientIdentity(recipient);
+  if (!identity || !["signer", "meeting"].includes(recipient.source))
+    return null;
+  const signer = recipient.source === "signer";
+  const row = await connection
+    .query(
+      `UPDATE ${identity.table} /* public-neutral */
+    SET unsubscribe_token=COALESCE(unsubscribe_token,?)${signer ? ", unsubscribe_token_created_at=?" : ""}
+    WHERE id=? AND email=? AND created_at=? RETURNING unsubscribe_token`,
+    )
+    .get(crypto.randomUUID(), ...(signer ? [nowIso()] : []), ...identity.args);
+  return row?.unsubscribe_token ?? null;
+}
+
 export async function getNewsletterRecipientByEmail(email) {
   return (
     (await db
       .query(
-        `SELECT id, name, email, lang FROM signers
+        `SELECT id, name, email, lang, created_at FROM signers
          WHERE email = ? AND verified = 1 AND newsletter = 1`,
       )
       .get(email)) || null
@@ -1625,7 +1895,9 @@ export async function getNewsletterRecipientByEmail(email) {
 export async function getZoomRecipientByEmail(email) {
   return (
     (await db
-      .query(`SELECT id, name, email, lang FROM zoom_registrations WHERE email = ?`)
+      .query(
+        `SELECT id, name, email, lang, created_at FROM zoom_registrations WHERE email = ?`,
+      )
       .get(email)) || null
   );
 }
@@ -1633,16 +1905,44 @@ export async function getZoomRecipientByEmail(email) {
 export async function getNewsletterRecipients() {
   return await db
     .query(
-      `SELECT id, name, email, unsubscribe_token, lang FROM signers
+      `SELECT id, name, email, unsubscribe_token, lang, created_at FROM signers
        WHERE verified = 1 AND newsletter = 1 ORDER BY created_at ASC`,
     )
     .all();
 }
 
+export async function getCampaignLanguageCounts(audience, ids = []) {
+  if (audience === "selection" && ids.length === 0) return {};
+  const [table, condition] = {
+    newsletter: ["signers s", "s.verified = 1 AND s.newsletter = 1"],
+    email_not_zoom: [
+      "signers s",
+      "s.verified = 1 AND s.newsletter = 1 AND NOT EXISTS (SELECT 1 FROM zoom_registrations z WHERE z.email = s.email)",
+    ],
+    zoom: ["zoom_registrations s", "1 = 1"],
+    zoom_delegates: ["zoom_registrations s", "s.delegierter = 1"],
+    selection: [
+      "signers s",
+      `s.verified = 1 AND s.newsletter = 1 AND s.id IN (${ids.map(() => "?").join(",")})`,
+    ],
+  }[audience];
+  const rows = await db
+    .query(
+      `SELECT s.lang, COUNT(*) AS count FROM ${table} WHERE ${condition} GROUP BY s.lang`,
+    )
+    .all(...(audience === "selection" ? ids : []));
+  const counts = {};
+  for (const row of rows) {
+    const language = normalizeLang(cfg, row.lang);
+    counts[language] = (counts[language] || 0) + row.count;
+  }
+  return counts;
+}
+
 export async function getNewsletterNotZoomRecipients() {
   return await db
     .query(
-      `SELECT id, name, email, unsubscribe_token, lang FROM signers s
+      `SELECT id, name, email, unsubscribe_token, lang, created_at FROM signers s
        WHERE s.verified = 1 AND s.newsletter = 1
          AND NOT EXISTS (SELECT 1 FROM zoom_registrations z WHERE z.email = s.email)
        ORDER BY s.created_at ASC`,
@@ -1655,11 +1955,21 @@ export async function getNewsletterRecipientsByIds(ids) {
   const placeholders = ids.map(() => "?").join(", ");
   return await db
     .query(
-      `SELECT id, name, email, unsubscribe_token, lang FROM signers
+      `SELECT id, name, email, unsubscribe_token, lang, created_at FROM signers
        WHERE verified = 1 AND newsletter = 1 AND id IN (${placeholders})
        ORDER BY created_at ASC`,
     )
     .all(...ids);
+}
+
+export function getCampaignRecipients(campaign) {
+  const audience = campaign.audience || "newsletter";
+  if (audience === "zoom" || audience === "zoom_delegates")
+    return getZoomRecipients({ delegatesOnly: audience === "zoom_delegates" });
+  if (audience === "selection")
+    return getNewsletterRecipientsByIds(campaign.recipient_ids || []);
+  if (audience === "email_not_zoom") return getNewsletterNotZoomRecipients();
+  return getNewsletterRecipients();
 }
 
 // ---- unsubscribe tokens ----------------------------------------------------
@@ -1723,10 +2033,15 @@ export async function optOutNewsletter(token) {
 // and everything else stored for that address, incl. a Treffen registration.
 // Accepts a signer or a Treffen token, like the rest of the settings page.
 export async function deleteSignerByUnsubscribeToken(token, source) {
-  const email = await resolveEmailFromToken(token, source);
-  if (!email) return false;
-  await eraseEmail(email);
-  return true;
+  return db.transaction(
+    async () => {
+      const email = await resolveEmailFromToken(token, source);
+      if (!email) return false;
+      await eraseAuthorizedEmail(email);
+      return true;
+    },
+    { immediate: true },
+  );
 }
 
 // DSGVO data minimisation: drop sign-ups that were never email-confirmed once
@@ -1769,7 +2084,11 @@ export async function deleteExpiredByAge(cutoff) {
 // only count within TOKEN_EDIT_WINDOW unless `optOut` is set; opting out must
 // work with a link from any mail, however old. Treffen tokens have no window;
 // their rows are purged shortly after the event.
-export async function resolveEmailFromToken(token, source, { optOut = false } = {}) {
+export async function resolveEmailFromToken(
+  token,
+  source,
+  { optOut = false } = {},
+) {
   const access = await resolveTokenAccess(token, source);
   if (!access) return null;
   return access.editable || optOut ? access.email : null;
@@ -1900,7 +2219,8 @@ export async function updateSignerByEmail(
     if (showPublicly) await forgetErasure(db, email, HIDE_PUBLICLY);
     else await recordErasure(db, email, HIDE_PUBLICLY);
     // Withdrawn consent to the name on the invite link, likewise.
-    if (inviteShowName === false) await recordErasure(db, email, HIDE_INVITE_NAME);
+    if (inviteShowName === false)
+      await recordErasure(db, email, HIDE_INVITE_NAME);
     else if (inviteShowName) await forgetErasure(db, email, HIDE_INVITE_NAME);
   }
   return Boolean(row);

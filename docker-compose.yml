@@ -19,7 +19,7 @@ services:
       # Unset = privacy.backupRetentionHours from the letter config.
       - BACKUP_KEEP=${BACKUP_KEEP:-}
       - BACKUP_ENCRYPTION_KEY=${BACKUP_ENCRYPTION_KEY}
-      - DATABASE_JOURNAL_MODE=${DATABASE_JOURNAL_MODE:-DELETE}
+      - DATABASE_JOURNAL_MODE=${DATABASE_JOURNAL_MODE:-WAL}
       - TRUST_PROXY=${TRUST_PROXY:-true}
     volumes:
       - data:/app/data

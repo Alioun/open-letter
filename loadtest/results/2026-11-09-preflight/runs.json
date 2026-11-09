@@ -1,0 +1,22 @@
+[
+  {
+    "name": "current-n1000-cpu1-mem1g-r1",
+    "cpu": 1,
+    "memory": "1g",
+    "repetition": 1,
+    "started": "2026-11-09T10:14:43.993Z",
+    "limits": {
+      "nanoCpus": 1000000000,
+      "memory": 1073741824,
+      "swap": 1073741824
+    },
+    "startupMs": 16993,
+    "passed": false,
+    "error": "undefined == true",
+    "finalState": {
+      "oom": false,
+      "exit": 0,
+      "running": true
+    }
+  }
+]

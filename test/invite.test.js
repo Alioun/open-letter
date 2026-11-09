@@ -1,4 +1,11 @@
-import { describe, test, expect, beforeEach, beforeAll, afterAll } from "bun:test";
+import {
+  describe,
+  test,
+  expect,
+  beforeEach,
+  beforeAll,
+  afterAll,
+} from "bun:test";
 import cfg from "../config/letter.config.js";
 import { resetDb, db } from "./helpers.js";
 import * as q from "../server/db.js";
@@ -63,7 +70,10 @@ describe("invite codes", () => {
 describe("crediting the inviter", () => {
   test("a confirmed sign-up counts once and leaves no link to the inviter", async () => {
     const inviter = await signAndConfirm("a@example.org");
-    await signAndConfirm("b@example.org", { ref: inviter.inviteCode, confirm: false });
+    await signAndConfirm("b@example.org", {
+      ref: inviter.inviteCode,
+      confirm: false,
+    });
     // Pending: not counted yet, ref held only on the unconfirmed row.
     expect((await row("a@example.org")).invite_count).toBe(0);
     expect((await row("b@example.org")).pending_ref).toBe(inviter.inviteCode);
@@ -84,7 +94,9 @@ describe("crediting the inviter", () => {
 
   test("an unconfirmed inviter isn't credited", async () => {
     await signAndConfirm("u@example.org", { confirm: false });
-    await db.query(`UPDATE signers SET invite_code = 'unconf01' WHERE email = ?`).run("u@example.org");
+    await db
+      .query(`UPDATE signers SET invite_code = 'unconf01' WHERE email = ?`)
+      .run("u@example.org");
     await signAndConfirm("v@example.org", { ref: "unconf01" });
     expect((await row("u@example.org")).invite_count).toBe(0);
   });
@@ -92,10 +104,17 @@ describe("crediting the inviter", () => {
 
 describe("invite page and stats", () => {
   test("the first name is shown only with opt-in", async () => {
-    const named = await signAndConfirm("n@example.org", { name: "Nora Muster", showName: true });
+    const named = await signAndConfirm("n@example.org", {
+      name: "Nora Muster",
+      showName: true,
+    });
     const anon = await signAndConfirm("m@example.org", { name: "Max Muster" });
-    expect(await q.getInviteByCode(named.inviteCode)).toEqual({ firstName: "Nora" });
-    expect(await q.getInviteByCode(anon.inviteCode)).toEqual({ firstName: null });
+    expect(await q.getInviteByCode(named.inviteCode)).toEqual({
+      firstName: "Nora",
+    });
+    expect(await q.getInviteByCode(anon.inviteCode)).toEqual({
+      firstName: null,
+    });
     expect(await q.getInviteByCode("00000000")).toBeNull();
     expect(await q.getInviteByCode("bad")).toBeNull();
   });
@@ -104,18 +123,26 @@ describe("invite page and stats", () => {
     const s = await signAndConfirm("s@example.org");
     const first = await q.issueInviteStatsToken(s.id);
     expect(first.inviteCode).toBe(s.inviteCode);
-    expect((await row("s@example.org")).invite_stats_hash).not.toContain(first.token);
-    expect(await q.getInviteStats(s.inviteCode, first.token)).toEqual({ count: 0 });
+    expect((await row("s@example.org")).invite_stats_hash).not.toContain(
+      first.token,
+    );
+    expect(await q.getInviteStats(s.inviteCode, first.token)).toEqual({
+      count: 0,
+    });
     expect(await q.getInviteStats(s.inviteCode, "wrong")).toBeNull();
 
     const second = await q.issueInviteStatsToken(s.id);
     expect(await q.getInviteStats(s.inviteCode, first.token)).toBeNull();
-    expect(await q.getInviteStats(s.inviteCode, second.token)).toEqual({ count: 0 });
+    expect(await q.getInviteStats(s.inviteCode, second.token)).toEqual({
+      count: 0,
+    });
   });
 
   test("stats are shown as exact as the letter's statsMode allows", () => {
-    const at = (mode, extra = {}) => (n) =>
-      statsDisplay(n, { ...resolveInvite({}), statsMode: mode, ...extra });
+    const at =
+      (mode, extra = {}) =>
+      (n) =>
+        statsDisplay(n, { ...resolveInvite({}), statsMode: mode, ...extra });
     const threshold = at("threshold");
     expect(threshold(2)).toEqual({ below: 3 });
     expect(threshold(3)).toEqual({ count: 3 });
@@ -132,22 +159,43 @@ describe("invite page and stats", () => {
   });
 
   test("fillInvite leaves unknown placeholders alone", () => {
-    expect(fillInvite("{firstName} lädt zu „{title}“ ein {x}", { firstName: "A", title: "T" })).toBe(
-      "A lädt zu „T“ ein {x}",
-    );
+    expect(
+      fillInvite("{firstName} lädt zu „{title}“ ein {x}", {
+        firstName: "A",
+        title: "T",
+      }),
+    ).toBe("A lädt zu „T“ ein {x}");
   });
 });
 
 describe("invite mail", () => {
-  test("is built with a fresh stats token at send time, only for confirmed signers", async () => {
+  test("reuses credentials persisted for the logical delivery, only for confirmed signers", async () => {
     const s = await signAndConfirm("mail@example.org");
-    const args = await prepareQueuedEmail({ kind: "invite", signerId: s.id, baseUrl: "https://x" });
+    const issued = await q.issueInviteStatsToken(s.id);
+    const payload = {
+      kind: "invite",
+      signerId: s.id,
+      baseUrl: "https://x",
+      statsToken: issued.token,
+      inviteCode: issued.inviteCode,
+    };
+    const args = await prepareQueuedEmail(payload);
+    const replay = await prepareQueuedEmail(payload);
+    expect(replay.statsToken).toBe(args.statsToken);
     expect(args.inviteCode).toBe(s.inviteCode);
-    expect(await q.getInviteStats(s.inviteCode, args.statsToken)).toEqual({ count: 0 });
+    expect(await q.getInviteStats(s.inviteCode, args.statsToken)).toEqual({
+      count: 0,
+    });
 
     await signAndConfirm("pend@example.org", { confirm: false });
     const pendingId = await q.getSignerIdByEmail("pend@example.org");
-    expect(await prepareQueuedEmail({ kind: "invite", signerId: pendingId, baseUrl: "https://x" })).toBeNull();
+    expect(
+      await prepareQueuedEmail({
+        kind: "invite",
+        signerId: pendingId,
+        baseUrl: "https://x",
+      }),
+    ).toBeNull();
   });
 });
 
@@ -182,7 +230,9 @@ describe("withdrawing the name", () => {
     expect(await q.getInviteByCode(s.inviteCode)).toEqual({ firstName: null });
 
     // undefined (feature off) leaves the choice as it is.
-    await db.query(`UPDATE signers SET invite_show_name = 1 WHERE email = ?`).run("w@example.org");
+    await db
+      .query(`UPDATE signers SET invite_show_name = 1 WHERE email = ?`)
+      .run("w@example.org");
     await q.updateSignerByEmail("w@example.org", {
       name: "Anna Beispiel",
       kreisverband: "",

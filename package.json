@@ -5,43 +5,70 @@
   "type": "module",
   "scripts": {
     "test": "bun test",
-    "dev": "bun --watch server/index.js",
+    "dev": "bun scripts/dev.js",
     "start": "NODE_ENV=production bun server/index.js",
     "db:setup": "bun db/setup.js",
     "db:seed": "bun db/seed.js",
     "db:migrate": "bun db/migrate-pg-to-sqlite.js",
     "db:restore": "bun db/restore-backup.js",
     "honker:build": "bash scripts/build-honker.sh",
-    "og": "bun scripts/generate-og.js"
+    "og": "bun scripts/generate-og.js",
+    "verify:publishing": "bun test --timeout 30000 test/publications.test.js test/email-setup.test.js test/email-tls.test.js test/statistics.test.js",
+    "verify:app": "bun scripts/verify-publishing.js",
+    "verify:delivery": "bun scripts/verify-delivery.js",
+    "verify:migration": "bun scripts/verify-migration.js",
+    "format:publishing": "prettier --check config/publication.js config/css-policy.js config/faq.js server/publications.js server/email-setup.js server/frontend.js src/publishing src/ui.jsx",
+    "lint": "eslint server db config src scripts test"
   },
   "trustedDependencies": [
     "@journeyapps/sqlcipher"
   ],
   "overrides": {
-    "undici": "^6.28.0"
+    "undici": "^8.12.4",
+    "prosemirror-model": "1.25.13",
+    "fflate": "^0.8.3"
   },
   "dependencies": {
+    "@base-ui/react": "1.9.0",
+    "@codemirror/autocomplete": "^6.20.4",
+    "@codemirror/commands": "^6.11.1",
+    "@codemirror/lang-css": "^6.3.1",
+    "@codemirror/lint": "^6.9.7",
+    "@codemirror/state": "^6.7.6",
+    "@codemirror/view": "^6.43.15",
     "@fontsource/inter": "^5.3.0",
     "@fontsource/work-sans": "^5.3.0",
     "@journeyapps/sqlcipher": "^6.0.0",
-    "@tiptap/core": "^3.31.3",
-    "@tiptap/extension-character-count": "^3.31.3",
-    "@tiptap/extension-link": "^3.31.3",
-    "@tiptap/extension-placeholder": "^3.31.3",
-    "@tiptap/extension-underline": "^3.31.3",
-    "@tiptap/pm": "^3.31.3",
-    "@tiptap/react": "^3.31.3",
-    "@tiptap/starter-kit": "^3.31.3",
+    "@puckeditor/core": "0.24.0",
+    "@tiptap/core": "^3.33.0",
+    "@tiptap/extension-character-count": "^3.33.0",
+    "@tiptap/extension-link": "^3.33.0",
+    "@tiptap/extension-placeholder": "^3.33.0",
+    "@tiptap/extension-underline": "^3.33.0",
+    "@tiptap/pm": "^3.33.0",
+    "@tiptap/react": "^3.33.0",
+    "@tiptap/starter-kit": "^3.33.0",
+    "analytik": "1.22.0",
+    "css-tree": "^3.2.1",
     "date-fns": "^4.4.0",
-    "jose": "^6.2.12",
-    "juice": "^11.1.1",
-    "nodemailer": "^9.1.1",
-    "postgres": "^3.4.9",
-    "react": "^18.3.1",
-    "react-day-picker": "^10.0.1",
-    "react-dom": "^18.3.1"
+    "hono": "^4.13.17",
+    "jose": "^6.2.16",
+    "juice": "^12.2.1",
+    "nodemailer": "^10.4.0",
+    "postgres": "^4.1.0",
+    "react": "^19.3.1",
+    "react-day-picker": "^10.0.2",
+    "react-dom": "^19.3.1",
+    "sanitize-html": "^2.18.1",
+    "satori": "^0.63.2",
+    "sharp": "^0.35.5"
   },
   "devDependencies": {
-    "puppeteer": "^25.11.0"
-  }
+    "eslint": "^10.14.0",
+    "globals": "^17.14.0",
+    "happy-dom": "^21.0.4",
+    "prettier": "^3.9.10",
+    "puppeteer": "^25.16.0"
+  },
+  "packageManager": "bun@1.4.4"
 }

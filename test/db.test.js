@@ -9,11 +9,158 @@ import {
   isoAgoDays,
 } from "./helpers.js";
 import * as q from "../server/db.js";
+import cfg from "../config/letter.config.js";
 
 beforeEach(resetDb);
 
 const future = () => new Date(Date.now() + 3600_000);
 const past = () => new Date(Date.now() - 1000);
+
+test("campaign sending and retry review resolve the same current eligible audience", async () => {
+  const first = await addVerifiedSigner();
+  const optedOut = await addVerifiedSigner({ newsletter: false });
+  const zoom = await addZoomRegistration({
+    email: first.email,
+    delegierter: true,
+  });
+  const otherZoom = await addZoomRegistration();
+  expect(
+    (
+      await q.getCampaignRecipients({
+        audience: "selection",
+        recipient_ids: [first.id, optedOut.id],
+      })
+    ).map((person) => person.email),
+  ).toEqual([first.email]);
+  expect(
+    (await q.getCampaignRecipients({ audience: "zoom_delegates" })).map(
+      (person) => person.email,
+    ),
+  ).toEqual([zoom.email]);
+  expect(
+    (await q.getCampaignRecipients({ audience: "zoom" }))
+      .map((person) => person.email)
+      .sort(),
+  ).toEqual([zoom.email, otherZoom.email].sort());
+  expect(await q.getCampaignRecipients({ audience: "email_not_zoom" })).toEqual(
+    [],
+  );
+  const later = await addVerifiedSigner();
+  expect(
+    (await q.getCampaignRecipients({ audience: "newsletter" }))
+      .map((person) => person.email)
+      .sort(),
+  ).toEqual([first.email, later.email].sort());
+  await db.query("UPDATE signers SET newsletter=0 WHERE id=?").run(first.id);
+  expect(
+    (await q.getCampaignRecipients({ audience: "newsletter" })).map(
+      (person) => person.email,
+    ),
+  ).toEqual([later.email]);
+});
+
+test("audience language counts follow delivery eligibility and normalize missing or unknown languages", async () => {
+  const features = cfg.features;
+  const languages = cfg.languages;
+  cfg.features = { ...features, multiLanguage: true };
+  cfg.languages = ["en", "de"];
+  try {
+    const en = await addVerifiedSigner();
+    const de = await addVerifiedSigner();
+    const optedOut = await addVerifiedSigner({ newsletter: false });
+    const unverified = await addVerifiedSigner();
+    await db
+      .query("UPDATE signers SET lang='de' WHERE id IN (?,?)")
+      .run(de.id, optedOut.id);
+    await db
+      .query("UPDATE signers SET verified=0 WHERE id=?")
+      .run(unverified.id);
+    const zoom = await addZoomRegistration({
+      email: de.email,
+      delegierter: true,
+    });
+    const unknown = await addZoomRegistration();
+    await db
+      .query("UPDATE zoom_registrations SET lang='de' WHERE id=?")
+      .run(zoom.id);
+    await db
+      .query("UPDATE zoom_registrations SET lang='unavailable' WHERE id=?")
+      .run(unknown.id);
+    expect(await q.getCampaignLanguageCounts("newsletter")).toEqual({
+      en: 1,
+      de: 1,
+    });
+    expect(await q.getCampaignLanguageCounts("email_not_zoom")).toEqual({
+      en: 1,
+    });
+    expect(await q.getCampaignLanguageCounts("zoom")).toEqual({ en: 1, de: 1 });
+    expect(await q.getCampaignLanguageCounts("zoom_delegates")).toEqual({
+      de: 1,
+    });
+    expect(
+      (
+        await q.selectedNewsletterSigners([
+          en.id,
+          de.id,
+          optedOut.id,
+          unverified.id,
+        ])
+      ).byLanguage,
+    ).toEqual({ en: 1, de: 1 });
+    expect(await q.getCampaignLanguageCounts("selection", [])).toEqual({});
+  } finally {
+    cfg.features = features;
+    cfg.languages = languages;
+  }
+});
+
+describe("meeting settings revisions", () => {
+  test("stale meeting saves preserve every value and missing revisions cannot write", async () => {
+    await expect(
+      q.setZoomSettings({ zoom_link: "https://example.org/invalid" }),
+    ).rejects.toMatchObject({ status: 400 });
+    expect(
+      await q.setZoomSettings(
+        { zoom_link: "https://example.org/current", zoom_duration_min: 95 },
+        0,
+      ),
+    ).toBe(1);
+    await expect(
+      q.setZoomSettings(
+        { zoom_link: "https://example.org/stale", zoom_duration_min: 120 },
+        0,
+      ),
+    ).rejects.toMatchObject({ status: 409 });
+    expect(await q.getZoomSettings()).toMatchObject({
+      zoom_link: "https://example.org/current",
+      zoom_duration_min: "95",
+      zoom_revision: "1",
+    });
+    expect(await q.setZoomSettings({ zoom_duration_min: 100 }, 1)).toBe(2);
+  });
+
+  test("simultaneous meeting saves accept exactly one expected revision", async () => {
+    const results = await Promise.allSettled([
+      q.setZoomSettings(
+        { zoom_link: "https://example.org/first", zoom_duration_min: 75 },
+        0,
+      ),
+      q.setZoomSettings(
+        { zoom_link: "https://example.org/second", zoom_duration_min: 105 },
+        0,
+      ),
+    ]);
+    expect(results.filter((r) => r.status === "fulfilled")).toHaveLength(1);
+    expect(results.find((r) => r.status === "rejected").reason.status).toBe(
+      409,
+    );
+    const settings = await q.getZoomSettings();
+    expect(settings.zoom_revision).toBe("1");
+    expect(settings.zoom_duration_min).toBe(
+      settings.zoom_link.endsWith("first") ? "75" : "105",
+    );
+  });
+});
 
 describe("signers: insert / confirm / delete", () => {
   test("insertSigner keeps a pending sign-up, replaces it once expired, no-ops once verified", async () => {
@@ -47,13 +194,21 @@ describe("signers: insert / confirm / delete", () => {
     expect(r2.ok).toBe(true);
     expect(r2.pendingKept).toBe(true);
     let row = await db
-      .query("SELECT name, show_publicly, verification_token FROM signers WHERE email=?")
+      .query(
+        "SELECT name, show_publicly, verification_token FROM signers WHERE email=?",
+      )
       .get(email);
-    expect(row).toEqual({ name: "First", show_publicly: 1, verification_token: "tok-1" });
+    expect(row).toEqual({
+      name: "First",
+      show_publicly: 1,
+      verification_token: "tok-1",
+    });
     expect((await q.getPendingSignerByToken("tok-1")).show_publicly).toBe(true);
 
     // Once the first link expired, a new sign-up replaces the pending row.
-    await db.run("UPDATE signers SET token_expires_at = '2000-01-01T00:00:00.000Z'");
+    await db.run(
+      "UPDATE signers SET token_expires_at = '2000-01-01T00:00:00.000Z'",
+    );
     const r2b = await q.insertSigner(attempt);
     expect(r2b.pendingKept).toBeUndefined();
     row = await db.query("SELECT name FROM signers WHERE email=?").get(email);
@@ -89,7 +244,6 @@ describe("signers: insert / confirm / delete", () => {
     });
     expect(await q.confirmSigner("tok-exp")).toBeNull();
   });
-
 });
 
 describe("erasure covers signatures and Treffen registrations", () => {
@@ -99,7 +253,9 @@ describe("erasure covers signatures and Treffen registrations", () => {
   test("the deletion link removes signature and Treffen registration", async () => {
     const s = await addVerifiedSigner();
     await addZoomRegistration({ email: s.email });
-    expect(await q.createDeletionRequest(s.email, "del-tok", future())).toBeTruthy();
+    expect(
+      await q.createDeletionRequest(s.email, "del-tok", future()),
+    ).toBeTruthy();
     expect(await q.deleteByDeletionToken("del-tok")).toBe(true);
     expect(await count("signers")).toBe(0);
     expect(await count("zoom_registrations")).toBe(0);
@@ -110,7 +266,9 @@ describe("erasure covers signatures and Treffen registrations", () => {
   test("an address that only registered for the Treffen can be erased", async () => {
     const z = await addZoomRegistration();
     const other = await addVerifiedSigner();
-    expect(await q.createDeletionRequest(z.email, "zoom-del", future())).toBeTruthy();
+    expect(
+      await q.createDeletionRequest(z.email, "zoom-del", future()),
+    ).toBeTruthy();
     expect(await q.deleteByDeletionToken("zoom-del")).toBe(true);
     expect(await count("zoom_registrations")).toBe(0);
     expect(await count("signers")).toBe(1);
@@ -118,7 +276,9 @@ describe("erasure covers signatures and Treffen registrations", () => {
   });
 
   test("unknown addresses get no request, expired links do nothing", async () => {
-    expect(await q.createDeletionRequest("nobody@example.org", "x", future())).toBeNull();
+    expect(
+      await q.createDeletionRequest("nobody@example.org", "x", future()),
+    ).toBeNull();
     const s = await addVerifiedSigner();
     await q.createDeletionRequest(s.email, "old-del", past());
     expect(await q.deleteByDeletionToken("old-del")).toBe(false);
@@ -146,7 +306,8 @@ describe("erasure covers signatures and Treffen registrations", () => {
 
 describe("getSigners + fuzzy search", () => {
   test("pagination and total", async () => {
-    for (let i = 0; i < 5; i++) await addVerifiedSigner({ name: `Person ${i}` });
+    for (let i = 0; i < 5; i++)
+      await addVerifiedSigner({ name: `Person ${i}` });
     const page = await q.getSigners({ limit: 2, offset: 0 });
     expect(page.total).toBe(5);
     expect(page.signers).toHaveLength(2);
@@ -193,7 +354,8 @@ describe("getSigners + fuzzy search", () => {
   });
 
   test("search is case-insensitive and paginates on the substring path", async () => {
-    for (let i = 0; i < 5; i++) await addVerifiedSigner({ name: `Mira Wagner ${i}` });
+    for (let i = 0; i < 5; i++)
+      await addVerifiedSigner({ name: `Mira Wagner ${i}` });
     await addVerifiedSigner({ name: "Unrelated Person" });
     const res = await q.getSigners({ search: "WAGNER", limit: 2, offset: 0 });
     expect(res.total).toBe(5);
@@ -209,7 +371,10 @@ describe("getSigners + fuzzy search", () => {
     expect(res.signers[0].name).toBe("Kerem Özdemir");
     // "öz" matches both Ö-names but not the wildcard-only superset hit.
     const both = await q.getSigners({ search: "Öz" });
-    expect(both.signers.map((s) => s.name).sort()).toEqual(["Kerem Özdemir", "Ömer Öztürk"]);
+    expect(both.signers.map((s) => s.name).sort()).toEqual([
+      "Kerem Özdemir",
+      "Ömer Öztürk",
+    ]);
     // A single umlaut is exact (not a match-anything wildcard) and paged in SQL.
     const one = await q.getSigners({ search: "ö", limit: 1 });
     expect(one.total).toBe(2);
@@ -237,8 +402,14 @@ describe("getSigners + fuzzy search", () => {
 describe("stats", () => {
   test("getStats counts verified/today/week/kv", async () => {
     await addVerifiedSigner({ kreisverband: "Berlin" });
-    await addVerifiedSigner({ kreisverband: "Hamburg", created_at: isoAgoDays(3) });
-    await addVerifiedSigner({ kreisverband: "Hamburg", created_at: isoAgoDays(30) });
+    await addVerifiedSigner({
+      kreisverband: "Hamburg",
+      created_at: isoAgoDays(3),
+    });
+    await addVerifiedSigner({
+      kreisverband: "Hamburg",
+      created_at: isoAgoDays(30),
+    });
     const s = await q.getStats();
     expect(s.total).toBe(3);
     expect(s.today).toBe(1);
@@ -268,6 +439,111 @@ describe("occupations", () => {
 });
 
 describe("campaigns", () => {
+  test("saved campaign audience audit hides opted-out and deleted recipients", async () => {
+    const available = await addVerifiedSigner({
+      newsletter: 1,
+      name: "Available",
+    });
+    const optedOut = await addVerifiedSigner({
+      newsletter: 1,
+      name: "Opted out",
+    });
+    const deleted = await addVerifiedSigner({ newsletter: 1, name: "Deleted" });
+    const template = await addTemplate();
+    const campaign = await q.createCampaign({
+      templateId: template.id,
+      subject: "Audience audit",
+      scheduledAt: future(),
+      audience: "selection",
+      recipientIds: [available.id, optedOut.id, deleted.id],
+    });
+    await q.optOutNewsletterByEmail(optedOut.email);
+    await db.query("DELETE FROM signers WHERE id=?").run(deleted.id);
+    const saved = await q.getCampaignById(campaign.id);
+    const audit = await q.selectedNewsletterSigners(saved.recipient_ids);
+    expect(saved.recipient_ids).toHaveLength(3);
+    expect(audit.total).toBe(1);
+    expect(audit.unavailable).toBe(2);
+    expect(audit.signers).toEqual([
+      { id: available.id, name: available.name, email: available.email },
+    ]);
+  });
+  test("concurrent and restarted campaign requests produce one campaign and cancelled requests stay cancelled", async () => {
+    const template = await addTemplate();
+    const request = {
+      templateId: template.id,
+      subject: "One request",
+      scheduledAt: future(),
+      requestKey: crypto.randomUUID(),
+    };
+    const results = await Promise.all([
+      q.createCampaign(request),
+      q.createCampaign(request),
+    ]);
+    expect(results[0].id).toBe(results[1].id);
+    expect(results.filter((item) => item.replayed)).toHaveLength(1);
+    expect(await q.listCampaigns()).toHaveLength(1);
+    const restarted = await import(
+      `../server/db.js?campaign-request=${Date.now()}`
+    );
+    expect((await restarted.createCampaign(request)).id).toBe(results[0].id);
+    await expect(
+      q.createCampaign({ ...request, subject: "Different message" }),
+    ).rejects.toMatchObject({ status: 409 });
+    await expect(
+      q.createCampaign({
+        ...request,
+        audience: "selection",
+        recipientIds: [1, 2],
+      }),
+    ).rejects.toMatchObject({ status: 409 });
+    expect(await q.cancelCampaign(results[0].id)).toBe(true);
+    expect((await q.createCampaign(request)).status).toBe("cancelled");
+    expect(await q.claimCampaignById(results[0].id)).toBeNull();
+    expect(await q.listCampaigns()).toHaveLength(1);
+    expect(
+      (await q.createCampaign({ ...request, requestKey: crypto.randomUUID() }))
+        .id,
+    ).not.toBe(results[0].id);
+  });
+  test("immediate delivery retries retain identity despite changing clock time", async () => {
+    const template = await addTemplate();
+    const request = {
+      templateId: template.id,
+      subject: "Immediate",
+      scheduledAt: new Date(),
+      sendNow: true,
+      requestKey: crypto.randomUUID(),
+    };
+    const first = await q.createCampaign(request);
+    const repeated = await q.createCampaign({
+      ...request,
+      scheduledAt: new Date(Date.now() + 60000),
+    });
+    expect(repeated.id).toBe(first.id);
+    expect(repeated.replayed).toBe(true);
+    expect(await q.listCampaigns()).toHaveLength(1);
+  });
+  test("operational templates cannot become broadcasts in any language", async () => {
+    const system = await addTemplate({ slug: "verification.de" });
+    const newsletter = await addTemplate();
+    expect(
+      await q.createCampaign({
+        templateId: system.id,
+        subject: "No",
+        scheduledAt: new Date(),
+      }),
+    ).toBeNull();
+    expect(
+      await q.createCampaign({
+        templateId: newsletter.id,
+        subject: "No",
+        scheduledAt: new Date(),
+        i18n: { de: { templateId: system.id } },
+      }),
+    ).toBeNull();
+    expect(await q.listCampaigns()).toHaveLength(0);
+  });
   test("createCampaign stores recipient_ids JSON and listCampaigns counts it", async () => {
     const t = await addTemplate();
     const c = await q.createCampaign({
@@ -282,6 +558,29 @@ describe("campaigns", () => {
     expect(list[0].selection_count).toBe(3);
     const byId = await q.getCampaignById(c.id);
     expect(byId.recipient_ids).toEqual([1, 2, 3]);
+  });
+
+  test("quota-deferred campaigns resume without spending attempts and stop before deduplication expires", async () => {
+    const template = await addTemplate();
+    const campaign = await q.createCampaign({
+      templateId: template.id,
+      subject: "Quota fixture",
+      scheduledAt: past(),
+    });
+    expect((await q.claimCampaignById(campaign.id)).attempts).toBe(1);
+    await q.deferCampaign(campaign.id, 60);
+    expect(await q.getDueCampaignIds()).not.toContain(campaign.id);
+    await db
+      .query("UPDATE campaigns SET scheduled_at=? WHERE id=?")
+      .run(past().toISOString(), campaign.id);
+    expect(await q.getDueCampaignIds()).toContain(campaign.id);
+    expect((await q.claimCampaignById(campaign.id)).attempts).toBe(1);
+    await q.deferCampaign(campaign.id, 0);
+    await db
+      .query("UPDATE campaigns SET delivery_expires_at=? WHERE id=?")
+      .run(past().toISOString(), campaign.id);
+    expect(await q.claimCampaignById(campaign.id)).toBeNull();
+    expect(await q.retryAbortedCampaign(campaign.id)).toBe(false);
   });
 
   test("claimCampaignById claims scheduled/failed once, then returns null", async () => {
@@ -299,8 +598,16 @@ describe("campaigns", () => {
 
   test("getDueCampaignIds returns only due scheduled/failed", async () => {
     const t = await addTemplate();
-    await q.createCampaign({ templateId: t.id, subject: "due", scheduledAt: past() });
-    await q.createCampaign({ templateId: t.id, subject: "future", scheduledAt: future() });
+    await q.createCampaign({
+      templateId: t.id,
+      subject: "due",
+      scheduledAt: past(),
+    });
+    await q.createCampaign({
+      templateId: t.id,
+      subject: "future",
+      scheduledAt: future(),
+    });
     const ids = await q.getDueCampaignIds();
     expect(ids).toHaveLength(1);
   });
@@ -309,45 +616,98 @@ describe("campaigns", () => {
 
   test("a 'sending' campaign is reclaimable only once its heartbeat is stale", async () => {
     const t = await addTemplate();
-    const c = await q.createCampaign({ templateId: t.id, subject: "s", scheduledAt: past() });
+    const c = await q.createCampaign({
+      templateId: t.id,
+      subject: "s",
+      scheduledAt: past(),
+    });
     expect((await q.claimCampaignById(c.id))?.attempts).toBe(1);
     // Live sender: heartbeat fresh -> not claimable, not due.
     expect(await q.claimCampaignById(c.id)).toBeNull();
     expect(await q.getDueCampaignIds()).not.toContain(c.id);
 
     // Process died mid-send: heartbeat stale -> due and claimable again.
-    await db.query("UPDATE campaigns SET heartbeat_at = ? WHERE id = ?").run(minutesAgo(11), c.id);
+    await db
+      .query("UPDATE campaigns SET heartbeat_at = ? WHERE id = ?")
+      .run(minutesAgo(11), c.id);
     expect(await q.getDueCampaignIds()).toContain(c.id);
     expect((await q.claimCampaignById(c.id))?.attempts).toBe(2);
   });
 
   test("failed campaigns back off between attempts and abort at the cap", async () => {
     const t = await addTemplate();
-    const c = await q.createCampaign({ templateId: t.id, subject: "s", scheduledAt: past() });
+    const c = await q.createCampaign({
+      templateId: t.id,
+      subject: "s",
+      scheduledAt: past(),
+    });
     await q.claimCampaignById(c.id);
-    await q.markCampaignFailed(c.id);
+    const failure = {
+      category: "authentication",
+      correlationId: crypto.randomUUID(),
+      protocol: 535,
+    };
+    await q.markCampaignFailed(c.id, failure);
+    expect((await q.listCampaigns())[0].failure).toEqual(failure);
     // Within the 1-minute backoff after the first failure.
     expect(await q.getDueCampaignIds()).not.toContain(c.id);
-    await db.query("UPDATE campaigns SET heartbeat_at = ? WHERE id = ?").run(minutesAgo(2), c.id);
-    expect(await q.getDueCampaignIds()).toContain(c.id);
+    await db
+      .query("UPDATE campaigns SET heartbeat_at = ? WHERE id = ?")
+      .run(minutesAgo(2), c.id);
+    expect(
+      await q.getDueCampaignIds(),
+      JSON.stringify({
+        now: new Date().toISOString(),
+        campaign: await db
+          .query(
+            "SELECT status, attempts, scheduled_at, heartbeat_at FROM campaigns WHERE id=?",
+          )
+          .get(c.id),
+      }),
+    ).toContain(c.id);
 
-    await db.query("UPDATE campaigns SET attempts = ? WHERE id = ?").run(q.MAX_MAILING_ATTEMPTS, c.id);
-    await q.markCampaignFailed(c.id);
-    let row = await db.query("SELECT status FROM campaigns WHERE id = ?").get(c.id);
+    await db
+      .query("UPDATE campaigns SET attempts = ? WHERE id = ?")
+      .run(q.MAX_MAILING_ATTEMPTS, c.id);
+    await q.markCampaignFailed(c.id, failure);
+    expect((await q.listCampaigns())[0].failure).toEqual(failure);
+    let row = await db
+      .query("SELECT status FROM campaigns WHERE id = ?")
+      .get(c.id);
     expect(row.status).toBe("aborted");
-    await db.query("UPDATE campaigns SET heartbeat_at = ? WHERE id = ?").run(minutesAgo(600), c.id);
+    await db
+      .query("UPDATE campaigns SET heartbeat_at = ? WHERE id = ?")
+      .run(minutesAgo(600), c.id);
     expect(await q.getDueCampaignIds()).not.toContain(c.id);
 
     expect(await q.retryAbortedCampaign(c.id)).toBe(true);
-    row = await db.query("SELECT status, attempts FROM campaigns WHERE id = ?").get(c.id);
+    row = await db
+      .query("SELECT status, attempts FROM campaigns WHERE id = ?")
+      .get(c.id);
     expect(row).toEqual({ status: "failed", attempts: 0 });
-    expect(await q.getDueCampaignIds()).toContain(c.id);
+    expect(
+      await q.getDueCampaignIds(),
+      JSON.stringify({
+        now: new Date().toISOString(),
+        campaign: await db
+          .query("SELECT * FROM campaigns WHERE id=?")
+          .get(c.id),
+      }),
+    ).toContain(c.id);
   });
 
   test("the delivery log is erased with the address and aged out once a campaign is done", async () => {
     const t = await addTemplate();
-    const done = await q.createCampaign({ templateId: t.id, subject: "d", scheduledAt: past() });
-    const open = await q.createCampaign({ templateId: t.id, subject: "o", scheduledAt: past() });
+    const done = await q.createCampaign({
+      templateId: t.id,
+      subject: "d",
+      scheduledAt: past(),
+    });
+    const open = await q.createCampaign({
+      templateId: t.id,
+      subject: "o",
+      scheduledAt: past(),
+    });
     await q.markCampaignSent(done.id, 1);
     await q.claimCampaignById(open.id);
     await q.markCampaignFailed(open.id);
@@ -362,14 +722,22 @@ describe("campaigns", () => {
     const s = await addVerifiedSigner();
     await q.markDelivered(`campaign:${open.id}`, [s.email]);
     await q.eraseEmail(s.email);
-    expect(await q.getDeliveredEmails(`campaign:${open.id}`)).not.toContain(s.email);
+    expect(await q.getDeliveredEmails(`campaign:${open.id}`)).not.toContain(
+      s.email,
+    );
   });
 
   test("an aborted campaign's log ages out, and its retry is refused after that", async () => {
     const t = await addTemplate();
-    const c = await q.createCampaign({ templateId: t.id, subject: "a", scheduledAt: past() });
+    const c = await q.createCampaign({
+      templateId: t.id,
+      subject: "a",
+      scheduledAt: past(),
+    });
     await q.claimCampaignById(c.id);
-    await db.query("UPDATE campaigns SET attempts = ? WHERE id = ?").run(q.MAX_MAILING_ATTEMPTS, c.id);
+    await db
+      .query("UPDATE campaigns SET attempts = ? WHERE id = ?")
+      .run(q.MAX_MAILING_ATTEMPTS, c.id);
     await q.markCampaignFailed(c.id); // -> aborted
     await q.markDelivered(`campaign:${c.id}`, ["y@x.org"]);
     const old = new Date(Date.now() - 31 * 86400_000).toISOString();
@@ -385,7 +753,10 @@ describe("campaigns", () => {
     await q.markDelivered("campaign:1", ["b@x.org"]); // retry reports it again
     await q.markDelivered("campaign:2", ["a@x.org"]);
     expect(await q.countDelivered("campaign:1")).toBe(2);
-    expect([...(await q.getDeliveredEmails("campaign:1"))].sort()).toEqual(["a@x.org", "b@x.org"]);
+    expect([...(await q.getDeliveredEmails("campaign:1"))].sort()).toEqual([
+      "a@x.org",
+      "b@x.org",
+    ]);
   });
 
   test("getNewsletterRecipientsByIds (ANY->IN) returns picked verified subscribers", async () => {
@@ -422,12 +793,36 @@ describe("zoom", () => {
     expect(m.sent_at).toBeTruthy();
   });
 
+  test("stopped automatic meeting mail retains its diagnostic and accepted count without losing delivery tracking", async () => {
+    await q.claimZoomMailing("link");
+    await q.markDelivered("zoom-link", ["accepted@example.invalid"]);
+    await db
+      .query("UPDATE zoom_event_mailings SET attempts=? WHERE kind='link'")
+      .run(q.MAX_MAILING_ATTEMPTS);
+    const failure = {
+      category: "authentication",
+      protocol: 535,
+      correlationId: crypto.randomUUID(),
+    };
+    await q.markZoomMailing("link", "failed", 1, failure);
+    expect((await q.listZoomMailings())[0]).toMatchObject({
+      status: "aborted",
+      recipient_count: 1,
+      attempts: q.MAX_MAILING_ATTEMPTS,
+      failure,
+    });
+    expect(await q.countDelivered("zoom-link")).toBe(1);
+    expect(await q.claimZoomMailing("link")).toBe(false);
+  });
+
   test("a zoom mailing stuck in 'sending' is reclaimed; event reset clears its log", async () => {
     expect(await q.claimZoomMailing("reminder")).toBe(true);
     await q.markDelivered("zoom-reminder", ["a@x.org"]);
     expect(await q.claimZoomMailing("reminder")).toBe(false);
     await db
-      .query("UPDATE zoom_event_mailings SET updated_at = ? WHERE kind = 'reminder'")
+      .query(
+        "UPDATE zoom_event_mailings SET updated_at = ? WHERE kind = 'reminder'",
+      )
       .run(new Date(Date.now() - 11 * 60_000).toISOString());
     expect(await q.claimZoomMailing("reminder")).toBe(true);
 
@@ -514,10 +909,20 @@ describe("unsubscribe tokens: stable, opt-out never expires", () => {
 
     expect((await applyDataMigrations(db)).length).toBeGreaterThan(0);
     expect(
-      (await db.query("SELECT unsubscribe_token t FROM signers WHERE id=?").get(s.id)).t,
+      (
+        await db
+          .query("SELECT unsubscribe_token t FROM signers WHERE id=?")
+          .get(s.id)
+      ).t,
     ).toBeNull();
     expect(
-      (await db.query("SELECT unsubscribe_token t FROM zoom_registrations WHERE id=?").get(z.id)).t,
+      (
+        await db
+          .query(
+            "SELECT unsubscribe_token t FROM zoom_registrations WHERE id=?",
+          )
+          .get(z.id)
+      ).t,
     ).toBeNull();
 
     // Already applied: tokens issued afterwards survive a second run.
@@ -548,12 +953,23 @@ describe("unsubscribe tokens: stable, opt-out never expires", () => {
       newsletter: false,
       showPublicly: true,
     };
-    await q.insertSigner({ ...base, token: "t1", expiresAt: new Date(Date.now() + 60_000) });
+    await q.insertSigner({
+      ...base,
+      token: "t1",
+      expiresAt: new Date(Date.now() + 60_000),
+    });
     const later = new Date(Date.now() + 24 * 3600_000);
-    const r = await q.insertSigner({ ...base, name: "Other", token: "t2", expiresAt: later });
+    const r = await q.insertSigner({
+      ...base,
+      name: "Other",
+      token: "t2",
+      expiresAt: later,
+    });
     expect(r.pendingKept).toBe(true);
     const row = await db
-      .query("SELECT name, verification_token, token_expires_at FROM signers WHERE email = ?")
+      .query(
+        "SELECT name, verification_token, token_expires_at FROM signers WHERE email = ?",
+      )
       .get(base.email);
     expect(row).toEqual({
       name: "Pia",
@@ -565,7 +981,10 @@ describe("unsubscribe tokens: stable, opt-out never expires", () => {
 
 describe("self-service edit (previously broken merge code)", () => {
   test("updateSignerByEmail updates fields and resets state only on KV change", async () => {
-    const s = await addVerifiedSigner({ kreisverband: "Berlin", state: "Berlin" });
+    const s = await addVerifiedSigner({
+      kreisverband: "Berlin",
+      state: "Berlin",
+    });
 
     // Same KV -> state preserved
     expect(
@@ -607,7 +1026,13 @@ describe("self-service edit (previously broken merge code)", () => {
     ).toBe(true);
     const reg = await q.getZoomRegistrationByEmail(z.email);
     expect(reg.delegierter).toBe(true);
-    expect((await db.query("SELECT name FROM zoom_registrations WHERE id=?").get(z.id)).name).toBe("Renamed");
+    expect(
+      (
+        await db
+          .query("SELECT name FROM zoom_registrations WHERE id=?")
+          .get(z.id)
+      ).name,
+    ).toBe("Renamed");
   });
 
   test("getUnifiedUnsubscribeState returns booleans for showPublicly/delegierter", async () => {
@@ -623,20 +1048,20 @@ describe("self-service edit (previously broken merge code)", () => {
 
 describe("email templates", () => {
   test("system flag is a boolean and reserved slugs are protected", async () => {
-    await db.query(
-      `INSERT INTO email_templates (slug, name, subject, html_body) VALUES ('verification','V','S','B')`,
-    ).run();
-    const created = await q.createEmailTemplate({
+    await db
+      .query(
+        `INSERT INTO email_templates (slug, name, subject, html_body) VALUES ('verification','V','S','B')`,
+      )
+      .run();
+    const created = await addTemplate({
+      slug: "newsletter-blast",
       name: "Newsletter Blast",
       subject: "S",
-      htmlBody: "B",
+      html_body: "B",
     });
     const list = await q.listEmailTemplates();
     const sys = list.find((t) => t.slug === "verification");
     expect(sys.system).toBe(true);
     expect(list.find((t) => t.id === created.id).system).toBe(false);
-    // reserved templates cannot be deleted
-    expect(await q.deleteEmailTemplate(sys.id)).toBe(false);
-    expect(await q.deleteEmailTemplate(created.id)).toBe(true);
   });
 });

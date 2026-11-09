@@ -36,6 +36,16 @@ const multi = {
 };
 const req = (url, headers = {}) => new Request(url, { headers });
 
+test("an untranslated locale keeps fallback copy while declaring the requested language", () => {
+  const localized = localizeConfig(
+    { ...multi, brand: { lang: "de", locale: "de-DE" } },
+    "en",
+  );
+  expect(localized.brand.lang).toBe("en");
+  expect(localized.brand.locale).toBe("en");
+  expect(localized.hero.ctaPrimary).toBe("Unterschreiben");
+});
+
 describe("language list", () => {
   test("flag off: one language, brand.lang, `languages` ignored", () => {
     expect(multiLanguage(single)).toBe(false);
@@ -110,7 +120,11 @@ describe("language pages", () => {
   const prefix = (c) => (l) => langPrefix(c, l);
 
   test("flag off: no hreflang, one page as before", () => {
-    const alts = languageAlternates(canonical, letterLanguages(single), prefix(single));
+    const alts = languageAlternates(
+      canonical,
+      letterLanguages(single),
+      prefix(single),
+    );
     expect(alts).toEqual([]);
     const html = renderIndexHtml(template, single, "x", { alternates: alts });
     expect(html).toBe(renderIndexHtml(template, single, "x"));
@@ -119,7 +133,11 @@ describe("language pages", () => {
   });
 
   test("flag on: lang, canonical and hreflang per page", () => {
-    const alts = languageAlternates(canonical, letterLanguages(multi), prefix(multi));
+    const alts = languageAlternates(
+      canonical,
+      letterLanguages(multi),
+      prefix(multi),
+    );
     expect(alts).toEqual([
       { hreflang: "de", href: "https://example.org/" },
       { hreflang: "en", href: "https://example.org/en/" },
@@ -132,7 +150,9 @@ describe("language pages", () => {
       preloadBoot: "/api/boot?lang=en",
     });
     expect(en).toContain('<html lang="en">');
-    expect(en).toContain('<link rel="canonical" href="https://example.org/en/" />');
+    expect(en).toContain(
+      '<link rel="canonical" href="https://example.org/en/" />',
+    );
     expect(en).toContain('hreflang="x-default" href="https://example.org/"');
     expect(en).toContain('hreflang="en" href="https://example.org/en/"');
     expect(en).toContain('href="/api/boot?lang=en"');
@@ -140,7 +160,9 @@ describe("language pages", () => {
       alternates: alts,
     });
     expect(de).toContain('<html lang="de">');
-    expect(de).toContain('<link rel="canonical" href="https://example.org/" />');
+    expect(de).toContain(
+      '<link rel="canonical" href="https://example.org/" />',
+    );
     expect(de).toContain('hreflang="de"');
   });
 

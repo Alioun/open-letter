@@ -3,8 +3,8 @@ import { db } from "../db/connection.js";
 
 const APP_TABLES = [
   "signers",
-  "email_templates",
   "campaigns",
+  "email_templates",
   "zoom_registrations",
   "deletion_requests",
   "zoom_pending",
@@ -116,9 +116,11 @@ export async function addTemplate(overrides = {}) {
 
 // Give a signer an unsubscribe token created `ageDays` ago.
 export async function setUnsubToken(signerId, token, ageDays = 0) {
-  await db.query(
-    `UPDATE signers SET unsubscribe_token = ?, unsubscribe_token_created_at = ? WHERE id = ?`,
-  ).run(token, isoAgoDays(ageDays), signerId);
+  await db
+    .query(
+      `UPDATE signers SET unsubscribe_token = ?, unsubscribe_token_created_at = ? WHERE id = ?`,
+    )
+    .run(token, isoAgoDays(ageDays), signerId);
   return token;
 }
 

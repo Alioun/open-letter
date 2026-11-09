@@ -1,32 +1,42 @@
-// Which config values the admin panel may change at runtime ("Texte & Modus"),
-// and how an override reaches them. Overrides are stored per path in
-// app_settings (`copy:<path>`), applied to the config object on the server at
-// boot and after each save, and sent to the browser in /api/boot, which applies
-// them to its copy of the config before the first render.
-//
-// Only plain text, lists, numbers and two presentation toggles are listed.
-// Everything the server wires up at boot (features that add routes or
-// workers, retention, email transport, head/meta, theme) stays in the config.
+// Editable copy descriptors shared with the publication validator and admin.
+// Legacy copy overrides migrate into the revisioned publication document.
+// Localized HTML embeds published copy before rendering; /api/boot is operational state only.
+// Routes, workers and retention remain deployment configuration.
 import { UI_DEFAULTS } from "./ui.js";
 import { resolveInvite } from "./invite.js";
 
 export const GROUPS = {
+  branding: "Name & Marke",
+  legal: "Datenschutz & Impressum",
+  confirmation: "Bestätigung nach der Unterschrift",
+  accessibility: "Barrierefreie Beschriftungen",
   mode: "Modus",
   hero: "Kopfbereich",
-  success: "Erfolgs-Ankündigung",
+  success: "Erfolgsmeldung",
   nav: "Navigation",
   sign: "Unterschreiben",
   list: "Unterschriftenliste",
   footer: "Fußzeile & Impressum",
   zoom: "Treffen",
   invite: "Einladungslinks",
-  pages: "Link-Seiten (Bestätigen, Löschen, …)",
-  ui: "Weitere Oberflächentexte",
+  pages: "Seiten für Bestätigung und Löschung",
+  ui: "Weitere Beschriftungen",
   settings: "E-Mail-Einstellungsseite",
   errors: "Fehlermeldungen",
 };
 
 export const SECTION_IDS = ["brief", "unterzeichnen", "liste", "faq"];
+export const SECTION_LABELS = {
+  brief: "Brief",
+  unterzeichnen: "Unterzeichnen",
+  liste: "Liste",
+  faq: "FAQ",
+};
+export const LINE_STYLES = [
+  ["", "Standard"],
+  ["banner", "Farbfläche"],
+  ["light", "Leicht"],
+];
 
 // [path, type, group]. Paths missing from the letter's config are skipped,
 // except ui.* (always present via config/ui.js).
@@ -116,9 +126,7 @@ function isPlainObject(v) {
 }
 
 export function getPath(obj, path) {
-  return path
-    .split(".")
-    .reduce((o, k) => (o == null ? undefined : o[k]), obj);
+  return path.split(".").reduce((o, k) => (o == null ? undefined : o[k]), obj);
 }
 
 // Sets obj.a.b.c, creating plain objects on the way (numeric keys index
@@ -195,9 +203,19 @@ export function editableFields(pristine, pageDefaults = null) {
   const ui = [];
   uiFields(UI_DEFAULTS, "ui", ui);
   for (const [path, type, group] of ui) {
-    if (group === "ui" && path.startsWith("ui.zoomForm.") && !pristine.features?.zoomEvent) continue;
-    if (path.startsWith("ui.stoerer.") && !pristine.features?.zoomEvent) continue;
-    if (path.startsWith("ui.chrome.language") && !pristine.features?.multiLanguage) continue;
+    if (
+      group === "ui" &&
+      path.startsWith("ui.zoomForm.") &&
+      !pristine.features?.zoomEvent
+    )
+      continue;
+    if (path.startsWith("ui.stoerer.") && !pristine.features?.zoomEvent)
+      continue;
+    if (
+      path.startsWith("ui.chrome.language") &&
+      !pristine.features?.multiLanguage
+    )
+      continue;
     add(path, type, group, getPath(pristine, path));
   }
   return fields;
@@ -227,7 +245,10 @@ export function cleanValue(field, value) {
     case "list":
       if (!Array.isArray(value) || value.some((v) => typeof v !== "string"))
         fail("Liste von Texten erwartet");
-      return value.map((v) => v.trim()).filter(Boolean).slice(0, 50);
+      return value
+        .map((v) => v.trim())
+        .filter(Boolean)
+        .slice(0, 50);
     case "lines":
       if (
         !Array.isArray(value) ||
@@ -240,10 +261,13 @@ export function cleanValue(field, value) {
         )
       )
         fail("Zeilen mit Text und Stil erwartet");
-      return value.slice(0, 10).map((l) => ({ text: l.text, style: l.style || "" }));
+      return value
+        .slice(0, 10)
+        .map((l) => ({ text: l.text, style: l.style || "" }));
     case "url": {
       const s = String(value ?? "").trim();
-      if (s && !/^https?:\/\//i.test(s)) fail("muss mit http:// oder https:// beginnen");
+      if (s && !/^https?:\/\//i.test(s))
+        fail("muss mit http:// oder https:// beginnen");
       return s.slice(0, 2000);
     }
     default:
@@ -258,7 +282,8 @@ export function cleanValue(field, value) {
 // takes effect without a restart.
 export function applyOverrides(target, fields, overrides) {
   for (const f of fields) {
-    const has = overrides && Object.prototype.hasOwnProperty.call(overrides, f.path);
+    const has =
+      overrides && Object.prototype.hasOwnProperty.call(overrides, f.path);
     const value = has ? overrides[f.path] : f.default;
     if (value === undefined) continue;
     setPath(target, f.path, structuredClone(value));

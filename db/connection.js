@@ -1,26 +1,15 @@
-// Shared SQLCipher-backed database connection.
+// SQLCipher connections use @journeyapps/sqlcipher through N-API.
+// On Bun Linux, bun:sqlite ignores setCustomSQLite(), so PRAGMA key alone
+// would not encrypt the database. Check cipher_version after applying the key.
 //
-// Encryption at rest is provided by @journeyapps/sqlcipher, a node-sqlite3
-// build that statically bundles SQLCipher. `bun:sqlite` cannot be used for this:
-// its `Database.setCustomSQLite()` is a silent no-op on Bun's Linux builds (Bun
-// statically links its own SQLite), so `PRAGMA key` is ignored and the database
-// is left unencrypted. @journeyapps/sqlcipher loads via N-API and works
-// identically on macOS and Linux, eliminating that dev/prod skew.
-//
-// node-sqlite3's API is asynchronous (callbacks), so this module exposes a thin
-// promise-returning wrapper whose shape mirrors the old bun:sqlite surface:
-//   db.query(sql).get(...params) / .all(...params) / .run(...params)  -> Promise
-//   db.run(sql, ...params)   (parameterised single statement)         -> Promise
-//   db.run(sql)              (no params; DDL / multi-statement / PRAGMA) -> Promise
-//   db.exec(sql) / db.loadExtension(path) / db.close()                 -> Promise
-// Every call site therefore `await`s its database access.
-//
-// `PRAGMA key` MUST be the first statement on every connection; stock SQLite
-// would silently ignore it and return an empty `cipher_version`, which we treat
-// as a fatal misconfiguration (fail closed).
+// The callback-based driver is wrapped in promises:
+//   query(sql).get(...params), .all(...params), and .run(...params)
+//   run(sql, ...params), exec(sql), loadExtension(path), and close()
+// Await every database call. Apply PRAGMA key before any other statement.
 import sqlite3 from "@journeyapps/sqlcipher";
 import { mkdirSync, readFileSync } from "node:fs";
-import { dirname, join } from "node:path";
+import { dirname, join, resolve as resolvePath } from "node:path";
+import { AsyncLocalStorage } from "node:async_hooks";
 import { fileURLToPath } from "node:url";
 import process from "node:process";
 
@@ -75,14 +64,13 @@ function requireKey(key) {
   const k = key ?? process.env.DATABASE_ENCRYPTION_KEY ?? "";
   if (!k) {
     throw new Error(
-      "DATABASE_ENCRYPTION_KEY is required: the database is encrypted at rest (SQLCipher).",
+      "Set DATABASE_ENCRYPTION_KEY before opening the SQLCipher database.",
     );
   }
   return k;
 }
 
-// Wrap a raw node-sqlite3 Database in the promise-returning surface used across
-// the app. Statement objects returned by `query()` are cheap and may be reused.
+// Adapt node-sqlite3 to the promise-based query API. Query objects can be reused.
 
 // Callback fired after any statement that changes rows, so the server's read
 // cache (server/cache.js) can drop stale entries. Registered by server/db.js;
@@ -91,7 +79,7 @@ let mutationHook = null;
 export function onMutation(fn) {
   mutationHook = fn;
 }
-const MUTATION_RE = /^\s*(?:INSERT|UPDATE|DELETE|REPLACE)\b/i;
+const MUTATION_RE = /\b(?:INSERT|UPDATE|DELETE|REPLACE|CREATE|ALTER|DROP)\b/i;
 
 // A write that provably cannot change any public response marks itself with
 // this comment and is skipped (see PUBLIC_NEUTRAL in server/db.js). The marker
@@ -100,32 +88,103 @@ const MUTATION_RE = /^\s*(?:INSERT|UPDATE|DELETE|REPLACE)\b/i;
 // would swallow another request's invalidation.
 const PUBLIC_NEUTRAL_RE = /\/\* public-neutral \*\//;
 
+const PRIVATE_TABLES =
+  /^(?:email_(?:attempts|quota|configuration)|publication(?:s|_assets|_asset_lifetimes|_asset_references)|analytics_\w+|zoom_pending|deletion_requests|mailing_deliveries|_honker_\w+)$/;
+function neutralMutation(sql) {
+  if (!PUBLIC_NEUTRAL_RE.test(sql)) return false;
+  const plain = sql.replace(/\/\*[\s\S]*?\*\//g, " ").trim();
+  if (plain.replace(/;\s*$/, "").includes(";")) return false;
+  const table =
+    /^(?:INSERT(?:\s+OR\s+\w+)?\s+INTO|UPDATE|DELETE\s+FROM|REPLACE\s+INTO)\s+(\w+)/i.exec(
+      plain,
+    )?.[1];
+  if (table && PRIVATE_TABLES.test(table)) return true;
+  if (table !== "signers") return false;
+  if (/^INSERT/i.test(plain)) {
+    const columns = /\(([^)]+)\)\s*VALUES/i.exec(plain)?.[1] || "";
+    return !/\bverified\b/i.test(columns) && Boolean(columns);
+  }
+  if (/^UPDATE/i.test(plain)) {
+    const assignments = /\bSET\s+([\s\S]+?)\s+WHERE\b/i.exec(plain)?.[1] || "";
+    return (
+      Boolean(assignments) &&
+      !/\b(?:name|verified|newsletter|show_publicly|state|kreisverband|occupation)\s*=/i.test(
+        assignments,
+      )
+    );
+  }
+  return false;
+}
 function noteMutation(sql) {
   if (!mutationHook) return;
-  if (!MUTATION_RE.test(sql)) return;
-  if (PUBLIC_NEUTRAL_RE.test(sql)) return;
+  const plain = sql.replace(/\/\*[\s\S]*?\*\//g, " ").replace(/--[^\n]*/g, " ");
+  if (!MUTATION_RE.test(plain) || neutralMutation(sql)) return;
   mutationHook();
 }
 
-function wrap(raw) {
+const transactionOwnership = new AsyncLocalStorage();
+export function inDatabaseTransaction() {
+  return Boolean(transactionOwnership.getStore()?.active);
+}
+
+const databaseQueues = new Map();
+const databaseOwnership = new AsyncLocalStorage();
+
+// A read transaction cannot upgrade its snapshot after another connection
+// commits. Keep complete transactions and Honker's write functions in one
+// queue per database file, including work from the analytics connection.
+function databaseOperation(path, operation) {
+  const ownership = databaseOwnership.getStore();
+  if (ownership?.get(path)?.active) return operation();
+  const previous = databaseQueues.get(path) || Promise.resolve();
+  const next = previous.then(async () => {
+    const lease = { active: true };
+    const owned = new Map(ownership);
+    owned.set(path, lease);
+    try {
+      return await databaseOwnership.run(owned, operation);
+    } finally {
+      lease.active = false;
+    }
+  });
+  databaseQueues.set(
+    path,
+    next.catch(() => {}),
+  );
+  return next;
+}
+
+function wrap(raw, path) {
+  // Finish each statement, including its cursor finalization, before starting
+  // another on this handle. Honker writes cannot run beside RETURNING cursors.
+  raw.serialize();
   // Calling into the driver after close() aborts the process at the NAPI layer
   // rather than raising a catchable error, so anything still in flight at
   // shutdown (a cache refresh, a job handler) must be rejected here instead.
   let closed = false;
-  const ifOpen = (fn) =>
-    closed
-      ? Promise.reject(new Error("database connection is closed"))
-      : new Promise(fn);
+  const ifOpen = (fn) => {
+    const owner = transactionOwnership.getStore();
+    if (owner?.active && owner.path === path && owner.raw !== raw)
+      return Promise.reject(
+        new Error("Use the transaction's connection for every statement"),
+      );
+    return databaseOperation(path, () =>
+      closed
+        ? Promise.reject(new Error("database connection is closed"))
+        : new Promise(fn),
+    );
+  };
 
   const stmt = (sql) => ({
     // get/all also carry mutations: writes with a RETURNING clause read back
-    // their row through them.
+    // their row through them. Consume the cursor to SQLITE_DONE before
+    // releasing the database queue, including for a single-row result.
     get: (...params) =>
       ifOpen((resolve, reject) =>
-        raw.get(sql, params, (err, row) => {
+        raw.all(sql, params, (err, rows) => {
           if (err) return reject(err);
           noteMutation(sql);
-          return resolve(row);
+          return resolve(rows[0]);
         }),
       ),
     all: (...params) =>
@@ -162,32 +221,63 @@ function wrap(raw) {
             }),
           )
         : ifOpen((resolve, reject) =>
-            raw.exec(sql, (err) => (err ? reject(err) : resolve())),
+            raw.exec(sql, (err) => {
+              if (err) reject(err);
+              else {
+                noteMutation(sql);
+                resolve();
+              }
+            }),
           ),
     exec: (sql) =>
       ifOpen((resolve, reject) =>
-        raw.exec(sql, (err) => (err ? reject(err) : resolve())),
+        raw.exec(sql, (err) => {
+          if (err) reject(err);
+          else {
+            noteMutation(sql);
+            resolve();
+          }
+        }),
       ),
-    loadExtension: (path) =>
-      new Promise((resolve, reject) =>
-        raw.loadExtension(path, (err) => (err ? reject(err) : resolve())),
+    loadExtension: (extensionPath) =>
+      ifOpen((resolve, reject) =>
+        raw.loadExtension(extensionPath, (err) =>
+          err ? reject(err) : resolve(),
+        ),
       ),
     close: () =>
-      new Promise((resolve, reject) => {
-        closed = true;
-        raw.close((err) => (err ? reject(err) : resolve()));
-      }),
-    // Minimal async transaction helper (used by the one-shot pg migration).
-    async transaction(fn) {
-      await this.run("BEGIN");
-      try {
-        const result = await fn();
-        await this.run("COMMIT");
-        return result;
-      } catch (err) {
-        await this.run("ROLLBACK").catch(() => {});
-        throw err;
-      }
+      databaseOperation(
+        path,
+        () =>
+          new Promise((resolve, reject) => {
+            closed = true;
+            raw.close((err) => (err ? reject(err) : resolve()));
+          }),
+      ),
+    transaction(fn, { immediate = false } = {}) {
+      if (inDatabaseTransaction())
+        return Promise.reject(
+          new Error(
+            "Join the existing transaction instead of nesting transactions",
+          ),
+        );
+      return databaseOperation(path, async () => {
+        await this.run(immediate ? "BEGIN IMMEDIATE" : "BEGIN");
+        try {
+          const lease = { active: true, path, raw };
+          let result;
+          try {
+            result = await transactionOwnership.run(lease, fn);
+          } finally {
+            lease.active = false;
+          }
+          await this.run("COMMIT");
+          return result;
+        } catch (err) {
+          await this.run("ROLLBACK").catch(() => {});
+          throw err;
+        }
+      });
     },
   };
 }
@@ -200,8 +290,8 @@ export async function applyKeyAndPragmas(database, key) {
   const row = await database.query("PRAGMA cipher_version").get();
   if (!row || !row.cipher_version) {
     throw new Error(
-      "SQLCipher is not active (empty cipher_version). The database driver is " +
-        "not SQLCipher-enabled; encryption at rest cannot be guaranteed.",
+      "SQLCipher is not active. PRAGMA cipher_version returned no version. The driver is " +
+        "not SQLCipher-enabled. Refusing to open the database.",
     );
   }
   await database.run(`PRAGMA journal_mode = ${DB_JOURNAL_MODE}`);
@@ -217,10 +307,13 @@ export function openEncrypted(path, key) {
   return new Promise((resolve, reject) => {
     const raw = new sqlite3.Database(path, (err) => {
       if (err) return reject(err);
-      const database = wrap(raw);
+      const database = wrap(raw, resolvePath(path));
       applyKeyAndPragmas(database, key).then(
         () => resolve(database),
-        (e) => reject(e),
+        async (e) => {
+          await database.close().catch(() => {});
+          reject(e);
+        },
       );
     });
   });

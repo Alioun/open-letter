@@ -17,7 +17,7 @@ services:
       - ADMIN_JWT_SECRET=${ADMIN_JWT_SECRET}
       - RESEND_API_KEY=${RESEND_API_KEY}
       - RESEND_FROM=${RESEND_FROM:-"Open Letter" <noreply@letter.example.org>}
-      - DATABASE_JOURNAL_MODE=${DATABASE_JOURNAL_MODE:-DELETE}
+      - DATABASE_JOURNAL_MODE=${DATABASE_JOURNAL_MODE:-WAL}
     volumes:
       - data-dev:/app/data
     restart: unless-stopped

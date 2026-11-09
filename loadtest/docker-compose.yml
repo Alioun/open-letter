@@ -1,16 +1,13 @@
-# Load-test stack: the production image under VPS-like CPU/RAM limits, a Mailpit
-# SMTP sink so sign-ups exercise the real email path without sending anything,
-# and k6. Uses throwaway secrets from .env.loadtest (see gen-env.sh) and its own
-# volumes, never your real .env or data.
+# Run the production image with CPU/RAM limits, k6, and a Mailpit mail sink.
+# Uses generated .env.loadtest secrets and separate volumes.
 #
 #   ./loadtest/gen-env.sh
 #   APP_CPUS=1 APP_MEM=1g docker compose -f loadtest/docker-compose.yml up -d app mailpit
 #
 # See loadtest/README.md.
-name: diaetendeckel-loadtest
-
 services:
   app:
+    image: ${LOADTEST_IMAGE:-openletter-loadtest:local}
     build:
       context: ..
       dockerfile: Dockerfile
@@ -18,23 +15,26 @@ services:
     environment:
       - NODE_ENV=production
       - PORT=3000
-      - BASE_URL=http://app:3000
+      - BASE_URL=http://letter.load.test:3000
       - DATABASE_PATH=/app/data/diaetendeckel.db
-      - DATABASE_JOURNAL_MODE=${DATABASE_JOURNAL_MODE:-DELETE}
+      - DATABASE_JOURNAL_MODE=${DATABASE_JOURNAL_MODE:-WAL}
       - LETTER_CONFIG=${LETTER_CONFIG:-example}
       - TRUST_PROXY=true
       - EMAIL_PROVIDER=smtp
       - SMTP_HOST=mailpit
       - SMTP_PORT=1025
-      - SMTP_SECURE=false
+      - SMTP_SECURE=true
+      - EMAIL_FROM=Open Letter <sender@load.test>
+      - NODE_EXTRA_CA_CERTS=/certs/cert.pem
       - BACKUP_DIR=/app/backups
     volumes:
       - data:/app/data
       - backups:/app/backups
       # Mount the harness so seeder edits don't need an image rebuild.
       - ./:/app/loadtest:ro
+      - ./.tls:/certs:ro
     ports:
-      - "127.0.0.1:3900:3000"
+      - "127.0.0.1:${LOADTEST_PORT:-3900}:3000"
     cpus: ${APP_CPUS:-1}
     mem_limit: ${APP_MEM:-1g}
     memswap_limit: ${APP_MEM:-1g}
@@ -42,20 +42,32 @@ services:
       - mailpit
 
   mailpit:
-    image: axllent/mailpit:latest
+    image: axllent/mailpit@sha256:aef2aacc11f075ec0fb6874275ee4a421e688e11a96ebb296134d1735c7761ce
     environment:
-      - MP_MAX_MESSAGES=5000
+      - MP_MAX_MESSAGES=100000
+      - MP_SMTP_TLS_CERT=/certs/cert.pem
+      - MP_SMTP_TLS_KEY=/certs/key.pem
+      - MP_SMTP_REQUIRE_TLS=true
+      - MP_SMTP_AUTH_FILE=/certs/smtp-auth
+      - MP_SMTP_DISABLE_RDNS=true
+      - MP_SMTP_ALLOWED_RECIPIENTS=@load\.test$$
+      - MP_DISABLE_VERSION_CHECK=true
+    volumes:
+      - ./.tls:/certs:ro
     ports:
-      - "127.0.0.1:3901:8025"
+      - "127.0.0.1:${MAILPIT_PORT:-3901}:8025"
 
   k6:
-    image: grafana/k6:latest
+    image: grafana/k6@sha256:3e4186aea62e11a45560bfc51e19eeafe82fc07ce069c78aff44b7ff893d9a5e
     profiles: ["k6"]
+    user: ${LOADTEST_UID:-1000}:${LOADTEST_GID:-1000}
     volumes:
       - ./k6:/scripts:ro
       - ./results:/results
     environment:
       - BASE_URL=http://app:3000
+      - ADMIN_TOKEN
+      - RUN_ID
     # No depends_on: starting k6 must never recreate the app container and
     # silently reset the CPU/memory limits under test.
 

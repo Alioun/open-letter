@@ -19,13 +19,20 @@ import { join, dirname } from "node:path";
 import { createGunzip } from "node:zlib";
 import { pipeline } from "node:stream/promises";
 import process from "node:process";
+import { createHash } from "node:crypto";
+import {
+  cleanDocument,
+  reconcileStoredDocument,
+} from "../server/publications.js";
 import { openEncrypted, DB_PATH } from "./connection.js";
 import { readErasureLog, applyErasureLog } from "./erasure-log.js";
 
 const BACKUP_DIR = process.env.BACKUP_DIR || "/app/backups";
 const DB_KEY = process.env.DATABASE_ENCRYPTION_KEY || "";
 const BACKUP_KEY =
-  process.env.BACKUP_ENCRYPTION_KEY || process.env.DATABASE_ENCRYPTION_KEY || "";
+  process.env.BACKUP_ENCRYPTION_KEY ||
+  process.env.DATABASE_ENCRYPTION_KEY ||
+  "";
 
 const TABLES = [
   "signers",
@@ -40,13 +47,23 @@ const TABLES = [
   "kv_state_cache",
   "kv_not_typo",
   "occupation_not_typo",
+  "publications",
+  "publication_assets",
+  "email_configuration",
+  "email_attempts",
+  "email_quota",
 ];
 
 const sqlQuote = (s) => `'${String(s).replace(/'/g, "''")}'`;
 
 async function counts(db) {
   const out = {};
-  for (const t of TABLES) {
+  const analytics = await db
+    .query(
+      "SELECT name FROM sqlite_master WHERE type='table' AND name LIKE 'analytics_%'",
+    )
+    .all();
+  for (const t of [...TABLES, ...analytics.map((r) => r.name)]) {
     try {
       out[t] = (await db.query(`SELECT COUNT(*) AS c FROM ${t}`).get()).c;
     } catch {
@@ -67,6 +84,43 @@ async function resolveBackupFile(arg) {
     throw new Error(`No backups found in ${BACKUP_DIR}`);
   }
   return join(BACKUP_DIR, files[0]);
+}
+
+async function validatePublications(connection, persist = false) {
+  const table = await connection
+    .query(
+      "SELECT name FROM sqlite_master WHERE type='table' AND name='publications'",
+    )
+    .get();
+  if (!table) return;
+  const assets = await connection
+    .query("SELECT * FROM publication_assets")
+    .all();
+  for (const asset of assets) {
+    if (
+      asset.mime !== "image/png" ||
+      createHash("sha256").update(Buffer.from(asset.bytes)).digest("hex") !==
+        asset.hash ||
+      asset.width < 16 ||
+      asset.height < 16 ||
+      asset.width > 2400 ||
+      asset.height > 2400
+    )
+      throw new Error("Invalid publication asset in backup");
+  }
+  const knownAssets = assets.map((a) => `/assets/${a.hash}.png`);
+  for (const row of await connection
+    .query("SELECT revision,document FROM publications")
+    .all()) {
+    const document = cleanDocument(
+      reconcileStoredDocument(JSON.parse(row.document)),
+      knownAssets,
+    );
+    if (persist)
+      await connection
+        .query("UPDATE publications SET document=? WHERE revision=?")
+        .run(JSON.stringify(document), row.revision);
+  }
 }
 
 async function main() {
@@ -101,8 +155,11 @@ async function main() {
   const integrity = await backupDb.query("PRAGMA integrity_check").get();
   if (!integrity || integrity.integrity_check !== "ok") {
     await backupDb.close();
-    throw new Error(`Backup failed integrity_check: ${JSON.stringify(integrity)}`);
+    throw new Error(
+      `Backup failed integrity_check: ${JSON.stringify(integrity)}`,
+    );
   }
+  await validatePublications(backupDb);
   const srcCounts = await counts(backupDb);
   console.log("[restore] backup row counts:", JSON.stringify(srcCounts));
 
@@ -143,25 +200,35 @@ async function main() {
   await liveDb.close();
   console.log("[restore] restored row counts:", JSON.stringify(dstCounts));
 
-  const mismatch = TABLES.filter((t) => srcCounts[t] !== dstCounts[t]);
+  const mismatch = [
+    ...new Set([...Object.keys(srcCounts), ...Object.keys(dstCounts)]),
+  ].filter((t) => srcCounts[t] !== dstCounts[t]);
   if (mismatch.length) {
     throw new Error(`Row-count mismatch after restore: ${mismatch.join(", ")}`);
   }
-  console.log("[restore] OK: all table counts match.");
+  console.log("[restore] all restored table counts match.");
 
   if (erasures === null) {
     console.error(
-      "[restore] WARNING: could not read the erasure log of the replaced database; " +
-        "erasures and opt-outs made after this backup are NOT re-applied. Re-apply them " +
-        "by hand (e.g. from the pre-restore copy) before starting the app.",
+      "[restore] Could not read the replaced database's erasure log. " +
+        "Later erasures and opt-outs have not been reapplied. Reapply them " +
+        "before starting the app, using the pre-restore copy if available.",
     );
-    return;
   }
   const restored = await openEncrypted(DB_PATH, DB_KEY);
   try {
-    const applied = await applyErasureLog(restored, erasures);
+    await restored.transaction(() => validatePublications(restored, true), {
+      immediate: true,
+    });
+    // A backup cannot attest that restored credentials still work or that attempts completed.
+    await restored
+      .query(
+        "INSERT INTO app_settings (key,value) VALUES ('email:restored',?) ON CONFLICT(key) DO UPDATE SET value=excluded.value",
+      )
+      .run(new Date().toISOString());
+    const applied = await applyErasureLog(restored, erasures || []);
     console.log(
-      `[restore] re-applied erasure log (${erasures.length} entr${erasures.length === 1 ? "y" : "ies"}):`,
+      `[restore] re-applied erasure log (${(erasures || []).length} entr${(erasures || []).length === 1 ? "y" : "ies"}):`,
       JSON.stringify(applied),
     );
   } finally {

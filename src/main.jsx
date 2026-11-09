@@ -4,8 +4,10 @@ import UnsubscribeApp from "./UnsubscribeApp.jsx";
 import { ErrorBoundary } from "./ErrorBoundary.jsx";
 import cfg, { LANG, DEFAULT_LANG } from "../config/letter.config.js";
 import { injectThemeCss } from "../config/theme-css.js";
-import { setPath } from "../config/editable.js";
 import "./index.css";
+
+const embedded = document.getElementById("publication-data");
+if (embedded) Object.assign(cfg, JSON.parse(embedded.textContent).config);
 
 // Apply the active letter's colour/font/style tokens as :root overrides on top
 // of the base values in index.css.
@@ -18,15 +20,6 @@ let reactRoot = null;
 function render(root, key = "boot") {
   reactRoot ??= createRoot(document.getElementById("root"));
   reactRoot.render(<ErrorBoundary key={key}>{root}</ErrorBoundary>);
-}
-
-// Texts and mode edited in the admin panel ("Texte & Modus"), written onto
-// the bundled config before rendering. Components read cfg while rendering,
-// so a re-render picks them up.
-function applyCopy(boot) {
-  for (const [path, value] of Object.entries(boot?.copy || {})) {
-    setPath(cfg, path, value);
-  }
 }
 
 // Wait for the live initial state (preloaded in <head>) so the first render
@@ -53,12 +46,10 @@ function loadBoot() {
 function start(view) {
   const { request, first } = loadBoot();
   first.then((boot) => {
-    applyCopy(boot);
     render(view(boot));
     if (!boot) {
       request.then((late) => {
         if (!late) return;
-        applyCopy(late);
         // A new key remounts, so memoized parts re-read the texts too.
         render(view(late), "late");
       });

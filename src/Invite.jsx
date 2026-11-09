@@ -1,3 +1,4 @@
+import { Modal } from "./ui.jsx";
 // Personal invite links (features.inviteLinks): the share block shown after
 // confirming, the invite modal on /i/<code>, and the private stats modal on
 // /i/<code>#s=<token>. Texts come from the letter's `invite` block.
@@ -5,7 +6,7 @@
 // Sharing uses plain links only (wa.me, t.me, mailto, the Web Share API): no
 // third-party script loads, and nothing is sent anywhere until someone clicks.
 
-import { useState, useEffect, useRef } from "react";
+import { useState } from "react";
 import cfg, { LANG, DEFAULT_LANG } from "../config/letter.config.js";
 import { resolveInvite, fillInvite } from "../config/invite.js";
 
@@ -16,7 +17,8 @@ const PREFIX = LANG === DEFAULT_LANG ? "" : `/${LANG}`;
 const CODE_RE = new RegExp(`^${PREFIX}/i/([0-9a-hjkmnp-tv-z]{8})/?$`);
 const REF_KEY = "invite-ref";
 
-export const inviteUrl = (code) => `${window.location.origin}${PREFIX}/i/${code}`;
+export const inviteUrl = (code) =>
+  `${window.location.origin}${PREFIX}/i/${code}`;
 
 // Read the invite path once on load. The stats token is taken out of the
 // fragment and the address bar is reset to "/" (or "/<lang>/"), so neither the code nor the
@@ -77,7 +79,10 @@ export function InviteShare({ code }) {
         fillInvite(T().shareMessage, { title: T().title, url: "" }).trim(),
       )}`,
     ],
-    ["E-Mail", `mailto:?subject=${encodeURIComponent(T().title)}&body=${encodeURIComponent(message)}`],
+    [
+      "E-Mail",
+      `mailto:?subject=${encodeURIComponent(T().title)}&body=${encodeURIComponent(message)}`,
+    ],
   ];
 
   return (
@@ -96,12 +101,7 @@ export function InviteShare({ code }) {
       </div>
       <div className="invite-share__buttons">
         {links.map(([label, href]) => (
-          <a
-            key={label}
-            href={href}
-            target="_blank"
-            rel="noopener noreferrer"
-          >
+          <a key={label} href={href} target="_blank" rel="noopener noreferrer">
             {label}
           </a>
         ))}
@@ -109,7 +109,9 @@ export function InviteShare({ code }) {
           <button
             type="button"
             onClick={() =>
-              navigator.share({ title: T().title, text: message }).catch(() => {})
+              navigator
+                .share({ title: T().title, text: message })
+                .catch(() => {})
             }
           >
             {T().moreLabel}
@@ -122,32 +124,22 @@ export function InviteShare({ code }) {
 }
 
 function InviteDialog({ title, onClose, children }) {
-  const ref = useRef(null);
-  useEffect(() => {
-    ref.current?.querySelector("button")?.focus();
-    const onKey = (e) => e.key === "Escape" && onClose();
-    window.addEventListener("keydown", onKey);
-    return () => window.removeEventListener("keydown", onKey);
-  }, [onClose]);
   return (
-    <div className="modal-overlay" onClick={onClose} role="presentation">
+    <Modal onClose={onClose} labelledBy="invite-modal-title">
       <div
         className="modal success"
-        role="dialog"
-        aria-modal="true"
         aria-labelledby="invite-modal-title"
         onClick={(e) => e.stopPropagation()}
-        ref={ref}
       >
         <div className="modal-head">
           <h3 id="invite-modal-title">{title}</h3>
-          <button onClick={onClose} aria-label="Schließen">
+          <button onClick={onClose} aria-label={cfg.ui.chrome.close}>
             ×
           </button>
         </div>
         <div className="modal-body">{children}</div>
       </div>
-    </div>
+    </Modal>
   );
 }
 

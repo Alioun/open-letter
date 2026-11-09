@@ -1,0 +1,4614 @@
+[
+  {
+    "name": "current-n100000-cpu1-mem512m-r1",
+    "cpu": 1,
+    "memory": "512m",
+    "repetition": 1,
+    "started": "2026-11-09T14:27:41.331Z",
+    "hostUptimeBefore": "15:27:41 up  5:05,  1 user,  load average: 5.61, 4.86, 3.39",
+    "limits": {
+      "nanoCpus": 1000000000,
+      "memory": 536870912,
+      "swap": 536870912
+    },
+    "startupMs": 17990,
+    "startupResources": "{\"BlockIO\":\"737kB / 1.33MB\",\"CPUPerc\":\"0.50%\",\"Container\":\"4b67fa1dbb953b8e73faecd2f525b3830a4506ac388ce21105e3e20a162dae80\",\"ID\":\"4b67fa1dbb95\",\"MemPerc\":\"18.08%\",\"MemUsage\":\"92.55MiB / 512MiB\",\"Name\":\"openletter-perf-1794233915178-559648-app-1\",\"NetIO\":\"2.27kB / 1.83kB\",\"PIDs\":\"12\"}",
+    "smtpVerified": true,
+    "cpuBefore": "usage_usec 2690753\nuser_usec 2090737\nsystem_usec 600015\nnice_usec 0\nnr_periods 159\nnr_throttled 12\nthrottled_usec 860108\nnr_bursts 0\nburst_usec 0\n",
+    "loadMs": 59552,
+    "k6Exit": 99,
+    "cpuAfter": "usage_usec 10351016\nuser_usec 8410649\nsystem_usec 1940367\nnice_usec 0\nnr_periods 812\nnr_throttled 12\nthrottled_usec 860108\nnr_bursts 0\nburst_usec 0\n",
+    "endLoadResources": "{\"BlockIO\":\"3.55MB / 14MB\",\"CPUPerc\":\"2.68%\",\"Container\":\"4b67fa1dbb953b8e73faecd2f525b3830a4506ac388ce21105e3e20a162dae80\",\"ID\":\"4b67fa1dbb95\",\"MemPerc\":\"26.65%\",\"MemUsage\":\"136.4MiB / 512MiB\",\"Name\":\"openletter-perf-1794233915178-559648-app-1\",\"NetIO\":\"1.31MB / 69.3MB\",\"PIDs\":\"8\"}",
+    "expectedPageviews": 61,
+    "drainMs": 16235,
+    "work": {
+      "signers": 100061,
+      "newSigners": 61,
+      "pending": 0,
+      "dead": 0,
+      "attempts": [
+        {
+          "status": "delivered",
+          "n": 71
+        }
+      ],
+      "campaigns": [
+        {
+          "id": 1,
+          "status": "sent",
+          "sent_count": 10,
+          "recipient_count": 10
+        }
+      ],
+      "recipients": [
+        1,
+        3,
+        4,
+        5,
+        6,
+        7,
+        9,
+        12,
+        13,
+        14
+      ],
+      "templateId": 5,
+      "databaseBytes": 56975360
+    },
+    "mailpitMessages": 71,
+    "accepted": 61,
+    "state": {
+      "oom": false,
+      "running": true,
+      "restarts": 0
+    },
+    "memoryPeakBytes": 274411520,
+    "memoryEvents": "low 0\nhigh 0\nmax 0\noom 0\noom_kill 0\noom_group_kill 0",
+    "statistics": {
+      "mode": "builtin",
+      "revision": 2,
+      "series": [
+        {
+          "ts": 1791676800000,
+          "visitors": 0,
+          "sessions": 0,
+          "pageviews": 0,
+          "revenue": 0,
+          "orders": 0,
+          "bounceRate": 0,
+          "avgDurationMs": 0,
+          "conversionRate": 0,
+          "revenuePerVisitor": 0
+        },
+        {
+          "ts": 1791763200000,
+          "visitors": 0,
+          "sessions": 0,
+          "pageviews": 0,
+          "revenue": 0,
+          "orders": 0,
+          "bounceRate": 0,
+          "avgDurationMs": 0,
+          "conversionRate": 0,
+          "revenuePerVisitor": 0
+        },
+        {
+          "ts": 1791849600000,
+          "visitors": 0,
+          "sessions": 0,
+          "pageviews": 0,
+          "revenue": 0,
+          "orders": 0,
+          "bounceRate": 0,
+          "avgDurationMs": 0,
+          "conversionRate": 0,
+          "revenuePerVisitor": 0
+        },
+        {
+          "ts": 1791936000000,
+          "visitors": 0,
+          "sessions": 0,
+          "pageviews": 0,
+          "revenue": 0,
+          "orders": 0,
+          "bounceRate": 0,
+          "avgDurationMs": 0,
+          "conversionRate": 0,
+          "revenuePerVisitor": 0
+        },
+        {
+          "ts": 1792022400000,
+          "visitors": 0,
+          "sessions": 0,
+          "pageviews": 0,
+          "revenue": 0,
+          "orders": 0,
+          "bounceRate": 0,
+          "avgDurationMs": 0,
+          "conversionRate": 0,
+          "revenuePerVisitor": 0
+        },
+        {
+          "ts": 1792108800000,
+          "visitors": 0,
+          "sessions": 0,
+          "pageviews": 0,
+          "revenue": 0,
+          "orders": 0,
+          "bounceRate": 0,
+          "avgDurationMs": 0,
+          "conversionRate": 0,
+          "revenuePerVisitor": 0
+        },
+        {
+          "ts": 1792195200000,
+          "visitors": 0,
+          "sessions": 0,
+          "pageviews": 0,
+          "revenue": 0,
+          "orders": 0,
+          "bounceRate": 0,
+          "avgDurationMs": 0,
+          "conversionRate": 0,
+          "revenuePerVisitor": 0
+        },
+        {
+          "ts": 1792281600000,
+          "visitors": 0,
+          "sessions": 0,
+          "pageviews": 0,
+          "revenue": 0,
+          "orders": 0,
+          "bounceRate": 0,
+          "avgDurationMs": 0,
+          "conversionRate": 0,
+          "revenuePerVisitor": 0
+        },
+        {
+          "ts": 1792368000000,
+          "visitors": 0,
+          "sessions": 0,
+          "pageviews": 0,
+          "revenue": 0,
+          "orders": 0,
+          "bounceRate": 0,
+          "avgDurationMs": 0,
+          "conversionRate": 0,
+          "revenuePerVisitor": 0
+        },
+        {
+          "ts": 1792454400000,
+          "visitors": 0,
+          "sessions": 0,
+          "pageviews": 0,
+          "revenue": 0,
+          "orders": 0,
+          "bounceRate": 0,
+          "avgDurationMs": 0,
+          "conversionRate": 0,
+          "revenuePerVisitor": 0
+        },
+        {
+          "ts": 1792540800000,
+          "visitors": 0,
+          "sessions": 0,
+          "pageviews": 0,
+          "revenue": 0,
+          "orders": 0,
+          "bounceRate": 0,
+          "avgDurationMs": 0,
+          "conversionRate": 0,
+          "revenuePerVisitor": 0
+        },
+        {
+          "ts": 1792627200000,
+          "visitors": 0,
+          "sessions": 0,
+          "pageviews": 0,
+          "revenue": 0,
+          "orders": 0,
+          "bounceRate": 0,
+          "avgDurationMs": 0,
+          "conversionRate": 0,
+          "revenuePerVisitor": 0
+        },
+        {
+          "ts": 1792713600000,
+          "visitors": 0,
+          "sessions": 0,
+          "pageviews": 0,
+          "revenue": 0,
+          "orders": 0,
+          "bounceRate": 0,
+          "avgDurationMs": 0,
+          "conversionRate": 0,
+          "revenuePerVisitor": 0
+        },
+        {
+          "ts": 1792800000000,
+          "visitors": 0,
+          "sessions": 0,
+          "pageviews": 0,
+          "revenue": 0,
+          "orders": 0,
+          "bounceRate": 0,
+          "avgDurationMs": 0,
+          "conversionRate": 0,
+          "revenuePerVisitor": 0
+        },
+        {
+          "ts": 1792886400000,
+          "visitors": 0,
+          "sessions": 0,
+          "pageviews": 0,
+          "revenue": 0,
+          "orders": 0,
+          "bounceRate": 0,
+          "avgDurationMs": 0,
+          "conversionRate": 0,
+          "revenuePerVisitor": 0
+        },
+        {
+          "ts": 1792972800000,
+          "visitors": 0,
+          "sessions": 0,
+          "pageviews": 0,
+          "revenue": 0,
+          "orders": 0,
+          "bounceRate": 0,
+          "avgDurationMs": 0,
+          "conversionRate": 0,
+          "revenuePerVisitor": 0
+        },
+        {
+          "ts": 1793059200000,
+          "visitors": 0,
+          "sessions": 0,
+          "pageviews": 0,
+          "revenue": 0,
+          "orders": 0,
+          "bounceRate": 0,
+          "avgDurationMs": 0,
+          "conversionRate": 0,
+          "revenuePerVisitor": 0
+        },
+        {
+          "ts": 1793145600000,
+          "visitors": 0,
+          "sessions": 0,
+          "pageviews": 0,
+          "revenue": 0,
+          "orders": 0,
+          "bounceRate": 0,
+          "avgDurationMs": 0,
+          "conversionRate": 0,
+          "revenuePerVisitor": 0
+        },
+        {
+          "ts": 1793232000000,
+          "visitors": 0,
+          "sessions": 0,
+          "pageviews": 0,
+          "revenue": 0,
+          "orders": 0,
+          "bounceRate": 0,
+          "avgDurationMs": 0,
+          "conversionRate": 0,
+          "revenuePerVisitor": 0
+        },
+        {
+          "ts": 1793318400000,
+          "visitors": 0,
+          "sessions": 0,
+          "pageviews": 0,
+          "revenue": 0,
+          "orders": 0,
+          "bounceRate": 0,
+          "avgDurationMs": 0,
+          "conversionRate": 0,
+          "revenuePerVisitor": 0
+        },
+        {
+          "ts": 1793404800000,
+          "visitors": 0,
+          "sessions": 0,
+          "pageviews": 0,
+          "revenue": 0,
+          "orders": 0,
+          "bounceRate": 0,
+          "avgDurationMs": 0,
+          "conversionRate": 0,
+          "revenuePerVisitor": 0
+        },
+        {
+          "ts": 1793491200000,
+          "visitors": 0,
+          "sessions": 0,
+          "pageviews": 0,
+          "revenue": 0,
+          "orders": 0,
+          "bounceRate": 0,
+          "avgDurationMs": 0,
+          "conversionRate": 0,
+          "revenuePerVisitor": 0
+        },
+        {
+          "ts": 1793577600000,
+          "visitors": 0,
+          "sessions": 0,
+          "pageviews": 0,
+          "revenue": 0,
+          "orders": 0,
+          "bounceRate": 0,
+          "avgDurationMs": 0,
+          "conversionRate": 0,
+          "revenuePerVisitor": 0
+        },
+        {
+          "ts": 1793664000000,
+          "visitors": 0,
+          "sessions": 0,
+          "pageviews": 0,
+          "revenue": 0,
+          "orders": 0,
+          "bounceRate": 0,
+          "avgDurationMs": 0,
+          "conversionRate": 0,
+          "revenuePerVisitor": 0
+        },
+        {
+          "ts": 1793750400000,
+          "visitors": 0,
+          "sessions": 0,
+          "pageviews": 0,
+          "revenue": 0,
+          "orders": 0,
+          "bounceRate": 0,
+          "avgDurationMs": 0,
+          "conversionRate": 0,
+          "revenuePerVisitor": 0
+        },
+        {
+          "ts": 1793836800000,
+          "visitors": 0,
+          "sessions": 0,
+          "pageviews": 0,
+          "revenue": 0,
+          "orders": 0,
+          "bounceRate": 0,
+          "avgDurationMs": 0,
+          "conversionRate": 0,
+          "revenuePerVisitor": 0
+        },
+        {
+          "ts": 1793923200000,
+          "visitors": 0,
+          "sessions": 0,
+          "pageviews": 0,
+          "revenue": 0,
+          "orders": 0,
+          "bounceRate": 0,
+          "avgDurationMs": 0,
+          "conversionRate": 0,
+          "revenuePerVisitor": 0
+        },
+        {
+          "ts": 1794009600000,
+          "visitors": 0,
+          "sessions": 0,
+          "pageviews": 0,
+          "revenue": 0,
+          "orders": 0,
+          "bounceRate": 0,
+          "avgDurationMs": 0,
+          "conversionRate": 0,
+          "revenuePerVisitor": 0
+        },
+        {
+          "ts": 1794096000000,
+          "visitors": 0,
+          "sessions": 0,
+          "pageviews": 0,
+          "revenue": 0,
+          "orders": 0,
+          "bounceRate": 0,
+          "avgDurationMs": 0,
+          "conversionRate": 0,
+          "revenuePerVisitor": 0
+        },
+        {
+          "ts": 1794182400000,
+          "visitors": 0,
+          "sessions": 0,
+          "pageviews": 61,
+          "revenue": 0,
+          "orders": 0,
+          "bounceRate": 0,
+          "avgDurationMs": 0,
+          "conversionRate": 0,
+          "revenuePerVisitor": 0
+        }
+      ],
+      "pages": [
+        {
+          "key": "/",
+          "pageviews": 61,
+          "revenue": 0,
+          "orders": 0,
+          "conversionRate": null
+        }
+      ],
+      "referrers": [
+        {
+          "key": "",
+          "pageviews": 61,
+          "revenue": 0,
+          "orders": 0,
+          "conversionRate": null
+        }
+      ],
+      "from": 1791676800000,
+      "to": 1794234566526,
+      "timeZone": "UTC"
+    },
+    "pageviews": 61,
+    "passed": false,
+    "error": "k6 thresholds or execution failed\n\n99 !== 0\n",
+    "finalState": {
+      "oom": false,
+      "exit": 0,
+      "running": true
+    },
+    "hostUptimeAfter": "15:29:26 up  5:07,  1 user,  load average: 4.69, 4.80, 3.55"
+  },
+  {
+    "name": "current-n100000-cpu1-mem1g-r1",
+    "cpu": 1,
+    "memory": "1g",
+    "repetition": 1,
+    "started": "2026-11-09T14:29:26.653Z",
+    "hostUptimeBefore": "15:29:26 up  5:07,  1 user,  load average: 4.69, 4.80, 3.55",
+    "limits": {
+      "nanoCpus": 1000000000,
+      "memory": 1073741824,
+      "swap": 1073741824
+    },
+    "startupMs": 10283,
+    "startupResources": "{\"BlockIO\":\"0B / 1.33MB\",\"CPUPerc\":\"0.50%\",\"Container\":\"e5bba3a74a066070471e5dad03fb59bad31ff4d7dd91a5f849cf64c8b6391d4a\",\"ID\":\"e5bba3a74a06\",\"MemPerc\":\"9.29%\",\"MemUsage\":\"95.12MiB / 1GiB\",\"Name\":\"openletter-perf-1794233915178-559648-app-1\",\"NetIO\":\"1.76kB / 1.5kB\",\"PIDs\":\"13\"}",
+    "smtpVerified": true,
+    "cpuBefore": "usage_usec 2715891\nuser_usec 2071504\nsystem_usec 644387\nnice_usec 0\nnr_periods 118\nnr_throttled 14\nthrottled_usec 1160106\nnr_bursts 0\nburst_usec 0\n",
+    "loadMs": 59853,
+    "k6Exit": 0,
+    "cpuAfter": "usage_usec 10992954\nuser_usec 8881904\nsystem_usec 2111050\nnice_usec 0\nnr_periods 752\nnr_throttled 14\nthrottled_usec 1160106\nnr_bursts 0\nburst_usec 0\n",
+    "endLoadResources": "{\"BlockIO\":\"0B / 15.2MB\",\"CPUPerc\":\"2.27%\",\"Container\":\"e5bba3a74a066070471e5dad03fb59bad31ff4d7dd91a5f849cf64c8b6391d4a\",\"ID\":\"e5bba3a74a06\",\"MemPerc\":\"13.17%\",\"MemUsage\":\"134.8MiB / 1GiB\",\"Name\":\"openletter-perf-1794233915178-559648-app-1\",\"NetIO\":\"1.38MB / 69.4MB\",\"PIDs\":\"8\"}",
+    "expectedPageviews": 61,
+    "drainMs": 3666,
+    "work": {
+      "signers": 100061,
+      "newSigners": 61,
+      "pending": 0,
+      "dead": 0,
+      "attempts": [
+        {
+          "status": "delivered",
+          "n": 71
+        }
+      ],
+      "campaigns": [
+        {
+          "id": 1,
+          "status": "sent",
+          "sent_count": 10,
+          "recipient_count": 10
+        }
+      ],
+      "recipients": [
+        1,
+        3,
+        4,
+        5,
+        6,
+        7,
+        9,
+        12,
+        13,
+        14
+      ],
+      "templateId": 5,
+      "databaseBytes": 56979456
+    },
+    "mailpitMessages": 71,
+    "accepted": 61,
+    "state": {
+      "oom": false,
+      "running": true,
+      "restarts": 0
+    },
+    "memoryPeakBytes": 273981440,
+    "memoryEvents": "low 0\nhigh 0\nmax 0\noom 0\noom_kill 0\noom_group_kill 0",
+    "statistics": {
+      "mode": "builtin",
+      "revision": 2,
+      "series": [
+        {
+          "ts": 1791676800000,
+          "visitors": 0,
+          "sessions": 0,
+          "pageviews": 0,
+          "revenue": 0,
+          "orders": 0,
+          "bounceRate": 0,
+          "avgDurationMs": 0,
+          "conversionRate": 0,
+          "revenuePerVisitor": 0
+        },
+        {
+          "ts": 1791763200000,
+          "visitors": 0,
+          "sessions": 0,
+          "pageviews": 0,
+          "revenue": 0,
+          "orders": 0,
+          "bounceRate": 0,
+          "avgDurationMs": 0,
+          "conversionRate": 0,
+          "revenuePerVisitor": 0
+        },
+        {
+          "ts": 1791849600000,
+          "visitors": 0,
+          "sessions": 0,
+          "pageviews": 0,
+          "revenue": 0,
+          "orders": 0,
+          "bounceRate": 0,
+          "avgDurationMs": 0,
+          "conversionRate": 0,
+          "revenuePerVisitor": 0
+        },
+        {
+          "ts": 1791936000000,
+          "visitors": 0,
+          "sessions": 0,
+          "pageviews": 0,
+          "revenue": 0,
+          "orders": 0,
+          "bounceRate": 0,
+          "avgDurationMs": 0,
+          "conversionRate": 0,
+          "revenuePerVisitor": 0
+        },
+        {
+          "ts": 1792022400000,
+          "visitors": 0,
+          "sessions": 0,
+          "pageviews": 0,
+          "revenue": 0,
+          "orders": 0,
+          "bounceRate": 0,
+          "avgDurationMs": 0,
+          "conversionRate": 0,
+          "revenuePerVisitor": 0
+        },
+        {
+          "ts": 1792108800000,
+          "visitors": 0,
+          "sessions": 0,
+          "pageviews": 0,
+          "revenue": 0,
+          "orders": 0,
+          "bounceRate": 0,
+          "avgDurationMs": 0,
+          "conversionRate": 0,
+          "revenuePerVisitor": 0
+        },
+        {
+          "ts": 1792195200000,
+          "visitors": 0,
+          "sessions": 0,
+          "pageviews": 0,
+          "revenue": 0,
+          "orders": 0,
+          "bounceRate": 0,
+          "avgDurationMs": 0,
+          "conversionRate": 0,
+          "revenuePerVisitor": 0
+        },
+        {
+          "ts": 1792281600000,
+          "visitors": 0,
+          "sessions": 0,
+          "pageviews": 0,
+          "revenue": 0,
+          "orders": 0,
+          "bounceRate": 0,
+          "avgDurationMs": 0,
+          "conversionRate": 0,
+          "revenuePerVisitor": 0
+        },
+        {
+          "ts": 1792368000000,
+          "visitors": 0,
+          "sessions": 0,
+          "pageviews": 0,
+          "revenue": 0,
+          "orders": 0,
+          "bounceRate": 0,
+          "avgDurationMs": 0,
+          "conversionRate": 0,
+          "revenuePerVisitor": 0
+        },
+        {
+          "ts": 1792454400000,
+          "visitors": 0,
+          "sessions": 0,
+          "pageviews": 0,
+          "revenue": 0,
+          "orders": 0,
+          "bounceRate": 0,
+          "avgDurationMs": 0,
+          "conversionRate": 0,
+          "revenuePerVisitor": 0
+        },
+        {
+          "ts": 1792540800000,
+          "visitors": 0,
+          "sessions": 0,
+          "pageviews": 0,
+          "revenue": 0,
+          "orders": 0,
+          "bounceRate": 0,
+          "avgDurationMs": 0,
+          "conversionRate": 0,
+          "revenuePerVisitor": 0
+        },
+        {
+          "ts": 1792627200000,
+          "visitors": 0,
+          "sessions": 0,
+          "pageviews": 0,
+          "revenue": 0,
+          "orders": 0,
+          "bounceRate": 0,
+          "avgDurationMs": 0,
+          "conversionRate": 0,
+          "revenuePerVisitor": 0
+        },
+        {
+          "ts": 1792713600000,
+          "visitors": 0,
+          "sessions": 0,
+          "pageviews": 0,
+          "revenue": 0,
+          "orders": 0,
+          "bounceRate": 0,
+          "avgDurationMs": 0,
+          "conversionRate": 0,
+          "revenuePerVisitor": 0
+        },
+        {
+          "ts": 1792800000000,
+          "visitors": 0,
+          "sessions": 0,
+          "pageviews": 0,
+          "revenue": 0,
+          "orders": 0,
+          "bounceRate": 0,
+          "avgDurationMs": 0,
+          "conversionRate": 0,
+          "revenuePerVisitor": 0
+        },
+        {
+          "ts": 1792886400000,
+          "visitors": 0,
+          "sessions": 0,
+          "pageviews": 0,
+          "revenue": 0,
+          "orders": 0,
+          "bounceRate": 0,
+          "avgDurationMs": 0,
+          "conversionRate": 0,
+          "revenuePerVisitor": 0
+        },
+        {
+          "ts": 1792972800000,
+          "visitors": 0,
+          "sessions": 0,
+          "pageviews": 0,
+          "revenue": 0,
+          "orders": 0,
+          "bounceRate": 0,
+          "avgDurationMs": 0,
+          "conversionRate": 0,
+          "revenuePerVisitor": 0
+        },
+        {
+          "ts": 1793059200000,
+          "visitors": 0,
+          "sessions": 0,
+          "pageviews": 0,
+          "revenue": 0,
+          "orders": 0,
+          "bounceRate": 0,
+          "avgDurationMs": 0,
+          "conversionRate": 0,
+          "revenuePerVisitor": 0
+        },
+        {
+          "ts": 1793145600000,
+          "visitors": 0,
+          "sessions": 0,
+          "pageviews": 0,
+          "revenue": 0,
+          "orders": 0,
+          "bounceRate": 0,
+          "avgDurationMs": 0,
+          "conversionRate": 0,
+          "revenuePerVisitor": 0
+        },
+        {
+          "ts": 1793232000000,
+          "visitors": 0,
+          "sessions": 0,
+          "pageviews": 0,
+          "revenue": 0,
+          "orders": 0,
+          "bounceRate": 0,
+          "avgDurationMs": 0,
+          "conversionRate": 0,
+          "revenuePerVisitor": 0
+        },
+        {
+          "ts": 1793318400000,
+          "visitors": 0,
+          "sessions": 0,
+          "pageviews": 0,
+          "revenue": 0,
+          "orders": 0,
+          "bounceRate": 0,
+          "avgDurationMs": 0,
+          "conversionRate": 0,
+          "revenuePerVisitor": 0
+        },
+        {
+          "ts": 1793404800000,
+          "visitors": 0,
+          "sessions": 0,
+          "pageviews": 0,
+          "revenue": 0,
+          "orders": 0,
+          "bounceRate": 0,
+          "avgDurationMs": 0,
+          "conversionRate": 0,
+          "revenuePerVisitor": 0
+        },
+        {
+          "ts": 1793491200000,
+          "visitors": 0,
+          "sessions": 0,
+          "pageviews": 0,
+          "revenue": 0,
+          "orders": 0,
+          "bounceRate": 0,
+          "avgDurationMs": 0,
+          "conversionRate": 0,
+          "revenuePerVisitor": 0
+        },
+        {
+          "ts": 1793577600000,
+          "visitors": 0,
+          "sessions": 0,
+          "pageviews": 0,
+          "revenue": 0,
+          "orders": 0,
+          "bounceRate": 0,
+          "avgDurationMs": 0,
+          "conversionRate": 0,
+          "revenuePerVisitor": 0
+        },
+        {
+          "ts": 1793664000000,
+          "visitors": 0,
+          "sessions": 0,
+          "pageviews": 0,
+          "revenue": 0,
+          "orders": 0,
+          "bounceRate": 0,
+          "avgDurationMs": 0,
+          "conversionRate": 0,
+          "revenuePerVisitor": 0
+        },
+        {
+          "ts": 1793750400000,
+          "visitors": 0,
+          "sessions": 0,
+          "pageviews": 0,
+          "revenue": 0,
+          "orders": 0,
+          "bounceRate": 0,
+          "avgDurationMs": 0,
+          "conversionRate": 0,
+          "revenuePerVisitor": 0
+        },
+        {
+          "ts": 1793836800000,
+          "visitors": 0,
+          "sessions": 0,
+          "pageviews": 0,
+          "revenue": 0,
+          "orders": 0,
+          "bounceRate": 0,
+          "avgDurationMs": 0,
+          "conversionRate": 0,
+          "revenuePerVisitor": 0
+        },
+        {
+          "ts": 1793923200000,
+          "visitors": 0,
+          "sessions": 0,
+          "pageviews": 0,
+          "revenue": 0,
+          "orders": 0,
+          "bounceRate": 0,
+          "avgDurationMs": 0,
+          "conversionRate": 0,
+          "revenuePerVisitor": 0
+        },
+        {
+          "ts": 1794009600000,
+          "visitors": 0,
+          "sessions": 0,
+          "pageviews": 0,
+          "revenue": 0,
+          "orders": 0,
+          "bounceRate": 0,
+          "avgDurationMs": 0,
+          "conversionRate": 0,
+          "revenuePerVisitor": 0
+        },
+        {
+          "ts": 1794096000000,
+          "visitors": 0,
+          "sessions": 0,
+          "pageviews": 0,
+          "revenue": 0,
+          "orders": 0,
+          "bounceRate": 0,
+          "avgDurationMs": 0,
+          "conversionRate": 0,
+          "revenuePerVisitor": 0
+        },
+        {
+          "ts": 1794182400000,
+          "visitors": 0,
+          "sessions": 0,
+          "pageviews": 61,
+          "revenue": 0,
+          "orders": 0,
+          "bounceRate": 0,
+          "avgDurationMs": 0,
+          "conversionRate": 0,
+          "revenuePerVisitor": 0
+        }
+      ],
+      "pages": [
+        {
+          "key": "/",
+          "pageviews": 61,
+          "revenue": 0,
+          "orders": 0,
+          "conversionRate": null
+        }
+      ],
+      "referrers": [
+        {
+          "key": "",
+          "pageviews": 61,
+          "revenue": 0,
+          "orders": 0,
+          "conversionRate": null
+        }
+      ],
+      "from": 1791676800000,
+      "to": 1794234655226,
+      "timeZone": "UTC"
+    },
+    "pageviews": 61,
+    "passed": true,
+    "finalState": {
+      "oom": false,
+      "exit": 0,
+      "running": true
+    },
+    "hostUptimeAfter": "15:30:55 up  5:08,  1 user,  load average: 2.23, 4.02, 3.40"
+  },
+  {
+    "name": "current-n100000-cpu1-mem512m-r2",
+    "cpu": 1,
+    "memory": "512m",
+    "repetition": 2,
+    "started": "2026-11-09T14:30:55.356Z",
+    "hostUptimeBefore": "15:30:55 up  5:08,  1 user,  load average: 2.23, 4.02, 3.40",
+    "limits": {
+      "nanoCpus": 1000000000,
+      "memory": 536870912,
+      "swap": 536870912
+    },
+    "startupMs": 5706,
+    "startupResources": "{\"BlockIO\":\"0B / 1.33MB\",\"CPUPerc\":\"0.53%\",\"Container\":\"cfe6ed4570ccd63ece9f13b99679bafbb6c6ba94a15a2104fb1e7241a25f2aa7\",\"ID\":\"cfe6ed4570cc\",\"MemPerc\":\"18.00%\",\"MemUsage\":\"92.16MiB / 512MiB\",\"Name\":\"openletter-perf-1794233915178-559648-app-1\",\"NetIO\":\"1.54kB / 1.34kB\",\"PIDs\":\"13\"}",
+    "smtpVerified": true,
+    "cpuBefore": "usage_usec 2615812\nuser_usec 2044364\nsystem_usec 571448\nnice_usec 0\nnr_periods 92\nnr_throttled 14\nthrottled_usec 990406\nnr_bursts 0\nburst_usec 0\n",
+    "loadMs": 59642,
+    "k6Exit": 0,
+    "cpuAfter": "usage_usec 10536939\nuser_usec 8316403\nsystem_usec 2220536\nnice_usec 0\nnr_periods 733\nnr_throttled 14\nthrottled_usec 990406\nnr_bursts 0\nburst_usec 0\n",
+    "endLoadResources": "{\"BlockIO\":\"0B / 15.2MB\",\"CPUPerc\":\"1.17%\",\"Container\":\"cfe6ed4570ccd63ece9f13b99679bafbb6c6ba94a15a2104fb1e7241a25f2aa7\",\"ID\":\"cfe6ed4570cc\",\"MemPerc\":\"27.37%\",\"MemUsage\":\"140.1MiB / 512MiB\",\"Name\":\"openletter-perf-1794233915178-559648-app-1\",\"NetIO\":\"1.37MB / 69.4MB\",\"PIDs\":\"8\"}",
+    "expectedPageviews": 61,
+    "drainMs": 4855,
+    "work": {
+      "signers": 100061,
+      "newSigners": 61,
+      "pending": 0,
+      "dead": 0,
+      "attempts": [
+        {
+          "status": "delivered",
+          "n": 71
+        }
+      ],
+      "campaigns": [
+        {
+          "id": 1,
+          "status": "sent",
+          "sent_count": 10,
+          "recipient_count": 10
+        }
+      ],
+      "recipients": [
+        1,
+        3,
+        4,
+        5,
+        6,
+        7,
+        9,
+        12,
+        13,
+        14
+      ],
+      "templateId": 5,
+      "databaseBytes": 56967168
+    },
+    "mailpitMessages": 71,
+    "accepted": 61,
+    "state": {
+      "oom": false,
+      "running": true,
+      "restarts": 0
+    },
+    "memoryPeakBytes": 272547840,
+    "memoryEvents": "low 0\nhigh 0\nmax 0\noom 0\noom_kill 0\noom_group_kill 0",
+    "statistics": {
+      "mode": "builtin",
+      "revision": 2,
+      "series": [
+        {
+          "ts": 1791676800000,
+          "visitors": 0,
+          "sessions": 0,
+          "pageviews": 0,
+          "revenue": 0,
+          "orders": 0,
+          "bounceRate": 0,
+          "avgDurationMs": 0,
+          "conversionRate": 0,
+          "revenuePerVisitor": 0
+        },
+        {
+          "ts": 1791763200000,
+          "visitors": 0,
+          "sessions": 0,
+          "pageviews": 0,
+          "revenue": 0,
+          "orders": 0,
+          "bounceRate": 0,
+          "avgDurationMs": 0,
+          "conversionRate": 0,
+          "revenuePerVisitor": 0
+        },
+        {
+          "ts": 1791849600000,
+          "visitors": 0,
+          "sessions": 0,
+          "pageviews": 0,
+          "revenue": 0,
+          "orders": 0,
+          "bounceRate": 0,
+          "avgDurationMs": 0,
+          "conversionRate": 0,
+          "revenuePerVisitor": 0
+        },
+        {
+          "ts": 1791936000000,
+          "visitors": 0,
+          "sessions": 0,
+          "pageviews": 0,
+          "revenue": 0,
+          "orders": 0,
+          "bounceRate": 0,
+          "avgDurationMs": 0,
+          "conversionRate": 0,
+          "revenuePerVisitor": 0
+        },
+        {
+          "ts": 1792022400000,
+          "visitors": 0,
+          "sessions": 0,
+          "pageviews": 0,
+          "revenue": 0,
+          "orders": 0,
+          "bounceRate": 0,
+          "avgDurationMs": 0,
+          "conversionRate": 0,
+          "revenuePerVisitor": 0
+        },
+        {
+          "ts": 1792108800000,
+          "visitors": 0,
+          "sessions": 0,
+          "pageviews": 0,
+          "revenue": 0,
+          "orders": 0,
+          "bounceRate": 0,
+          "avgDurationMs": 0,
+          "conversionRate": 0,
+          "revenuePerVisitor": 0
+        },
+        {
+          "ts": 1792195200000,
+          "visitors": 0,
+          "sessions": 0,
+          "pageviews": 0,
+          "revenue": 0,
+          "orders": 0,
+          "bounceRate": 0,
+          "avgDurationMs": 0,
+          "conversionRate": 0,
+          "revenuePerVisitor": 0
+        },
+        {
+          "ts": 1792281600000,
+          "visitors": 0,
+          "sessions": 0,
+          "pageviews": 0,
+          "revenue": 0,
+          "orders": 0,
+          "bounceRate": 0,
+          "avgDurationMs": 0,
+          "conversionRate": 0,
+          "revenuePerVisitor": 0
+        },
+        {
+          "ts": 1792368000000,
+          "visitors": 0,
+          "sessions": 0,
+          "pageviews": 0,
+          "revenue": 0,
+          "orders": 0,
+          "bounceRate": 0,
+          "avgDurationMs": 0,
+          "conversionRate": 0,
+          "revenuePerVisitor": 0
+        },
+        {
+          "ts": 1792454400000,
+          "visitors": 0,
+          "sessions": 0,
+          "pageviews": 0,
+          "revenue": 0,
+          "orders": 0,
+          "bounceRate": 0,
+          "avgDurationMs": 0,
+          "conversionRate": 0,
+          "revenuePerVisitor": 0
+        },
+        {
+          "ts": 1792540800000,
+          "visitors": 0,
+          "sessions": 0,
+          "pageviews": 0,
+          "revenue": 0,
+          "orders": 0,
+          "bounceRate": 0,
+          "avgDurationMs": 0,
+          "conversionRate": 0,
+          "revenuePerVisitor": 0
+        },
+        {
+          "ts": 1792627200000,
+          "visitors": 0,
+          "sessions": 0,
+          "pageviews": 0,
+          "revenue": 0,
+          "orders": 0,
+          "bounceRate": 0,
+          "avgDurationMs": 0,
+          "conversionRate": 0,
+          "revenuePerVisitor": 0
+        },
+        {
+          "ts": 1792713600000,
+          "visitors": 0,
+          "sessions": 0,
+          "pageviews": 0,
+          "revenue": 0,
+          "orders": 0,
+          "bounceRate": 0,
+          "avgDurationMs": 0,
+          "conversionRate": 0,
+          "revenuePerVisitor": 0
+        },
+        {
+          "ts": 1792800000000,
+          "visitors": 0,
+          "sessions": 0,
+          "pageviews": 0,
+          "revenue": 0,
+          "orders": 0,
+          "bounceRate": 0,
+          "avgDurationMs": 0,
+          "conversionRate": 0,
+          "revenuePerVisitor": 0
+        },
+        {
+          "ts": 1792886400000,
+          "visitors": 0,
+          "sessions": 0,
+          "pageviews": 0,
+          "revenue": 0,
+          "orders": 0,
+          "bounceRate": 0,
+          "avgDurationMs": 0,
+          "conversionRate": 0,
+          "revenuePerVisitor": 0
+        },
+        {
+          "ts": 1792972800000,
+          "visitors": 0,
+          "sessions": 0,
+          "pageviews": 0,
+          "revenue": 0,
+          "orders": 0,
+          "bounceRate": 0,
+          "avgDurationMs": 0,
+          "conversionRate": 0,
+          "revenuePerVisitor": 0
+        },
+        {
+          "ts": 1793059200000,
+          "visitors": 0,
+          "sessions": 0,
+          "pageviews": 0,
+          "revenue": 0,
+          "orders": 0,
+          "bounceRate": 0,
+          "avgDurationMs": 0,
+          "conversionRate": 0,
+          "revenuePerVisitor": 0
+        },
+        {
+          "ts": 1793145600000,
+          "visitors": 0,
+          "sessions": 0,
+          "pageviews": 0,
+          "revenue": 0,
+          "orders": 0,
+          "bounceRate": 0,
+          "avgDurationMs": 0,
+          "conversionRate": 0,
+          "revenuePerVisitor": 0
+        },
+        {
+          "ts": 1793232000000,
+          "visitors": 0,
+          "sessions": 0,
+          "pageviews": 0,
+          "revenue": 0,
+          "orders": 0,
+          "bounceRate": 0,
+          "avgDurationMs": 0,
+          "conversionRate": 0,
+          "revenuePerVisitor": 0
+        },
+        {
+          "ts": 1793318400000,
+          "visitors": 0,
+          "sessions": 0,
+          "pageviews": 0,
+          "revenue": 0,
+          "orders": 0,
+          "bounceRate": 0,
+          "avgDurationMs": 0,
+          "conversionRate": 0,
+          "revenuePerVisitor": 0
+        },
+        {
+          "ts": 1793404800000,
+          "visitors": 0,
+          "sessions": 0,
+          "pageviews": 0,
+          "revenue": 0,
+          "orders": 0,
+          "bounceRate": 0,
+          "avgDurationMs": 0,
+          "conversionRate": 0,
+          "revenuePerVisitor": 0
+        },
+        {
+          "ts": 1793491200000,
+          "visitors": 0,
+          "sessions": 0,
+          "pageviews": 0,
+          "revenue": 0,
+          "orders": 0,
+          "bounceRate": 0,
+          "avgDurationMs": 0,
+          "conversionRate": 0,
+          "revenuePerVisitor": 0
+        },
+        {
+          "ts": 1793577600000,
+          "visitors": 0,
+          "sessions": 0,
+          "pageviews": 0,
+          "revenue": 0,
+          "orders": 0,
+          "bounceRate": 0,
+          "avgDurationMs": 0,
+          "conversionRate": 0,
+          "revenuePerVisitor": 0
+        },
+        {
+          "ts": 1793664000000,
+          "visitors": 0,
+          "sessions": 0,
+          "pageviews": 0,
+          "revenue": 0,
+          "orders": 0,
+          "bounceRate": 0,
+          "avgDurationMs": 0,
+          "conversionRate": 0,
+          "revenuePerVisitor": 0
+        },
+        {
+          "ts": 1793750400000,
+          "visitors": 0,
+          "sessions": 0,
+          "pageviews": 0,
+          "revenue": 0,
+          "orders": 0,
+          "bounceRate": 0,
+          "avgDurationMs": 0,
+          "conversionRate": 0,
+          "revenuePerVisitor": 0
+        },
+        {
+          "ts": 1793836800000,
+          "visitors": 0,
+          "sessions": 0,
+          "pageviews": 0,
+          "revenue": 0,
+          "orders": 0,
+          "bounceRate": 0,
+          "avgDurationMs": 0,
+          "conversionRate": 0,
+          "revenuePerVisitor": 0
+        },
+        {
+          "ts": 1793923200000,
+          "visitors": 0,
+          "sessions": 0,
+          "pageviews": 0,
+          "revenue": 0,
+          "orders": 0,
+          "bounceRate": 0,
+          "avgDurationMs": 0,
+          "conversionRate": 0,
+          "revenuePerVisitor": 0
+        },
+        {
+          "ts": 1794009600000,
+          "visitors": 0,
+          "sessions": 0,
+          "pageviews": 0,
+          "revenue": 0,
+          "orders": 0,
+          "bounceRate": 0,
+          "avgDurationMs": 0,
+          "conversionRate": 0,
+          "revenuePerVisitor": 0
+        },
+        {
+          "ts": 1794096000000,
+          "visitors": 0,
+          "sessions": 0,
+          "pageviews": 0,
+          "revenue": 0,
+          "orders": 0,
+          "bounceRate": 0,
+          "avgDurationMs": 0,
+          "conversionRate": 0,
+          "revenuePerVisitor": 0
+        },
+        {
+          "ts": 1794182400000,
+          "visitors": 0,
+          "sessions": 0,
+          "pageviews": 61,
+          "revenue": 0,
+          "orders": 0,
+          "bounceRate": 0,
+          "avgDurationMs": 0,
+          "conversionRate": 0,
+          "revenuePerVisitor": 0
+        }
+      ],
+      "pages": [
+        {
+          "key": "/",
+          "pageviews": 61,
+          "revenue": 0,
+          "orders": 0,
+          "conversionRate": null
+        }
+      ],
+      "referrers": [
+        {
+          "key": "",
+          "pageviews": 61,
+          "revenue": 0,
+          "orders": 0,
+          "conversionRate": null
+        }
+      ],
+      "from": 1791676800000,
+      "to": 1794234736073,
+      "timeZone": "UTC"
+    },
+    "pageviews": 61,
+    "passed": true,
+    "finalState": {
+      "oom": false,
+      "exit": 0,
+      "running": true
+    },
+    "hostUptimeAfter": "15:32:16 up  5:10,  1 user,  load average: 2.41, 3.62, 3.31"
+  },
+  {
+    "name": "current-n100000-cpu1-mem1g-r2",
+    "cpu": 1,
+    "memory": "1g",
+    "repetition": 2,
+    "started": "2026-11-09T14:32:16.183Z",
+    "hostUptimeBefore": "15:32:16 up  5:10,  1 user,  load average: 2.41, 3.62, 3.31",
+    "limits": {
+      "nanoCpus": 1000000000,
+      "memory": 1073741824,
+      "swap": 1073741824
+    },
+    "startupMs": 8665,
+    "startupResources": "{\"BlockIO\":\"0B / 1.33MB\",\"CPUPerc\":\"0.49%\",\"Container\":\"5e77467d3333219075eafcf4125145886613b010e916a94eeec468cfa739fc2e\",\"ID\":\"5e77467d3333\",\"MemPerc\":\"9.05%\",\"MemUsage\":\"92.72MiB / 1GiB\",\"Name\":\"openletter-perf-1794233915178-559648-app-1\",\"NetIO\":\"1.54kB / 1.34kB\",\"PIDs\":\"13\"}",
+    "smtpVerified": true,
+    "cpuBefore": "usage_usec 2553110\nuser_usec 2051094\nsystem_usec 502016\nnice_usec 0\nnr_periods 87\nnr_throttled 12\nthrottled_usec 797764\nnr_bursts 0\nburst_usec 0\n",
+    "loadMs": 59743,
+    "k6Exit": 99,
+    "cpuAfter": "usage_usec 9773987\nuser_usec 7785583\nsystem_usec 1988404\nnice_usec 0\nnr_periods 724\nnr_throttled 12\nthrottled_usec 797764\nnr_bursts 0\nburst_usec 0\n",
+    "endLoadResources": "{\"BlockIO\":\"0B / 14.8MB\",\"CPUPerc\":\"3.33%\",\"Container\":\"5e77467d3333219075eafcf4125145886613b010e916a94eeec468cfa739fc2e\",\"ID\":\"5e77467d3333\",\"MemPerc\":\"13.38%\",\"MemUsage\":\"137MiB / 1GiB\",\"Name\":\"openletter-perf-1794233915178-559648-app-1\",\"NetIO\":\"1.35MB / 69.4MB\",\"PIDs\":\"8\"}",
+    "expectedPageviews": 61,
+    "drainMs": 6628,
+    "work": {
+      "signers": 100060,
+      "newSigners": 60,
+      "pending": 0,
+      "dead": 0,
+      "attempts": [
+        {
+          "status": "delivered",
+          "n": 70
+        }
+      ],
+      "campaigns": [
+        {
+          "id": 1,
+          "status": "sent",
+          "sent_count": 10,
+          "recipient_count": 10
+        }
+      ],
+      "recipients": [
+        1,
+        3,
+        4,
+        5,
+        6,
+        7,
+        9,
+        12,
+        13,
+        14
+      ],
+      "templateId": 5,
+      "databaseBytes": 56971264
+    },
+    "mailpitMessages": 70,
+    "accepted": 60,
+    "state": {
+      "oom": false,
+      "running": true,
+      "restarts": 0
+    },
+    "memoryPeakBytes": 272793600,
+    "memoryEvents": "low 0\nhigh 0\nmax 0\noom 0\noom_kill 0\noom_group_kill 0",
+    "statistics": {
+      "mode": "builtin",
+      "revision": 2,
+      "series": [
+        {
+          "ts": 1791676800000,
+          "visitors": 0,
+          "sessions": 0,
+          "pageviews": 0,
+          "revenue": 0,
+          "orders": 0,
+          "bounceRate": 0,
+          "avgDurationMs": 0,
+          "conversionRate": 0,
+          "revenuePerVisitor": 0
+        },
+        {
+          "ts": 1791763200000,
+          "visitors": 0,
+          "sessions": 0,
+          "pageviews": 0,
+          "revenue": 0,
+          "orders": 0,
+          "bounceRate": 0,
+          "avgDurationMs": 0,
+          "conversionRate": 0,
+          "revenuePerVisitor": 0
+        },
+        {
+          "ts": 1791849600000,
+          "visitors": 0,
+          "sessions": 0,
+          "pageviews": 0,
+          "revenue": 0,
+          "orders": 0,
+          "bounceRate": 0,
+          "avgDurationMs": 0,
+          "conversionRate": 0,
+          "revenuePerVisitor": 0
+        },
+        {
+          "ts": 1791936000000,
+          "visitors": 0,
+          "sessions": 0,
+          "pageviews": 0,
+          "revenue": 0,
+          "orders": 0,
+          "bounceRate": 0,
+          "avgDurationMs": 0,
+          "conversionRate": 0,
+          "revenuePerVisitor": 0
+        },
+        {
+          "ts": 1792022400000,
+          "visitors": 0,
+          "sessions": 0,
+          "pageviews": 0,
+          "revenue": 0,
+          "orders": 0,
+          "bounceRate": 0,
+          "avgDurationMs": 0,
+          "conversionRate": 0,
+          "revenuePerVisitor": 0
+        },
+        {
+          "ts": 1792108800000,
+          "visitors": 0,
+          "sessions": 0,
+          "pageviews": 0,
+          "revenue": 0,
+          "orders": 0,
+          "bounceRate": 0,
+          "avgDurationMs": 0,
+          "conversionRate": 0,
+          "revenuePerVisitor": 0
+        },
+        {
+          "ts": 1792195200000,
+          "visitors": 0,
+          "sessions": 0,
+          "pageviews": 0,
+          "revenue": 0,
+          "orders": 0,
+          "bounceRate": 0,
+          "avgDurationMs": 0,
+          "conversionRate": 0,
+          "revenuePerVisitor": 0
+        },
+        {
+          "ts": 1792281600000,
+          "visitors": 0,
+          "sessions": 0,
+          "pageviews": 0,
+          "revenue": 0,
+          "orders": 0,
+          "bounceRate": 0,
+          "avgDurationMs": 0,
+          "conversionRate": 0,
+          "revenuePerVisitor": 0
+        },
+        {
+          "ts": 1792368000000,
+          "visitors": 0,
+          "sessions": 0,
+          "pageviews": 0,
+          "revenue": 0,
+          "orders": 0,
+          "bounceRate": 0,
+          "avgDurationMs": 0,
+          "conversionRate": 0,
+          "revenuePerVisitor": 0
+        },
+        {
+          "ts": 1792454400000,
+          "visitors": 0,
+          "sessions": 0,
+          "pageviews": 0,
+          "revenue": 0,
+          "orders": 0,
+          "bounceRate": 0,
+          "avgDurationMs": 0,
+          "conversionRate": 0,
+          "revenuePerVisitor": 0
+        },
+        {
+          "ts": 1792540800000,
+          "visitors": 0,
+          "sessions": 0,
+          "pageviews": 0,
+          "revenue": 0,
+          "orders": 0,
+          "bounceRate": 0,
+          "avgDurationMs": 0,
+          "conversionRate": 0,
+          "revenuePerVisitor": 0
+        },
+        {
+          "ts": 1792627200000,
+          "visitors": 0,
+          "sessions": 0,
+          "pageviews": 0,
+          "revenue": 0,
+          "orders": 0,
+          "bounceRate": 0,
+          "avgDurationMs": 0,
+          "conversionRate": 0,
+          "revenuePerVisitor": 0
+        },
+        {
+          "ts": 1792713600000,
+          "visitors": 0,
+          "sessions": 0,
+          "pageviews": 0,
+          "revenue": 0,
+          "orders": 0,
+          "bounceRate": 0,
+          "avgDurationMs": 0,
+          "conversionRate": 0,
+          "revenuePerVisitor": 0
+        },
+        {
+          "ts": 1792800000000,
+          "visitors": 0,
+          "sessions": 0,
+          "pageviews": 0,
+          "revenue": 0,
+          "orders": 0,
+          "bounceRate": 0,
+          "avgDurationMs": 0,
+          "conversionRate": 0,
+          "revenuePerVisitor": 0
+        },
+        {
+          "ts": 1792886400000,
+          "visitors": 0,
+          "sessions": 0,
+          "pageviews": 0,
+          "revenue": 0,
+          "orders": 0,
+          "bounceRate": 0,
+          "avgDurationMs": 0,
+          "conversionRate": 0,
+          "revenuePerVisitor": 0
+        },
+        {
+          "ts": 1792972800000,
+          "visitors": 0,
+          "sessions": 0,
+          "pageviews": 0,
+          "revenue": 0,
+          "orders": 0,
+          "bounceRate": 0,
+          "avgDurationMs": 0,
+          "conversionRate": 0,
+          "revenuePerVisitor": 0
+        },
+        {
+          "ts": 1793059200000,
+          "visitors": 0,
+          "sessions": 0,
+          "pageviews": 0,
+          "revenue": 0,
+          "orders": 0,
+          "bounceRate": 0,
+          "avgDurationMs": 0,
+          "conversionRate": 0,
+          "revenuePerVisitor": 0
+        },
+        {
+          "ts": 1793145600000,
+          "visitors": 0,
+          "sessions": 0,
+          "pageviews": 0,
+          "revenue": 0,
+          "orders": 0,
+          "bounceRate": 0,
+          "avgDurationMs": 0,
+          "conversionRate": 0,
+          "revenuePerVisitor": 0
+        },
+        {
+          "ts": 1793232000000,
+          "visitors": 0,
+          "sessions": 0,
+          "pageviews": 0,
+          "revenue": 0,
+          "orders": 0,
+          "bounceRate": 0,
+          "avgDurationMs": 0,
+          "conversionRate": 0,
+          "revenuePerVisitor": 0
+        },
+        {
+          "ts": 1793318400000,
+          "visitors": 0,
+          "sessions": 0,
+          "pageviews": 0,
+          "revenue": 0,
+          "orders": 0,
+          "bounceRate": 0,
+          "avgDurationMs": 0,
+          "conversionRate": 0,
+          "revenuePerVisitor": 0
+        },
+        {
+          "ts": 1793404800000,
+          "visitors": 0,
+          "sessions": 0,
+          "pageviews": 0,
+          "revenue": 0,
+          "orders": 0,
+          "bounceRate": 0,
+          "avgDurationMs": 0,
+          "conversionRate": 0,
+          "revenuePerVisitor": 0
+        },
+        {
+          "ts": 1793491200000,
+          "visitors": 0,
+          "sessions": 0,
+          "pageviews": 0,
+          "revenue": 0,
+          "orders": 0,
+          "bounceRate": 0,
+          "avgDurationMs": 0,
+          "conversionRate": 0,
+          "revenuePerVisitor": 0
+        },
+        {
+          "ts": 1793577600000,
+          "visitors": 0,
+          "sessions": 0,
+          "pageviews": 0,
+          "revenue": 0,
+          "orders": 0,
+          "bounceRate": 0,
+          "avgDurationMs": 0,
+          "conversionRate": 0,
+          "revenuePerVisitor": 0
+        },
+        {
+          "ts": 1793664000000,
+          "visitors": 0,
+          "sessions": 0,
+          "pageviews": 0,
+          "revenue": 0,
+          "orders": 0,
+          "bounceRate": 0,
+          "avgDurationMs": 0,
+          "conversionRate": 0,
+          "revenuePerVisitor": 0
+        },
+        {
+          "ts": 1793750400000,
+          "visitors": 0,
+          "sessions": 0,
+          "pageviews": 0,
+          "revenue": 0,
+          "orders": 0,
+          "bounceRate": 0,
+          "avgDurationMs": 0,
+          "conversionRate": 0,
+          "revenuePerVisitor": 0
+        },
+        {
+          "ts": 1793836800000,
+          "visitors": 0,
+          "sessions": 0,
+          "pageviews": 0,
+          "revenue": 0,
+          "orders": 0,
+          "bounceRate": 0,
+          "avgDurationMs": 0,
+          "conversionRate": 0,
+          "revenuePerVisitor": 0
+        },
+        {
+          "ts": 1793923200000,
+          "visitors": 0,
+          "sessions": 0,
+          "pageviews": 0,
+          "revenue": 0,
+          "orders": 0,
+          "bounceRate": 0,
+          "avgDurationMs": 0,
+          "conversionRate": 0,
+          "revenuePerVisitor": 0
+        },
+        {
+          "ts": 1794009600000,
+          "visitors": 0,
+          "sessions": 0,
+          "pageviews": 0,
+          "revenue": 0,
+          "orders": 0,
+          "bounceRate": 0,
+          "avgDurationMs": 0,
+          "conversionRate": 0,
+          "revenuePerVisitor": 0
+        },
+        {
+          "ts": 1794096000000,
+          "visitors": 0,
+          "sessions": 0,
+          "pageviews": 0,
+          "revenue": 0,
+          "orders": 0,
+          "bounceRate": 0,
+          "avgDurationMs": 0,
+          "conversionRate": 0,
+          "revenuePerVisitor": 0
+        },
+        {
+          "ts": 1794182400000,
+          "visitors": 0,
+          "sessions": 0,
+          "pageviews": 61,
+          "revenue": 0,
+          "orders": 0,
+          "bounceRate": 0,
+          "avgDurationMs": 0,
+          "conversionRate": 0,
+          "revenuePerVisitor": 0
+        }
+      ],
+      "pages": [
+        {
+          "key": "/",
+          "pageviews": 61,
+          "revenue": 0,
+          "orders": 0,
+          "conversionRate": null
+        }
+      ],
+      "referrers": [
+        {
+          "key": "",
+          "pageviews": 61,
+          "revenue": 0,
+          "orders": 0,
+          "conversionRate": null
+        }
+      ],
+      "from": 1791676800000,
+      "to": 1794234818945,
+      "timeZone": "UTC"
+    },
+    "pageviews": 61,
+    "passed": false,
+    "error": "k6 thresholds or execution failed\n\n99 !== 0\n",
+    "finalState": {
+      "oom": false,
+      "exit": 0,
+      "running": true
+    },
+    "hostUptimeAfter": "15:33:39 up  5:11,  1 user,  load average: 3.45, 3.61, 3.34"
+  },
+  {
+    "name": "current-n100000-cpu1-mem512m-r3",
+    "cpu": 1,
+    "memory": "512m",
+    "repetition": 3,
+    "started": "2026-11-09T14:33:39.058Z",
+    "hostUptimeBefore": "15:33:39 up  5:11,  1 user,  load average: 3.45, 3.61, 3.34",
+    "limits": {
+      "nanoCpus": 1000000000,
+      "memory": 536870912,
+      "swap": 536870912
+    },
+    "startupMs": 13067,
+    "startupResources": "{\"BlockIO\":\"0B / 1.33MB\",\"CPUPerc\":\"0.59%\",\"Container\":\"729c94e1187b4240f79c5792012686d539672fd255a6c62a48fd496f00e947d1\",\"ID\":\"729c94e1187b\",\"MemPerc\":\"18.06%\",\"MemUsage\":\"92.48MiB / 512MiB\",\"Name\":\"openletter-perf-1794233915178-559648-app-1\",\"NetIO\":\"1.76kB / 1.5kB\",\"PIDs\":\"13\"}",
+    "smtpVerified": true,
+    "cpuBefore": "usage_usec 2567832\nuser_usec 2041003\nsystem_usec 526829\nnice_usec 0\nnr_periods 109\nnr_throttled 14\nthrottled_usec 796655\nnr_bursts 0\nburst_usec 0\n",
+    "loadMs": 60477,
+    "k6Exit": 0,
+    "cpuAfter": "usage_usec 10122050\nuser_usec 7941114\nsystem_usec 2180936\nnice_usec 0\nnr_periods 754\nnr_throttled 14\nthrottled_usec 796655\nnr_bursts 0\nburst_usec 0\n",
+    "endLoadResources": "{\"BlockIO\":\"160kB / 14.6MB\",\"CPUPerc\":\"2.34%\",\"Container\":\"729c94e1187b4240f79c5792012686d539672fd255a6c62a48fd496f00e947d1\",\"ID\":\"729c94e1187b\",\"MemPerc\":\"27.00%\",\"MemUsage\":\"138.2MiB / 512MiB\",\"Name\":\"openletter-perf-1794233915178-559648-app-1\",\"NetIO\":\"1.36MB / 69.5MB\",\"PIDs\":\"8\"}",
+    "expectedPageviews": 61,
+    "drainMs": 7746,
+    "work": {
+      "signers": 100060,
+      "newSigners": 60,
+      "pending": 0,
+      "dead": 0,
+      "attempts": [
+        {
+          "status": "delivered",
+          "n": 70
+        }
+      ],
+      "campaigns": [
+        {
+          "id": 1,
+          "status": "sent",
+          "sent_count": 10,
+          "recipient_count": 10
+        }
+      ],
+      "recipients": [
+        1,
+        3,
+        4,
+        5,
+        6,
+        7,
+        9,
+        12,
+        13,
+        14
+      ],
+      "templateId": 5,
+      "databaseBytes": 56971264
+    },
+    "mailpitMessages": 70,
+    "accepted": 60,
+    "state": {
+      "oom": false,
+      "running": true,
+      "restarts": 0
+    },
+    "memoryPeakBytes": 270094336,
+    "memoryEvents": "low 0\nhigh 0\nmax 0\noom 0\noom_kill 0\noom_group_kill 0",
+    "statistics": {
+      "mode": "builtin",
+      "revision": 2,
+      "series": [
+        {
+          "ts": 1791676800000,
+          "visitors": 0,
+          "sessions": 0,
+          "pageviews": 0,
+          "revenue": 0,
+          "orders": 0,
+          "bounceRate": 0,
+          "avgDurationMs": 0,
+          "conversionRate": 0,
+          "revenuePerVisitor": 0
+        },
+        {
+          "ts": 1791763200000,
+          "visitors": 0,
+          "sessions": 0,
+          "pageviews": 0,
+          "revenue": 0,
+          "orders": 0,
+          "bounceRate": 0,
+          "avgDurationMs": 0,
+          "conversionRate": 0,
+          "revenuePerVisitor": 0
+        },
+        {
+          "ts": 1791849600000,
+          "visitors": 0,
+          "sessions": 0,
+          "pageviews": 0,
+          "revenue": 0,
+          "orders": 0,
+          "bounceRate": 0,
+          "avgDurationMs": 0,
+          "conversionRate": 0,
+          "revenuePerVisitor": 0
+        },
+        {
+          "ts": 1791936000000,
+          "visitors": 0,
+          "sessions": 0,
+          "pageviews": 0,
+          "revenue": 0,
+          "orders": 0,
+          "bounceRate": 0,
+          "avgDurationMs": 0,
+          "conversionRate": 0,
+          "revenuePerVisitor": 0
+        },
+        {
+          "ts": 1792022400000,
+          "visitors": 0,
+          "sessions": 0,
+          "pageviews": 0,
+          "revenue": 0,
+          "orders": 0,
+          "bounceRate": 0,
+          "avgDurationMs": 0,
+          "conversionRate": 0,
+          "revenuePerVisitor": 0
+        },
+        {
+          "ts": 1792108800000,
+          "visitors": 0,
+          "sessions": 0,
+          "pageviews": 0,
+          "revenue": 0,
+          "orders": 0,
+          "bounceRate": 0,
+          "avgDurationMs": 0,
+          "conversionRate": 0,
+          "revenuePerVisitor": 0
+        },
+        {
+          "ts": 1792195200000,
+          "visitors": 0,
+          "sessions": 0,
+          "pageviews": 0,
+          "revenue": 0,
+          "orders": 0,
+          "bounceRate": 0,
+          "avgDurationMs": 0,
+          "conversionRate": 0,
+          "revenuePerVisitor": 0
+        },
+        {
+          "ts": 1792281600000,
+          "visitors": 0,
+          "sessions": 0,
+          "pageviews": 0,
+          "revenue": 0,
+          "orders": 0,
+          "bounceRate": 0,
+          "avgDurationMs": 0,
+          "conversionRate": 0,
+          "revenuePerVisitor": 0
+        },
+        {
+          "ts": 1792368000000,
+          "visitors": 0,
+          "sessions": 0,
+          "pageviews": 0,
+          "revenue": 0,
+          "orders": 0,
+          "bounceRate": 0,
+          "avgDurationMs": 0,
+          "conversionRate": 0,
+          "revenuePerVisitor": 0
+        },
+        {
+          "ts": 1792454400000,
+          "visitors": 0,
+          "sessions": 0,
+          "pageviews": 0,
+          "revenue": 0,
+          "orders": 0,
+          "bounceRate": 0,
+          "avgDurationMs": 0,
+          "conversionRate": 0,
+          "revenuePerVisitor": 0
+        },
+        {
+          "ts": 1792540800000,
+          "visitors": 0,
+          "sessions": 0,
+          "pageviews": 0,
+          "revenue": 0,
+          "orders": 0,
+          "bounceRate": 0,
+          "avgDurationMs": 0,
+          "conversionRate": 0,
+          "revenuePerVisitor": 0
+        },
+        {
+          "ts": 1792627200000,
+          "visitors": 0,
+          "sessions": 0,
+          "pageviews": 0,
+          "revenue": 0,
+          "orders": 0,
+          "bounceRate": 0,
+          "avgDurationMs": 0,
+          "conversionRate": 0,
+          "revenuePerVisitor": 0
+        },
+        {
+          "ts": 1792713600000,
+          "visitors": 0,
+          "sessions": 0,
+          "pageviews": 0,
+          "revenue": 0,
+          "orders": 0,
+          "bounceRate": 0,
+          "avgDurationMs": 0,
+          "conversionRate": 0,
+          "revenuePerVisitor": 0
+        },
+        {
+          "ts": 1792800000000,
+          "visitors": 0,
+          "sessions": 0,
+          "pageviews": 0,
+          "revenue": 0,
+          "orders": 0,
+          "bounceRate": 0,
+          "avgDurationMs": 0,
+          "conversionRate": 0,
+          "revenuePerVisitor": 0
+        },
+        {
+          "ts": 1792886400000,
+          "visitors": 0,
+          "sessions": 0,
+          "pageviews": 0,
+          "revenue": 0,
+          "orders": 0,
+          "bounceRate": 0,
+          "avgDurationMs": 0,
+          "conversionRate": 0,
+          "revenuePerVisitor": 0
+        },
+        {
+          "ts": 1792972800000,
+          "visitors": 0,
+          "sessions": 0,
+          "pageviews": 0,
+          "revenue": 0,
+          "orders": 0,
+          "bounceRate": 0,
+          "avgDurationMs": 0,
+          "conversionRate": 0,
+          "revenuePerVisitor": 0
+        },
+        {
+          "ts": 1793059200000,
+          "visitors": 0,
+          "sessions": 0,
+          "pageviews": 0,
+          "revenue": 0,
+          "orders": 0,
+          "bounceRate": 0,
+          "avgDurationMs": 0,
+          "conversionRate": 0,
+          "revenuePerVisitor": 0
+        },
+        {
+          "ts": 1793145600000,
+          "visitors": 0,
+          "sessions": 0,
+          "pageviews": 0,
+          "revenue": 0,
+          "orders": 0,
+          "bounceRate": 0,
+          "avgDurationMs": 0,
+          "conversionRate": 0,
+          "revenuePerVisitor": 0
+        },
+        {
+          "ts": 1793232000000,
+          "visitors": 0,
+          "sessions": 0,
+          "pageviews": 0,
+          "revenue": 0,
+          "orders": 0,
+          "bounceRate": 0,
+          "avgDurationMs": 0,
+          "conversionRate": 0,
+          "revenuePerVisitor": 0
+        },
+        {
+          "ts": 1793318400000,
+          "visitors": 0,
+          "sessions": 0,
+          "pageviews": 0,
+          "revenue": 0,
+          "orders": 0,
+          "bounceRate": 0,
+          "avgDurationMs": 0,
+          "conversionRate": 0,
+          "revenuePerVisitor": 0
+        },
+        {
+          "ts": 1793404800000,
+          "visitors": 0,
+          "sessions": 0,
+          "pageviews": 0,
+          "revenue": 0,
+          "orders": 0,
+          "bounceRate": 0,
+          "avgDurationMs": 0,
+          "conversionRate": 0,
+          "revenuePerVisitor": 0
+        },
+        {
+          "ts": 1793491200000,
+          "visitors": 0,
+          "sessions": 0,
+          "pageviews": 0,
+          "revenue": 0,
+          "orders": 0,
+          "bounceRate": 0,
+          "avgDurationMs": 0,
+          "conversionRate": 0,
+          "revenuePerVisitor": 0
+        },
+        {
+          "ts": 1793577600000,
+          "visitors": 0,
+          "sessions": 0,
+          "pageviews": 0,
+          "revenue": 0,
+          "orders": 0,
+          "bounceRate": 0,
+          "avgDurationMs": 0,
+          "conversionRate": 0,
+          "revenuePerVisitor": 0
+        },
+        {
+          "ts": 1793664000000,
+          "visitors": 0,
+          "sessions": 0,
+          "pageviews": 0,
+          "revenue": 0,
+          "orders": 0,
+          "bounceRate": 0,
+          "avgDurationMs": 0,
+          "conversionRate": 0,
+          "revenuePerVisitor": 0
+        },
+        {
+          "ts": 1793750400000,
+          "visitors": 0,
+          "sessions": 0,
+          "pageviews": 0,
+          "revenue": 0,
+          "orders": 0,
+          "bounceRate": 0,
+          "avgDurationMs": 0,
+          "conversionRate": 0,
+          "revenuePerVisitor": 0
+        },
+        {
+          "ts": 1793836800000,
+          "visitors": 0,
+          "sessions": 0,
+          "pageviews": 0,
+          "revenue": 0,
+          "orders": 0,
+          "bounceRate": 0,
+          "avgDurationMs": 0,
+          "conversionRate": 0,
+          "revenuePerVisitor": 0
+        },
+        {
+          "ts": 1793923200000,
+          "visitors": 0,
+          "sessions": 0,
+          "pageviews": 0,
+          "revenue": 0,
+          "orders": 0,
+          "bounceRate": 0,
+          "avgDurationMs": 0,
+          "conversionRate": 0,
+          "revenuePerVisitor": 0
+        },
+        {
+          "ts": 1794009600000,
+          "visitors": 0,
+          "sessions": 0,
+          "pageviews": 0,
+          "revenue": 0,
+          "orders": 0,
+          "bounceRate": 0,
+          "avgDurationMs": 0,
+          "conversionRate": 0,
+          "revenuePerVisitor": 0
+        },
+        {
+          "ts": 1794096000000,
+          "visitors": 0,
+          "sessions": 0,
+          "pageviews": 0,
+          "revenue": 0,
+          "orders": 0,
+          "bounceRate": 0,
+          "avgDurationMs": 0,
+          "conversionRate": 0,
+          "revenuePerVisitor": 0
+        },
+        {
+          "ts": 1794182400000,
+          "visitors": 0,
+          "sessions": 0,
+          "pageviews": 61,
+          "revenue": 0,
+          "orders": 0,
+          "bounceRate": 0,
+          "avgDurationMs": 0,
+          "conversionRate": 0,
+          "revenuePerVisitor": 0
+        }
+      ],
+      "pages": [
+        {
+          "key": "/",
+          "pageviews": 61,
+          "revenue": 0,
+          "orders": 0,
+          "conversionRate": null
+        }
+      ],
+      "referrers": [
+        {
+          "key": "",
+          "pageviews": 61,
+          "revenue": 0,
+          "orders": 0,
+          "conversionRate": null
+        }
+      ],
+      "from": 1791676800000,
+      "to": 1794234912980,
+      "timeZone": "UTC"
+    },
+    "pageviews": 61,
+    "passed": true,
+    "finalState": {
+      "oom": false,
+      "exit": 0,
+      "running": true
+    },
+    "hostUptimeAfter": "15:35:13 up  5:13,  1 user,  load average: 3.81, 3.63, 3.37"
+  },
+  {
+    "name": "current-n100000-cpu1-mem1g-r3",
+    "cpu": 1,
+    "memory": "1g",
+    "repetition": 3,
+    "started": "2026-11-09T14:35:13.097Z",
+    "hostUptimeBefore": "15:35:13 up  5:13,  1 user,  load average: 3.81, 3.63, 3.37",
+    "limits": {
+      "nanoCpus": 1000000000,
+      "memory": 1073741824,
+      "swap": 1073741824
+    },
+    "startupMs": 15417,
+    "startupResources": "{\"BlockIO\":\"0B / 1.33MB\",\"CPUPerc\":\"0.57%\",\"Container\":\"a61efffa1a2612f0420ba5ef0427776ee28828554e4447f5f3f5a1ee5f2e1372\",\"ID\":\"a61efffa1a26\",\"MemPerc\":\"9.27%\",\"MemUsage\":\"94.9MiB / 1GiB\",\"Name\":\"openletter-perf-1794233915178-559648-app-1\",\"NetIO\":\"1.98kB / 1.61kB\",\"PIDs\":\"12\"}",
+    "smtpVerified": true,
+    "cpuBefore": "usage_usec 2655799\nuser_usec 2048759\nsystem_usec 607039\nnice_usec 0\nnr_periods 129\nnr_throttled 14\nthrottled_usec 1025992\nnr_bursts 0\nburst_usec 0\n",
+    "loadMs": 59605,
+    "k6Exit": 0,
+    "cpuAfter": "usage_usec 10636919\nuser_usec 8480835\nsystem_usec 2156083\nnice_usec 0\nnr_periods 766\nnr_throttled 14\nthrottled_usec 1025992\nnr_bursts 0\nburst_usec 0\n",
+    "endLoadResources": "{\"BlockIO\":\"0B / 15.3MB\",\"CPUPerc\":\"7.97%\",\"Container\":\"a61efffa1a2612f0420ba5ef0427776ee28828554e4447f5f3f5a1ee5f2e1372\",\"ID\":\"a61efffa1a26\",\"MemPerc\":\"12.98%\",\"MemUsage\":\"132.9MiB / 1GiB\",\"Name\":\"openletter-perf-1794233915178-559648-app-1\",\"NetIO\":\"1.38MB / 69.5MB\",\"PIDs\":\"9\"}",
+    "expectedPageviews": 61,
+    "drainMs": 4426,
+    "work": {
+      "signers": 100061,
+      "newSigners": 61,
+      "pending": 0,
+      "dead": 0,
+      "attempts": [
+        {
+          "status": "delivered",
+          "n": 71
+        }
+      ],
+      "campaigns": [
+        {
+          "id": 1,
+          "status": "sent",
+          "sent_count": 10,
+          "recipient_count": 10
+        }
+      ],
+      "recipients": [
+        1,
+        3,
+        4,
+        5,
+        6,
+        7,
+        9,
+        12,
+        13,
+        14
+      ],
+      "templateId": 5,
+      "databaseBytes": 56971264
+    },
+    "mailpitMessages": 71,
+    "accepted": 61,
+    "state": {
+      "oom": false,
+      "running": true,
+      "restarts": 0
+    },
+    "memoryPeakBytes": 276742144,
+    "memoryEvents": "low 0\nhigh 0\nmax 0\noom 0\noom_kill 0\noom_group_kill 0",
+    "statistics": {
+      "mode": "builtin",
+      "revision": 2,
+      "series": [
+        {
+          "ts": 1791676800000,
+          "visitors": 0,
+          "sessions": 0,
+          "pageviews": 0,
+          "revenue": 0,
+          "orders": 0,
+          "bounceRate": 0,
+          "avgDurationMs": 0,
+          "conversionRate": 0,
+          "revenuePerVisitor": 0
+        },
+        {
+          "ts": 1791763200000,
+          "visitors": 0,
+          "sessions": 0,
+          "pageviews": 0,
+          "revenue": 0,
+          "orders": 0,
+          "bounceRate": 0,
+          "avgDurationMs": 0,
+          "conversionRate": 0,
+          "revenuePerVisitor": 0
+        },
+        {
+          "ts": 1791849600000,
+          "visitors": 0,
+          "sessions": 0,
+          "pageviews": 0,
+          "revenue": 0,
+          "orders": 0,
+          "bounceRate": 0,
+          "avgDurationMs": 0,
+          "conversionRate": 0,
+          "revenuePerVisitor": 0
+        },
+        {
+          "ts": 1791936000000,
+          "visitors": 0,
+          "sessions": 0,
+          "pageviews": 0,
+          "revenue": 0,
+          "orders": 0,
+          "bounceRate": 0,
+          "avgDurationMs": 0,
+          "conversionRate": 0,
+          "revenuePerVisitor": 0
+        },
+        {
+          "ts": 1792022400000,
+          "visitors": 0,
+          "sessions": 0,
+          "pageviews": 0,
+          "revenue": 0,
+          "orders": 0,
+          "bounceRate": 0,
+          "avgDurationMs": 0,
+          "conversionRate": 0,
+          "revenuePerVisitor": 0
+        },
+        {
+          "ts": 1792108800000,
+          "visitors": 0,
+          "sessions": 0,
+          "pageviews": 0,
+          "revenue": 0,
+          "orders": 0,
+          "bounceRate": 0,
+          "avgDurationMs": 0,
+          "conversionRate": 0,
+          "revenuePerVisitor": 0
+        },
+        {
+          "ts": 1792195200000,
+          "visitors": 0,
+          "sessions": 0,
+          "pageviews": 0,
+          "revenue": 0,
+          "orders": 0,
+          "bounceRate": 0,
+          "avgDurationMs": 0,
+          "conversionRate": 0,
+          "revenuePerVisitor": 0
+        },
+        {
+          "ts": 1792281600000,
+          "visitors": 0,
+          "sessions": 0,
+          "pageviews": 0,
+          "revenue": 0,
+          "orders": 0,
+          "bounceRate": 0,
+          "avgDurationMs": 0,
+          "conversionRate": 0,
+          "revenuePerVisitor": 0
+        },
+        {
+          "ts": 1792368000000,
+          "visitors": 0,
+          "sessions": 0,
+          "pageviews": 0,
+          "revenue": 0,
+          "orders": 0,
+          "bounceRate": 0,
+          "avgDurationMs": 0,
+          "conversionRate": 0,
+          "revenuePerVisitor": 0
+        },
+        {
+          "ts": 1792454400000,
+          "visitors": 0,
+          "sessions": 0,
+          "pageviews": 0,
+          "revenue": 0,
+          "orders": 0,
+          "bounceRate": 0,
+          "avgDurationMs": 0,
+          "conversionRate": 0,
+          "revenuePerVisitor": 0
+        },
+        {
+          "ts": 1792540800000,
+          "visitors": 0,
+          "sessions": 0,
+          "pageviews": 0,
+          "revenue": 0,
+          "orders": 0,
+          "bounceRate": 0,
+          "avgDurationMs": 0,
+          "conversionRate": 0,
+          "revenuePerVisitor": 0
+        },
+        {
+          "ts": 1792627200000,
+          "visitors": 0,
+          "sessions": 0,
+          "pageviews": 0,
+          "revenue": 0,
+          "orders": 0,
+          "bounceRate": 0,
+          "avgDurationMs": 0,
+          "conversionRate": 0,
+          "revenuePerVisitor": 0
+        },
+        {
+          "ts": 1792713600000,
+          "visitors": 0,
+          "sessions": 0,
+          "pageviews": 0,
+          "revenue": 0,
+          "orders": 0,
+          "bounceRate": 0,
+          "avgDurationMs": 0,
+          "conversionRate": 0,
+          "revenuePerVisitor": 0
+        },
+        {
+          "ts": 1792800000000,
+          "visitors": 0,
+          "sessions": 0,
+          "pageviews": 0,
+          "revenue": 0,
+          "orders": 0,
+          "bounceRate": 0,
+          "avgDurationMs": 0,
+          "conversionRate": 0,
+          "revenuePerVisitor": 0
+        },
+        {
+          "ts": 1792886400000,
+          "visitors": 0,
+          "sessions": 0,
+          "pageviews": 0,
+          "revenue": 0,
+          "orders": 0,
+          "bounceRate": 0,
+          "avgDurationMs": 0,
+          "conversionRate": 0,
+          "revenuePerVisitor": 0
+        },
+        {
+          "ts": 1792972800000,
+          "visitors": 0,
+          "sessions": 0,
+          "pageviews": 0,
+          "revenue": 0,
+          "orders": 0,
+          "bounceRate": 0,
+          "avgDurationMs": 0,
+          "conversionRate": 0,
+          "revenuePerVisitor": 0
+        },
+        {
+          "ts": 1793059200000,
+          "visitors": 0,
+          "sessions": 0,
+          "pageviews": 0,
+          "revenue": 0,
+          "orders": 0,
+          "bounceRate": 0,
+          "avgDurationMs": 0,
+          "conversionRate": 0,
+          "revenuePerVisitor": 0
+        },
+        {
+          "ts": 1793145600000,
+          "visitors": 0,
+          "sessions": 0,
+          "pageviews": 0,
+          "revenue": 0,
+          "orders": 0,
+          "bounceRate": 0,
+          "avgDurationMs": 0,
+          "conversionRate": 0,
+          "revenuePerVisitor": 0
+        },
+        {
+          "ts": 1793232000000,
+          "visitors": 0,
+          "sessions": 0,
+          "pageviews": 0,
+          "revenue": 0,
+          "orders": 0,
+          "bounceRate": 0,
+          "avgDurationMs": 0,
+          "conversionRate": 0,
+          "revenuePerVisitor": 0
+        },
+        {
+          "ts": 1793318400000,
+          "visitors": 0,
+          "sessions": 0,
+          "pageviews": 0,
+          "revenue": 0,
+          "orders": 0,
+          "bounceRate": 0,
+          "avgDurationMs": 0,
+          "conversionRate": 0,
+          "revenuePerVisitor": 0
+        },
+        {
+          "ts": 1793404800000,
+          "visitors": 0,
+          "sessions": 0,
+          "pageviews": 0,
+          "revenue": 0,
+          "orders": 0,
+          "bounceRate": 0,
+          "avgDurationMs": 0,
+          "conversionRate": 0,
+          "revenuePerVisitor": 0
+        },
+        {
+          "ts": 1793491200000,
+          "visitors": 0,
+          "sessions": 0,
+          "pageviews": 0,
+          "revenue": 0,
+          "orders": 0,
+          "bounceRate": 0,
+          "avgDurationMs": 0,
+          "conversionRate": 0,
+          "revenuePerVisitor": 0
+        },
+        {
+          "ts": 1793577600000,
+          "visitors": 0,
+          "sessions": 0,
+          "pageviews": 0,
+          "revenue": 0,
+          "orders": 0,
+          "bounceRate": 0,
+          "avgDurationMs": 0,
+          "conversionRate": 0,
+          "revenuePerVisitor": 0
+        },
+        {
+          "ts": 1793664000000,
+          "visitors": 0,
+          "sessions": 0,
+          "pageviews": 0,
+          "revenue": 0,
+          "orders": 0,
+          "bounceRate": 0,
+          "avgDurationMs": 0,
+          "conversionRate": 0,
+          "revenuePerVisitor": 0
+        },
+        {
+          "ts": 1793750400000,
+          "visitors": 0,
+          "sessions": 0,
+          "pageviews": 0,
+          "revenue": 0,
+          "orders": 0,
+          "bounceRate": 0,
+          "avgDurationMs": 0,
+          "conversionRate": 0,
+          "revenuePerVisitor": 0
+        },
+        {
+          "ts": 1793836800000,
+          "visitors": 0,
+          "sessions": 0,
+          "pageviews": 0,
+          "revenue": 0,
+          "orders": 0,
+          "bounceRate": 0,
+          "avgDurationMs": 0,
+          "conversionRate": 0,
+          "revenuePerVisitor": 0
+        },
+        {
+          "ts": 1793923200000,
+          "visitors": 0,
+          "sessions": 0,
+          "pageviews": 0,
+          "revenue": 0,
+          "orders": 0,
+          "bounceRate": 0,
+          "avgDurationMs": 0,
+          "conversionRate": 0,
+          "revenuePerVisitor": 0
+        },
+        {
+          "ts": 1794009600000,
+          "visitors": 0,
+          "sessions": 0,
+          "pageviews": 0,
+          "revenue": 0,
+          "orders": 0,
+          "bounceRate": 0,
+          "avgDurationMs": 0,
+          "conversionRate": 0,
+          "revenuePerVisitor": 0
+        },
+        {
+          "ts": 1794096000000,
+          "visitors": 0,
+          "sessions": 0,
+          "pageviews": 0,
+          "revenue": 0,
+          "orders": 0,
+          "bounceRate": 0,
+          "avgDurationMs": 0,
+          "conversionRate": 0,
+          "revenuePerVisitor": 0
+        },
+        {
+          "ts": 1794182400000,
+          "visitors": 0,
+          "sessions": 0,
+          "pageviews": 61,
+          "revenue": 0,
+          "orders": 0,
+          "bounceRate": 0,
+          "avgDurationMs": 0,
+          "conversionRate": 0,
+          "revenuePerVisitor": 0
+        }
+      ],
+      "pages": [
+        {
+          "key": "/",
+          "pageviews": 61,
+          "revenue": 0,
+          "orders": 0,
+          "conversionRate": null
+        }
+      ],
+      "referrers": [
+        {
+          "key": "",
+          "pageviews": 61,
+          "revenue": 0,
+          "orders": 0,
+          "conversionRate": null
+        }
+      ],
+      "from": 1791676800000,
+      "to": 1794235003429,
+      "timeZone": "UTC"
+    },
+    "pageviews": 61,
+    "passed": true,
+    "finalState": {
+      "oom": false,
+      "exit": 0,
+      "running": true
+    },
+    "hostUptimeAfter": "15:36:43 up  5:15,  1 user,  load average: 2.73, 3.41, 3.32"
+  },
+  {
+    "name": "current-n100000-cpu1-mem512m-r4",
+    "cpu": 1,
+    "memory": "512m",
+    "repetition": 4,
+    "started": "2026-11-09T14:36:43.558Z",
+    "hostUptimeBefore": "15:36:43 up  5:15,  1 user,  load average: 2.73, 3.41, 3.32",
+    "limits": {
+      "nanoCpus": 1000000000,
+      "memory": 536870912,
+      "swap": 536870912
+    },
+    "startupMs": 7632,
+    "startupResources": "{\"BlockIO\":\"0B / 1.33MB\",\"CPUPerc\":\"0.48%\",\"Container\":\"79bdd6836c5167fba46b3f3bfcebf5211ece077a047b424b3c3950408b548ee1\",\"ID\":\"79bdd6836c51\",\"MemPerc\":\"18.69%\",\"MemUsage\":\"95.7MiB / 512MiB\",\"Name\":\"openletter-perf-1794233915178-559648-app-1\",\"NetIO\":\"1.42kB / 1.24kB\",\"PIDs\":\"13\"}",
+    "smtpVerified": true,
+    "cpuBefore": "usage_usec 2609112\nuser_usec 2019838\nsystem_usec 589273\nnice_usec 0\nnr_periods 84\nnr_throttled 15\nthrottled_usec 959440\nnr_bursts 0\nburst_usec 0\n",
+    "loadMs": 58742,
+    "k6Exit": 0,
+    "cpuAfter": "usage_usec 10120486\nuser_usec 8012052\nsystem_usec 2108434\nnice_usec 0\nnr_periods 720\nnr_throttled 15\nthrottled_usec 959440\nnr_bursts 0\nburst_usec 0\n",
+    "endLoadResources": "{\"BlockIO\":\"0B / 14.8MB\",\"CPUPerc\":\"2.23%\",\"Container\":\"79bdd6836c5167fba46b3f3bfcebf5211ece077a047b424b3c3950408b548ee1\",\"ID\":\"79bdd6836c51\",\"MemPerc\":\"27.46%\",\"MemUsage\":\"140.6MiB / 512MiB\",\"Name\":\"openletter-perf-1794233915178-559648-app-1\",\"NetIO\":\"1.36MB / 69.5MB\",\"PIDs\":\"8\"}",
+    "expectedPageviews": 61,
+    "drainMs": 6635,
+    "work": {
+      "signers": 100061,
+      "newSigners": 61,
+      "pending": 0,
+      "dead": 0,
+      "attempts": [
+        {
+          "status": "delivered",
+          "n": 71
+        }
+      ],
+      "campaigns": [
+        {
+          "id": 1,
+          "status": "sent",
+          "sent_count": 10,
+          "recipient_count": 10
+        }
+      ],
+      "recipients": [
+        1,
+        3,
+        4,
+        5,
+        6,
+        7,
+        9,
+        12,
+        13,
+        14
+      ],
+      "templateId": 5,
+      "databaseBytes": 56963072
+    },
+    "mailpitMessages": 71,
+    "accepted": 61,
+    "state": {
+      "oom": false,
+      "running": true,
+      "restarts": 0
+    },
+    "memoryPeakBytes": 269160448,
+    "memoryEvents": "low 0\nhigh 0\nmax 0\noom 0\noom_kill 0\noom_group_kill 0",
+    "statistics": {
+      "mode": "builtin",
+      "revision": 2,
+      "series": [
+        {
+          "ts": 1791676800000,
+          "visitors": 0,
+          "sessions": 0,
+          "pageviews": 0,
+          "revenue": 0,
+          "orders": 0,
+          "bounceRate": 0,
+          "avgDurationMs": 0,
+          "conversionRate": 0,
+          "revenuePerVisitor": 0
+        },
+        {
+          "ts": 1791763200000,
+          "visitors": 0,
+          "sessions": 0,
+          "pageviews": 0,
+          "revenue": 0,
+          "orders": 0,
+          "bounceRate": 0,
+          "avgDurationMs": 0,
+          "conversionRate": 0,
+          "revenuePerVisitor": 0
+        },
+        {
+          "ts": 1791849600000,
+          "visitors": 0,
+          "sessions": 0,
+          "pageviews": 0,
+          "revenue": 0,
+          "orders": 0,
+          "bounceRate": 0,
+          "avgDurationMs": 0,
+          "conversionRate": 0,
+          "revenuePerVisitor": 0
+        },
+        {
+          "ts": 1791936000000,
+          "visitors": 0,
+          "sessions": 0,
+          "pageviews": 0,
+          "revenue": 0,
+          "orders": 0,
+          "bounceRate": 0,
+          "avgDurationMs": 0,
+          "conversionRate": 0,
+          "revenuePerVisitor": 0
+        },
+        {
+          "ts": 1792022400000,
+          "visitors": 0,
+          "sessions": 0,
+          "pageviews": 0,
+          "revenue": 0,
+          "orders": 0,
+          "bounceRate": 0,
+          "avgDurationMs": 0,
+          "conversionRate": 0,
+          "revenuePerVisitor": 0
+        },
+        {
+          "ts": 1792108800000,
+          "visitors": 0,
+          "sessions": 0,
+          "pageviews": 0,
+          "revenue": 0,
+          "orders": 0,
+          "bounceRate": 0,
+          "avgDurationMs": 0,
+          "conversionRate": 0,
+          "revenuePerVisitor": 0
+        },
+        {
+          "ts": 1792195200000,
+          "visitors": 0,
+          "sessions": 0,
+          "pageviews": 0,
+          "revenue": 0,
+          "orders": 0,
+          "bounceRate": 0,
+          "avgDurationMs": 0,
+          "conversionRate": 0,
+          "revenuePerVisitor": 0
+        },
+        {
+          "ts": 1792281600000,
+          "visitors": 0,
+          "sessions": 0,
+          "pageviews": 0,
+          "revenue": 0,
+          "orders": 0,
+          "bounceRate": 0,
+          "avgDurationMs": 0,
+          "conversionRate": 0,
+          "revenuePerVisitor": 0
+        },
+        {
+          "ts": 1792368000000,
+          "visitors": 0,
+          "sessions": 0,
+          "pageviews": 0,
+          "revenue": 0,
+          "orders": 0,
+          "bounceRate": 0,
+          "avgDurationMs": 0,
+          "conversionRate": 0,
+          "revenuePerVisitor": 0
+        },
+        {
+          "ts": 1792454400000,
+          "visitors": 0,
+          "sessions": 0,
+          "pageviews": 0,
+          "revenue": 0,
+          "orders": 0,
+          "bounceRate": 0,
+          "avgDurationMs": 0,
+          "conversionRate": 0,
+          "revenuePerVisitor": 0
+        },
+        {
+          "ts": 1792540800000,
+          "visitors": 0,
+          "sessions": 0,
+          "pageviews": 0,
+          "revenue": 0,
+          "orders": 0,
+          "bounceRate": 0,
+          "avgDurationMs": 0,
+          "conversionRate": 0,
+          "revenuePerVisitor": 0
+        },
+        {
+          "ts": 1792627200000,
+          "visitors": 0,
+          "sessions": 0,
+          "pageviews": 0,
+          "revenue": 0,
+          "orders": 0,
+          "bounceRate": 0,
+          "avgDurationMs": 0,
+          "conversionRate": 0,
+          "revenuePerVisitor": 0
+        },
+        {
+          "ts": 1792713600000,
+          "visitors": 0,
+          "sessions": 0,
+          "pageviews": 0,
+          "revenue": 0,
+          "orders": 0,
+          "bounceRate": 0,
+          "avgDurationMs": 0,
+          "conversionRate": 0,
+          "revenuePerVisitor": 0
+        },
+        {
+          "ts": 1792800000000,
+          "visitors": 0,
+          "sessions": 0,
+          "pageviews": 0,
+          "revenue": 0,
+          "orders": 0,
+          "bounceRate": 0,
+          "avgDurationMs": 0,
+          "conversionRate": 0,
+          "revenuePerVisitor": 0
+        },
+        {
+          "ts": 1792886400000,
+          "visitors": 0,
+          "sessions": 0,
+          "pageviews": 0,
+          "revenue": 0,
+          "orders": 0,
+          "bounceRate": 0,
+          "avgDurationMs": 0,
+          "conversionRate": 0,
+          "revenuePerVisitor": 0
+        },
+        {
+          "ts": 1792972800000,
+          "visitors": 0,
+          "sessions": 0,
+          "pageviews": 0,
+          "revenue": 0,
+          "orders": 0,
+          "bounceRate": 0,
+          "avgDurationMs": 0,
+          "conversionRate": 0,
+          "revenuePerVisitor": 0
+        },
+        {
+          "ts": 1793059200000,
+          "visitors": 0,
+          "sessions": 0,
+          "pageviews": 0,
+          "revenue": 0,
+          "orders": 0,
+          "bounceRate": 0,
+          "avgDurationMs": 0,
+          "conversionRate": 0,
+          "revenuePerVisitor": 0
+        },
+        {
+          "ts": 1793145600000,
+          "visitors": 0,
+          "sessions": 0,
+          "pageviews": 0,
+          "revenue": 0,
+          "orders": 0,
+          "bounceRate": 0,
+          "avgDurationMs": 0,
+          "conversionRate": 0,
+          "revenuePerVisitor": 0
+        },
+        {
+          "ts": 1793232000000,
+          "visitors": 0,
+          "sessions": 0,
+          "pageviews": 0,
+          "revenue": 0,
+          "orders": 0,
+          "bounceRate": 0,
+          "avgDurationMs": 0,
+          "conversionRate": 0,
+          "revenuePerVisitor": 0
+        },
+        {
+          "ts": 1793318400000,
+          "visitors": 0,
+          "sessions": 0,
+          "pageviews": 0,
+          "revenue": 0,
+          "orders": 0,
+          "bounceRate": 0,
+          "avgDurationMs": 0,
+          "conversionRate": 0,
+          "revenuePerVisitor": 0
+        },
+        {
+          "ts": 1793404800000,
+          "visitors": 0,
+          "sessions": 0,
+          "pageviews": 0,
+          "revenue": 0,
+          "orders": 0,
+          "bounceRate": 0,
+          "avgDurationMs": 0,
+          "conversionRate": 0,
+          "revenuePerVisitor": 0
+        },
+        {
+          "ts": 1793491200000,
+          "visitors": 0,
+          "sessions": 0,
+          "pageviews": 0,
+          "revenue": 0,
+          "orders": 0,
+          "bounceRate": 0,
+          "avgDurationMs": 0,
+          "conversionRate": 0,
+          "revenuePerVisitor": 0
+        },
+        {
+          "ts": 1793577600000,
+          "visitors": 0,
+          "sessions": 0,
+          "pageviews": 0,
+          "revenue": 0,
+          "orders": 0,
+          "bounceRate": 0,
+          "avgDurationMs": 0,
+          "conversionRate": 0,
+          "revenuePerVisitor": 0
+        },
+        {
+          "ts": 1793664000000,
+          "visitors": 0,
+          "sessions": 0,
+          "pageviews": 0,
+          "revenue": 0,
+          "orders": 0,
+          "bounceRate": 0,
+          "avgDurationMs": 0,
+          "conversionRate": 0,
+          "revenuePerVisitor": 0
+        },
+        {
+          "ts": 1793750400000,
+          "visitors": 0,
+          "sessions": 0,
+          "pageviews": 0,
+          "revenue": 0,
+          "orders": 0,
+          "bounceRate": 0,
+          "avgDurationMs": 0,
+          "conversionRate": 0,
+          "revenuePerVisitor": 0
+        },
+        {
+          "ts": 1793836800000,
+          "visitors": 0,
+          "sessions": 0,
+          "pageviews": 0,
+          "revenue": 0,
+          "orders": 0,
+          "bounceRate": 0,
+          "avgDurationMs": 0,
+          "conversionRate": 0,
+          "revenuePerVisitor": 0
+        },
+        {
+          "ts": 1793923200000,
+          "visitors": 0,
+          "sessions": 0,
+          "pageviews": 0,
+          "revenue": 0,
+          "orders": 0,
+          "bounceRate": 0,
+          "avgDurationMs": 0,
+          "conversionRate": 0,
+          "revenuePerVisitor": 0
+        },
+        {
+          "ts": 1794009600000,
+          "visitors": 0,
+          "sessions": 0,
+          "pageviews": 0,
+          "revenue": 0,
+          "orders": 0,
+          "bounceRate": 0,
+          "avgDurationMs": 0,
+          "conversionRate": 0,
+          "revenuePerVisitor": 0
+        },
+        {
+          "ts": 1794096000000,
+          "visitors": 0,
+          "sessions": 0,
+          "pageviews": 0,
+          "revenue": 0,
+          "orders": 0,
+          "bounceRate": 0,
+          "avgDurationMs": 0,
+          "conversionRate": 0,
+          "revenuePerVisitor": 0
+        },
+        {
+          "ts": 1794182400000,
+          "visitors": 0,
+          "sessions": 0,
+          "pageviews": 61,
+          "revenue": 0,
+          "orders": 0,
+          "bounceRate": 0,
+          "avgDurationMs": 0,
+          "conversionRate": 0,
+          "revenuePerVisitor": 0
+        }
+      ],
+      "pages": [
+        {
+          "key": "/",
+          "pageviews": 61,
+          "revenue": 0,
+          "orders": 0,
+          "conversionRate": null
+        }
+      ],
+      "referrers": [
+        {
+          "key": "",
+          "pageviews": 61,
+          "revenue": 0,
+          "orders": 0,
+          "conversionRate": null
+        }
+      ],
+      "from": 1791676800000,
+      "to": 1794235087220,
+      "timeZone": "UTC"
+    },
+    "pageviews": 61,
+    "passed": true,
+    "finalState": {
+      "oom": false,
+      "exit": 0,
+      "running": true
+    },
+    "hostUptimeAfter": "15:38:07 up  5:16,  1 user,  load average: 2.80, 3.28, 3.28"
+  },
+  {
+    "name": "current-n100000-cpu1-mem1g-r4",
+    "cpu": 1,
+    "memory": "1g",
+    "repetition": 4,
+    "started": "2026-11-09T14:38:07.340Z",
+    "hostUptimeBefore": "15:38:07 up  5:16,  1 user,  load average: 2.80, 3.28, 3.28",
+    "limits": {
+      "nanoCpus": 1000000000,
+      "memory": 1073741824,
+      "swap": 1073741824
+    },
+    "startupMs": 6824,
+    "startupResources": "{\"BlockIO\":\"0B / 1.33MB\",\"CPUPerc\":\"0.49%\",\"Container\":\"be5b189b41fa2aa6734ec7091374d03b03e2a4741a86f89e430bf295b0ed07df\",\"ID\":\"be5b189b41fa\",\"MemPerc\":\"9.03%\",\"MemUsage\":\"92.51MiB / 1GiB\",\"Name\":\"openletter-perf-1794233915178-559648-app-1\",\"NetIO\":\"1.54kB / 1.34kB\",\"PIDs\":\"13\"}",
+    "smtpVerified": true,
+    "cpuBefore": "usage_usec 2725912\nuser_usec 2127093\nsystem_usec 598819\nnice_usec 0\nnr_periods 86\nnr_throttled 14\nthrottled_usec 964303\nnr_bursts 0\nburst_usec 0\n",
+    "loadMs": 59377,
+    "k6Exit": 0,
+    "cpuAfter": "usage_usec 10093820\nuser_usec 7938556\nsystem_usec 2155264\nnice_usec 0\nnr_periods 719\nnr_throttled 14\nthrottled_usec 964303\nnr_bursts 0\nburst_usec 0\n",
+    "endLoadResources": "{\"BlockIO\":\"0B / 15.3MB\",\"CPUPerc\":\"7.25%\",\"Container\":\"be5b189b41fa2aa6734ec7091374d03b03e2a4741a86f89e430bf295b0ed07df\",\"ID\":\"be5b189b41fa\",\"MemPerc\":\"14.04%\",\"MemUsage\":\"143.8MiB / 1GiB\",\"Name\":\"openletter-perf-1794233915178-559648-app-1\",\"NetIO\":\"1.37MB / 68.3MB\",\"PIDs\":\"8\"}",
+    "expectedPageviews": 60,
+    "drainMs": 2754,
+    "work": {
+      "signers": 100061,
+      "newSigners": 61,
+      "pending": 0,
+      "dead": 0,
+      "attempts": [
+        {
+          "status": "delivered",
+          "n": 71
+        }
+      ],
+      "campaigns": [
+        {
+          "id": 1,
+          "status": "sent",
+          "sent_count": 10,
+          "recipient_count": 10
+        }
+      ],
+      "recipients": [
+        1,
+        3,
+        4,
+        5,
+        6,
+        7,
+        9,
+        12,
+        13,
+        14
+      ],
+      "templateId": 5,
+      "databaseBytes": 56963072
+    },
+    "mailpitMessages": 71,
+    "accepted": 61,
+    "state": {
+      "oom": false,
+      "running": true,
+      "restarts": 0
+    },
+    "memoryPeakBytes": 271114240,
+    "memoryEvents": "low 0\nhigh 0\nmax 0\noom 0\noom_kill 0\noom_group_kill 0",
+    "statistics": {
+      "mode": "builtin",
+      "revision": 2,
+      "series": [
+        {
+          "ts": 1791676800000,
+          "visitors": 0,
+          "sessions": 0,
+          "pageviews": 0,
+          "revenue": 0,
+          "orders": 0,
+          "bounceRate": 0,
+          "avgDurationMs": 0,
+          "conversionRate": 0,
+          "revenuePerVisitor": 0
+        },
+        {
+          "ts": 1791763200000,
+          "visitors": 0,
+          "sessions": 0,
+          "pageviews": 0,
+          "revenue": 0,
+          "orders": 0,
+          "bounceRate": 0,
+          "avgDurationMs": 0,
+          "conversionRate": 0,
+          "revenuePerVisitor": 0
+        },
+        {
+          "ts": 1791849600000,
+          "visitors": 0,
+          "sessions": 0,
+          "pageviews": 0,
+          "revenue": 0,
+          "orders": 0,
+          "bounceRate": 0,
+          "avgDurationMs": 0,
+          "conversionRate": 0,
+          "revenuePerVisitor": 0
+        },
+        {
+          "ts": 1791936000000,
+          "visitors": 0,
+          "sessions": 0,
+          "pageviews": 0,
+          "revenue": 0,
+          "orders": 0,
+          "bounceRate": 0,
+          "avgDurationMs": 0,
+          "conversionRate": 0,
+          "revenuePerVisitor": 0
+        },
+        {
+          "ts": 1792022400000,
+          "visitors": 0,
+          "sessions": 0,
+          "pageviews": 0,
+          "revenue": 0,
+          "orders": 0,
+          "bounceRate": 0,
+          "avgDurationMs": 0,
+          "conversionRate": 0,
+          "revenuePerVisitor": 0
+        },
+        {
+          "ts": 1792108800000,
+          "visitors": 0,
+          "sessions": 0,
+          "pageviews": 0,
+          "revenue": 0,
+          "orders": 0,
+          "bounceRate": 0,
+          "avgDurationMs": 0,
+          "conversionRate": 0,
+          "revenuePerVisitor": 0
+        },
+        {
+          "ts": 1792195200000,
+          "visitors": 0,
+          "sessions": 0,
+          "pageviews": 0,
+          "revenue": 0,
+          "orders": 0,
+          "bounceRate": 0,
+          "avgDurationMs": 0,
+          "conversionRate": 0,
+          "revenuePerVisitor": 0
+        },
+        {
+          "ts": 1792281600000,
+          "visitors": 0,
+          "sessions": 0,
+          "pageviews": 0,
+          "revenue": 0,
+          "orders": 0,
+          "bounceRate": 0,
+          "avgDurationMs": 0,
+          "conversionRate": 0,
+          "revenuePerVisitor": 0
+        },
+        {
+          "ts": 1792368000000,
+          "visitors": 0,
+          "sessions": 0,
+          "pageviews": 0,
+          "revenue": 0,
+          "orders": 0,
+          "bounceRate": 0,
+          "avgDurationMs": 0,
+          "conversionRate": 0,
+          "revenuePerVisitor": 0
+        },
+        {
+          "ts": 1792454400000,
+          "visitors": 0,
+          "sessions": 0,
+          "pageviews": 0,
+          "revenue": 0,
+          "orders": 0,
+          "bounceRate": 0,
+          "avgDurationMs": 0,
+          "conversionRate": 0,
+          "revenuePerVisitor": 0
+        },
+        {
+          "ts": 1792540800000,
+          "visitors": 0,
+          "sessions": 0,
+          "pageviews": 0,
+          "revenue": 0,
+          "orders": 0,
+          "bounceRate": 0,
+          "avgDurationMs": 0,
+          "conversionRate": 0,
+          "revenuePerVisitor": 0
+        },
+        {
+          "ts": 1792627200000,
+          "visitors": 0,
+          "sessions": 0,
+          "pageviews": 0,
+          "revenue": 0,
+          "orders": 0,
+          "bounceRate": 0,
+          "avgDurationMs": 0,
+          "conversionRate": 0,
+          "revenuePerVisitor": 0
+        },
+        {
+          "ts": 1792713600000,
+          "visitors": 0,
+          "sessions": 0,
+          "pageviews": 0,
+          "revenue": 0,
+          "orders": 0,
+          "bounceRate": 0,
+          "avgDurationMs": 0,
+          "conversionRate": 0,
+          "revenuePerVisitor": 0
+        },
+        {
+          "ts": 1792800000000,
+          "visitors": 0,
+          "sessions": 0,
+          "pageviews": 0,
+          "revenue": 0,
+          "orders": 0,
+          "bounceRate": 0,
+          "avgDurationMs": 0,
+          "conversionRate": 0,
+          "revenuePerVisitor": 0
+        },
+        {
+          "ts": 1792886400000,
+          "visitors": 0,
+          "sessions": 0,
+          "pageviews": 0,
+          "revenue": 0,
+          "orders": 0,
+          "bounceRate": 0,
+          "avgDurationMs": 0,
+          "conversionRate": 0,
+          "revenuePerVisitor": 0
+        },
+        {
+          "ts": 1792972800000,
+          "visitors": 0,
+          "sessions": 0,
+          "pageviews": 0,
+          "revenue": 0,
+          "orders": 0,
+          "bounceRate": 0,
+          "avgDurationMs": 0,
+          "conversionRate": 0,
+          "revenuePerVisitor": 0
+        },
+        {
+          "ts": 1793059200000,
+          "visitors": 0,
+          "sessions": 0,
+          "pageviews": 0,
+          "revenue": 0,
+          "orders": 0,
+          "bounceRate": 0,
+          "avgDurationMs": 0,
+          "conversionRate": 0,
+          "revenuePerVisitor": 0
+        },
+        {
+          "ts": 1793145600000,
+          "visitors": 0,
+          "sessions": 0,
+          "pageviews": 0,
+          "revenue": 0,
+          "orders": 0,
+          "bounceRate": 0,
+          "avgDurationMs": 0,
+          "conversionRate": 0,
+          "revenuePerVisitor": 0
+        },
+        {
+          "ts": 1793232000000,
+          "visitors": 0,
+          "sessions": 0,
+          "pageviews": 0,
+          "revenue": 0,
+          "orders": 0,
+          "bounceRate": 0,
+          "avgDurationMs": 0,
+          "conversionRate": 0,
+          "revenuePerVisitor": 0
+        },
+        {
+          "ts": 1793318400000,
+          "visitors": 0,
+          "sessions": 0,
+          "pageviews": 0,
+          "revenue": 0,
+          "orders": 0,
+          "bounceRate": 0,
+          "avgDurationMs": 0,
+          "conversionRate": 0,
+          "revenuePerVisitor": 0
+        },
+        {
+          "ts": 1793404800000,
+          "visitors": 0,
+          "sessions": 0,
+          "pageviews": 0,
+          "revenue": 0,
+          "orders": 0,
+          "bounceRate": 0,
+          "avgDurationMs": 0,
+          "conversionRate": 0,
+          "revenuePerVisitor": 0
+        },
+        {
+          "ts": 1793491200000,
+          "visitors": 0,
+          "sessions": 0,
+          "pageviews": 0,
+          "revenue": 0,
+          "orders": 0,
+          "bounceRate": 0,
+          "avgDurationMs": 0,
+          "conversionRate": 0,
+          "revenuePerVisitor": 0
+        },
+        {
+          "ts": 1793577600000,
+          "visitors": 0,
+          "sessions": 0,
+          "pageviews": 0,
+          "revenue": 0,
+          "orders": 0,
+          "bounceRate": 0,
+          "avgDurationMs": 0,
+          "conversionRate": 0,
+          "revenuePerVisitor": 0
+        },
+        {
+          "ts": 1793664000000,
+          "visitors": 0,
+          "sessions": 0,
+          "pageviews": 0,
+          "revenue": 0,
+          "orders": 0,
+          "bounceRate": 0,
+          "avgDurationMs": 0,
+          "conversionRate": 0,
+          "revenuePerVisitor": 0
+        },
+        {
+          "ts": 1793750400000,
+          "visitors": 0,
+          "sessions": 0,
+          "pageviews": 0,
+          "revenue": 0,
+          "orders": 0,
+          "bounceRate": 0,
+          "avgDurationMs": 0,
+          "conversionRate": 0,
+          "revenuePerVisitor": 0
+        },
+        {
+          "ts": 1793836800000,
+          "visitors": 0,
+          "sessions": 0,
+          "pageviews": 0,
+          "revenue": 0,
+          "orders": 0,
+          "bounceRate": 0,
+          "avgDurationMs": 0,
+          "conversionRate": 0,
+          "revenuePerVisitor": 0
+        },
+        {
+          "ts": 1793923200000,
+          "visitors": 0,
+          "sessions": 0,
+          "pageviews": 0,
+          "revenue": 0,
+          "orders": 0,
+          "bounceRate": 0,
+          "avgDurationMs": 0,
+          "conversionRate": 0,
+          "revenuePerVisitor": 0
+        },
+        {
+          "ts": 1794009600000,
+          "visitors": 0,
+          "sessions": 0,
+          "pageviews": 0,
+          "revenue": 0,
+          "orders": 0,
+          "bounceRate": 0,
+          "avgDurationMs": 0,
+          "conversionRate": 0,
+          "revenuePerVisitor": 0
+        },
+        {
+          "ts": 1794096000000,
+          "visitors": 0,
+          "sessions": 0,
+          "pageviews": 0,
+          "revenue": 0,
+          "orders": 0,
+          "bounceRate": 0,
+          "avgDurationMs": 0,
+          "conversionRate": 0,
+          "revenuePerVisitor": 0
+        },
+        {
+          "ts": 1794182400000,
+          "visitors": 0,
+          "sessions": 0,
+          "pageviews": 60,
+          "revenue": 0,
+          "orders": 0,
+          "bounceRate": 0,
+          "avgDurationMs": 0,
+          "conversionRate": 0,
+          "revenuePerVisitor": 0
+        }
+      ],
+      "pages": [
+        {
+          "key": "/",
+          "pageviews": 60,
+          "revenue": 0,
+          "orders": 0,
+          "conversionRate": null
+        }
+      ],
+      "referrers": [
+        {
+          "key": "",
+          "pageviews": 60,
+          "revenue": 0,
+          "orders": 0,
+          "conversionRate": null
+        }
+      ],
+      "from": 1791676800000,
+      "to": 1794235167089,
+      "timeZone": "UTC"
+    },
+    "pageviews": 60,
+    "passed": true,
+    "finalState": {
+      "oom": false,
+      "exit": 0,
+      "running": true
+    },
+    "hostUptimeAfter": "15:39:27 up  5:18,  1 user,  load average: 1.85, 2.82, 3.12"
+  },
+  {
+    "name": "current-n100000-cpu1-mem512m-r5",
+    "cpu": 1,
+    "memory": "512m",
+    "repetition": 5,
+    "started": "2026-11-09T14:39:27.217Z",
+    "hostUptimeBefore": "15:39:27 up  5:18,  1 user,  load average: 1.85, 2.82, 3.12",
+    "limits": {
+      "nanoCpus": 1000000000,
+      "memory": 536870912,
+      "swap": 536870912
+    },
+    "startupMs": 6908,
+    "startupResources": "{\"BlockIO\":\"24.6kB / 1.33MB\",\"CPUPerc\":\"0.56%\",\"Container\":\"1cc2fe55c803a6addc1731e4126f73e8bde4135c855f0307d432f49983d0a6c1\",\"ID\":\"1cc2fe55c803\",\"MemPerc\":\"18.40%\",\"MemUsage\":\"94.2MiB / 512MiB\",\"Name\":\"openletter-perf-1794233915178-559648-app-1\",\"NetIO\":\"1.54kB / 1.34kB\",\"PIDs\":\"13\"}",
+    "smtpVerified": true,
+    "cpuBefore": "usage_usec 2848062\nuser_usec 2159720\nsystem_usec 688342\nnice_usec 0\nnr_periods 101\nnr_throttled 15\nthrottled_usec 1050553\nnr_bursts 0\nburst_usec 0\n",
+    "loadMs": 59648,
+    "k6Exit": 0,
+    "cpuAfter": "usage_usec 11351425\nuser_usec 9043217\nsystem_usec 2308208\nnice_usec 0\nnr_periods 739\nnr_throttled 15\nthrottled_usec 1050553\nnr_bursts 0\nburst_usec 0\n",
+    "endLoadResources": "{\"BlockIO\":\"4.12MB / 15.1MB\",\"CPUPerc\":\"2.13%\",\"Container\":\"1cc2fe55c803a6addc1731e4126f73e8bde4135c855f0307d432f49983d0a6c1\",\"ID\":\"1cc2fe55c803\",\"MemPerc\":\"29.35%\",\"MemUsage\":\"150.3MiB / 512MiB\",\"Name\":\"openletter-perf-1794233915178-559648-app-1\",\"NetIO\":\"1.36MB / 68.4MB\",\"PIDs\":\"8\"}",
+    "expectedPageviews": 60,
+    "drainMs": 4268,
+    "work": {
+      "signers": 100061,
+      "newSigners": 61,
+      "pending": 0,
+      "dead": 0,
+      "attempts": [
+        {
+          "status": "delivered",
+          "n": 71
+        }
+      ],
+      "campaigns": [
+        {
+          "id": 1,
+          "status": "sent",
+          "sent_count": 10,
+          "recipient_count": 10
+        }
+      ],
+      "recipients": [
+        1,
+        3,
+        4,
+        5,
+        6,
+        7,
+        9,
+        12,
+        13,
+        14
+      ],
+      "templateId": 5,
+      "databaseBytes": 56967168
+    },
+    "mailpitMessages": 71,
+    "accepted": 61,
+    "state": {
+      "oom": false,
+      "running": true,
+      "restarts": 0
+    },
+    "memoryPeakBytes": 269017088,
+    "memoryEvents": "low 0\nhigh 0\nmax 0\noom 0\noom_kill 0\noom_group_kill 0",
+    "statistics": {
+      "mode": "builtin",
+      "revision": 2,
+      "series": [
+        {
+          "ts": 1791676800000,
+          "visitors": 0,
+          "sessions": 0,
+          "pageviews": 0,
+          "revenue": 0,
+          "orders": 0,
+          "bounceRate": 0,
+          "avgDurationMs": 0,
+          "conversionRate": 0,
+          "revenuePerVisitor": 0
+        },
+        {
+          "ts": 1791763200000,
+          "visitors": 0,
+          "sessions": 0,
+          "pageviews": 0,
+          "revenue": 0,
+          "orders": 0,
+          "bounceRate": 0,
+          "avgDurationMs": 0,
+          "conversionRate": 0,
+          "revenuePerVisitor": 0
+        },
+        {
+          "ts": 1791849600000,
+          "visitors": 0,
+          "sessions": 0,
+          "pageviews": 0,
+          "revenue": 0,
+          "orders": 0,
+          "bounceRate": 0,
+          "avgDurationMs": 0,
+          "conversionRate": 0,
+          "revenuePerVisitor": 0
+        },
+        {
+          "ts": 1791936000000,
+          "visitors": 0,
+          "sessions": 0,
+          "pageviews": 0,
+          "revenue": 0,
+          "orders": 0,
+          "bounceRate": 0,
+          "avgDurationMs": 0,
+          "conversionRate": 0,
+          "revenuePerVisitor": 0
+        },
+        {
+          "ts": 1792022400000,
+          "visitors": 0,
+          "sessions": 0,
+          "pageviews": 0,
+          "revenue": 0,
+          "orders": 0,
+          "bounceRate": 0,
+          "avgDurationMs": 0,
+          "conversionRate": 0,
+          "revenuePerVisitor": 0
+        },
+        {
+          "ts": 1792108800000,
+          "visitors": 0,
+          "sessions": 0,
+          "pageviews": 0,
+          "revenue": 0,
+          "orders": 0,
+          "bounceRate": 0,
+          "avgDurationMs": 0,
+          "conversionRate": 0,
+          "revenuePerVisitor": 0
+        },
+        {
+          "ts": 1792195200000,
+          "visitors": 0,
+          "sessions": 0,
+          "pageviews": 0,
+          "revenue": 0,
+          "orders": 0,
+          "bounceRate": 0,
+          "avgDurationMs": 0,
+          "conversionRate": 0,
+          "revenuePerVisitor": 0
+        },
+        {
+          "ts": 1792281600000,
+          "visitors": 0,
+          "sessions": 0,
+          "pageviews": 0,
+          "revenue": 0,
+          "orders": 0,
+          "bounceRate": 0,
+          "avgDurationMs": 0,
+          "conversionRate": 0,
+          "revenuePerVisitor": 0
+        },
+        {
+          "ts": 1792368000000,
+          "visitors": 0,
+          "sessions": 0,
+          "pageviews": 0,
+          "revenue": 0,
+          "orders": 0,
+          "bounceRate": 0,
+          "avgDurationMs": 0,
+          "conversionRate": 0,
+          "revenuePerVisitor": 0
+        },
+        {
+          "ts": 1792454400000,
+          "visitors": 0,
+          "sessions": 0,
+          "pageviews": 0,
+          "revenue": 0,
+          "orders": 0,
+          "bounceRate": 0,
+          "avgDurationMs": 0,
+          "conversionRate": 0,
+          "revenuePerVisitor": 0
+        },
+        {
+          "ts": 1792540800000,
+          "visitors": 0,
+          "sessions": 0,
+          "pageviews": 0,
+          "revenue": 0,
+          "orders": 0,
+          "bounceRate": 0,
+          "avgDurationMs": 0,
+          "conversionRate": 0,
+          "revenuePerVisitor": 0
+        },
+        {
+          "ts": 1792627200000,
+          "visitors": 0,
+          "sessions": 0,
+          "pageviews": 0,
+          "revenue": 0,
+          "orders": 0,
+          "bounceRate": 0,
+          "avgDurationMs": 0,
+          "conversionRate": 0,
+          "revenuePerVisitor": 0
+        },
+        {
+          "ts": 1792713600000,
+          "visitors": 0,
+          "sessions": 0,
+          "pageviews": 0,
+          "revenue": 0,
+          "orders": 0,
+          "bounceRate": 0,
+          "avgDurationMs": 0,
+          "conversionRate": 0,
+          "revenuePerVisitor": 0
+        },
+        {
+          "ts": 1792800000000,
+          "visitors": 0,
+          "sessions": 0,
+          "pageviews": 0,
+          "revenue": 0,
+          "orders": 0,
+          "bounceRate": 0,
+          "avgDurationMs": 0,
+          "conversionRate": 0,
+          "revenuePerVisitor": 0
+        },
+        {
+          "ts": 1792886400000,
+          "visitors": 0,
+          "sessions": 0,
+          "pageviews": 0,
+          "revenue": 0,
+          "orders": 0,
+          "bounceRate": 0,
+          "avgDurationMs": 0,
+          "conversionRate": 0,
+          "revenuePerVisitor": 0
+        },
+        {
+          "ts": 1792972800000,
+          "visitors": 0,
+          "sessions": 0,
+          "pageviews": 0,
+          "revenue": 0,
+          "orders": 0,
+          "bounceRate": 0,
+          "avgDurationMs": 0,
+          "conversionRate": 0,
+          "revenuePerVisitor": 0
+        },
+        {
+          "ts": 1793059200000,
+          "visitors": 0,
+          "sessions": 0,
+          "pageviews": 0,
+          "revenue": 0,
+          "orders": 0,
+          "bounceRate": 0,
+          "avgDurationMs": 0,
+          "conversionRate": 0,
+          "revenuePerVisitor": 0
+        },
+        {
+          "ts": 1793145600000,
+          "visitors": 0,
+          "sessions": 0,
+          "pageviews": 0,
+          "revenue": 0,
+          "orders": 0,
+          "bounceRate": 0,
+          "avgDurationMs": 0,
+          "conversionRate": 0,
+          "revenuePerVisitor": 0
+        },
+        {
+          "ts": 1793232000000,
+          "visitors": 0,
+          "sessions": 0,
+          "pageviews": 0,
+          "revenue": 0,
+          "orders": 0,
+          "bounceRate": 0,
+          "avgDurationMs": 0,
+          "conversionRate": 0,
+          "revenuePerVisitor": 0
+        },
+        {
+          "ts": 1793318400000,
+          "visitors": 0,
+          "sessions": 0,
+          "pageviews": 0,
+          "revenue": 0,
+          "orders": 0,
+          "bounceRate": 0,
+          "avgDurationMs": 0,
+          "conversionRate": 0,
+          "revenuePerVisitor": 0
+        },
+        {
+          "ts": 1793404800000,
+          "visitors": 0,
+          "sessions": 0,
+          "pageviews": 0,
+          "revenue": 0,
+          "orders": 0,
+          "bounceRate": 0,
+          "avgDurationMs": 0,
+          "conversionRate": 0,
+          "revenuePerVisitor": 0
+        },
+        {
+          "ts": 1793491200000,
+          "visitors": 0,
+          "sessions": 0,
+          "pageviews": 0,
+          "revenue": 0,
+          "orders": 0,
+          "bounceRate": 0,
+          "avgDurationMs": 0,
+          "conversionRate": 0,
+          "revenuePerVisitor": 0
+        },
+        {
+          "ts": 1793577600000,
+          "visitors": 0,
+          "sessions": 0,
+          "pageviews": 0,
+          "revenue": 0,
+          "orders": 0,
+          "bounceRate": 0,
+          "avgDurationMs": 0,
+          "conversionRate": 0,
+          "revenuePerVisitor": 0
+        },
+        {
+          "ts": 1793664000000,
+          "visitors": 0,
+          "sessions": 0,
+          "pageviews": 0,
+          "revenue": 0,
+          "orders": 0,
+          "bounceRate": 0,
+          "avgDurationMs": 0,
+          "conversionRate": 0,
+          "revenuePerVisitor": 0
+        },
+        {
+          "ts": 1793750400000,
+          "visitors": 0,
+          "sessions": 0,
+          "pageviews": 0,
+          "revenue": 0,
+          "orders": 0,
+          "bounceRate": 0,
+          "avgDurationMs": 0,
+          "conversionRate": 0,
+          "revenuePerVisitor": 0
+        },
+        {
+          "ts": 1793836800000,
+          "visitors": 0,
+          "sessions": 0,
+          "pageviews": 0,
+          "revenue": 0,
+          "orders": 0,
+          "bounceRate": 0,
+          "avgDurationMs": 0,
+          "conversionRate": 0,
+          "revenuePerVisitor": 0
+        },
+        {
+          "ts": 1793923200000,
+          "visitors": 0,
+          "sessions": 0,
+          "pageviews": 0,
+          "revenue": 0,
+          "orders": 0,
+          "bounceRate": 0,
+          "avgDurationMs": 0,
+          "conversionRate": 0,
+          "revenuePerVisitor": 0
+        },
+        {
+          "ts": 1794009600000,
+          "visitors": 0,
+          "sessions": 0,
+          "pageviews": 0,
+          "revenue": 0,
+          "orders": 0,
+          "bounceRate": 0,
+          "avgDurationMs": 0,
+          "conversionRate": 0,
+          "revenuePerVisitor": 0
+        },
+        {
+          "ts": 1794096000000,
+          "visitors": 0,
+          "sessions": 0,
+          "pageviews": 0,
+          "revenue": 0,
+          "orders": 0,
+          "bounceRate": 0,
+          "avgDurationMs": 0,
+          "conversionRate": 0,
+          "revenuePerVisitor": 0
+        },
+        {
+          "ts": 1794182400000,
+          "visitors": 0,
+          "sessions": 0,
+          "pageviews": 60,
+          "revenue": 0,
+          "orders": 0,
+          "bounceRate": 0,
+          "avgDurationMs": 0,
+          "conversionRate": 0,
+          "revenuePerVisitor": 0
+        }
+      ],
+      "pages": [
+        {
+          "key": "/",
+          "pageviews": 60,
+          "revenue": 0,
+          "orders": 0,
+          "conversionRate": null
+        }
+      ],
+      "referrers": [
+        {
+          "key": "",
+          "pageviews": 60,
+          "revenue": 0,
+          "orders": 0,
+          "conversionRate": null
+        }
+      ],
+      "from": 1791676800000,
+      "to": 1794235250559,
+      "timeZone": "UTC"
+    },
+    "pageviews": 60,
+    "passed": true,
+    "finalState": {
+      "oom": false,
+      "exit": 0,
+      "running": true
+    },
+    "hostUptimeAfter": "15:40:50 up  5:19,  1 user,  load average: 2.27, 2.68, 3.03"
+  },
+  {
+    "name": "current-n100000-cpu1-mem1g-r5",
+    "cpu": 1,
+    "memory": "1g",
+    "repetition": 5,
+    "started": "2026-11-09T14:40:50.683Z",
+    "hostUptimeBefore": "15:40:50 up  5:19,  1 user,  load average: 2.27, 2.68, 3.03",
+    "limits": {
+      "nanoCpus": 1000000000,
+      "memory": 1073741824,
+      "swap": 1073741824
+    },
+    "startupMs": 8492,
+    "startupResources": "{\"BlockIO\":\"225kB / 1.33MB\",\"CPUPerc\":\"0.50%\",\"Container\":\"60594d08047aabdb37257e82695145a9780bdf03e77ecc78cd50e3fdcc005952\",\"ID\":\"60594d08047a\",\"MemPerc\":\"9.63%\",\"MemUsage\":\"98.62MiB / 1GiB\",\"Name\":\"openletter-perf-1794233915178-559648-app-1\",\"NetIO\":\"1.54kB / 1.34kB\",\"PIDs\":\"13\"}",
+    "smtpVerified": true,
+    "cpuBefore": "usage_usec 2760141\nuser_usec 2250352\nsystem_usec 509788\nnice_usec 0\nnr_periods 97\nnr_throttled 14\nthrottled_usec 1023610\nnr_bursts 0\nburst_usec 0\n",
+    "loadMs": 58405,
+    "k6Exit": 0,
+    "cpuAfter": "usage_usec 11196905\nuser_usec 9217810\nsystem_usec 1979095\nnice_usec 0\nnr_periods 733\nnr_throttled 14\nthrottled_usec 1023610\nnr_bursts 0\nburst_usec 0\n",
+    "endLoadResources": "{\"BlockIO\":\"225kB / 15.2MB\",\"CPUPerc\":\"2.03%\",\"Container\":\"60594d08047aabdb37257e82695145a9780bdf03e77ecc78cd50e3fdcc005952\",\"ID\":\"60594d08047a\",\"MemPerc\":\"14.32%\",\"MemUsage\":\"146.6MiB / 1GiB\",\"Name\":\"openletter-perf-1794233915178-559648-app-1\",\"NetIO\":\"1.38MB / 69.5MB\",\"PIDs\":\"8\"}",
+    "expectedPageviews": 61,
+    "drainMs": 1476,
+    "work": {
+      "signers": 100060,
+      "newSigners": 60,
+      "pending": 0,
+      "dead": 0,
+      "attempts": [
+        {
+          "status": "delivered",
+          "n": 70
+        }
+      ],
+      "campaigns": [
+        {
+          "id": 1,
+          "status": "sent",
+          "sent_count": 10,
+          "recipient_count": 10
+        }
+      ],
+      "recipients": [
+        1,
+        3,
+        4,
+        5,
+        6,
+        7,
+        9,
+        12,
+        13,
+        14
+      ],
+      "templateId": 5,
+      "databaseBytes": 56971264
+    },
+    "mailpitMessages": 70,
+    "accepted": 60,
+    "state": {
+      "oom": false,
+      "running": true,
+      "restarts": 0
+    },
+    "memoryPeakBytes": 269385728,
+    "memoryEvents": "low 0\nhigh 0\nmax 0\noom 0\noom_kill 0\noom_group_kill 0",
+    "statistics": {
+      "mode": "builtin",
+      "revision": 2,
+      "series": [
+        {
+          "ts": 1791676800000,
+          "visitors": 0,
+          "sessions": 0,
+          "pageviews": 0,
+          "revenue": 0,
+          "orders": 0,
+          "bounceRate": 0,
+          "avgDurationMs": 0,
+          "conversionRate": 0,
+          "revenuePerVisitor": 0
+        },
+        {
+          "ts": 1791763200000,
+          "visitors": 0,
+          "sessions": 0,
+          "pageviews": 0,
+          "revenue": 0,
+          "orders": 0,
+          "bounceRate": 0,
+          "avgDurationMs": 0,
+          "conversionRate": 0,
+          "revenuePerVisitor": 0
+        },
+        {
+          "ts": 1791849600000,
+          "visitors": 0,
+          "sessions": 0,
+          "pageviews": 0,
+          "revenue": 0,
+          "orders": 0,
+          "bounceRate": 0,
+          "avgDurationMs": 0,
+          "conversionRate": 0,
+          "revenuePerVisitor": 0
+        },
+        {
+          "ts": 1791936000000,
+          "visitors": 0,
+          "sessions": 0,
+          "pageviews": 0,
+          "revenue": 0,
+          "orders": 0,
+          "bounceRate": 0,
+          "avgDurationMs": 0,
+          "conversionRate": 0,
+          "revenuePerVisitor": 0
+        },
+        {
+          "ts": 1792022400000,
+          "visitors": 0,
+          "sessions": 0,
+          "pageviews": 0,
+          "revenue": 0,
+          "orders": 0,
+          "bounceRate": 0,
+          "avgDurationMs": 0,
+          "conversionRate": 0,
+          "revenuePerVisitor": 0
+        },
+        {
+          "ts": 1792108800000,
+          "visitors": 0,
+          "sessions": 0,
+          "pageviews": 0,
+          "revenue": 0,
+          "orders": 0,
+          "bounceRate": 0,
+          "avgDurationMs": 0,
+          "conversionRate": 0,
+          "revenuePerVisitor": 0
+        },
+        {
+          "ts": 1792195200000,
+          "visitors": 0,
+          "sessions": 0,
+          "pageviews": 0,
+          "revenue": 0,
+          "orders": 0,
+          "bounceRate": 0,
+          "avgDurationMs": 0,
+          "conversionRate": 0,
+          "revenuePerVisitor": 0
+        },
+        {
+          "ts": 1792281600000,
+          "visitors": 0,
+          "sessions": 0,
+          "pageviews": 0,
+          "revenue": 0,
+          "orders": 0,
+          "bounceRate": 0,
+          "avgDurationMs": 0,
+          "conversionRate": 0,
+          "revenuePerVisitor": 0
+        },
+        {
+          "ts": 1792368000000,
+          "visitors": 0,
+          "sessions": 0,
+          "pageviews": 0,
+          "revenue": 0,
+          "orders": 0,
+          "bounceRate": 0,
+          "avgDurationMs": 0,
+          "conversionRate": 0,
+          "revenuePerVisitor": 0
+        },
+        {
+          "ts": 1792454400000,
+          "visitors": 0,
+          "sessions": 0,
+          "pageviews": 0,
+          "revenue": 0,
+          "orders": 0,
+          "bounceRate": 0,
+          "avgDurationMs": 0,
+          "conversionRate": 0,
+          "revenuePerVisitor": 0
+        },
+        {
+          "ts": 1792540800000,
+          "visitors": 0,
+          "sessions": 0,
+          "pageviews": 0,
+          "revenue": 0,
+          "orders": 0,
+          "bounceRate": 0,
+          "avgDurationMs": 0,
+          "conversionRate": 0,
+          "revenuePerVisitor": 0
+        },
+        {
+          "ts": 1792627200000,
+          "visitors": 0,
+          "sessions": 0,
+          "pageviews": 0,
+          "revenue": 0,
+          "orders": 0,
+          "bounceRate": 0,
+          "avgDurationMs": 0,
+          "conversionRate": 0,
+          "revenuePerVisitor": 0
+        },
+        {
+          "ts": 1792713600000,
+          "visitors": 0,
+          "sessions": 0,
+          "pageviews": 0,
+          "revenue": 0,
+          "orders": 0,
+          "bounceRate": 0,
+          "avgDurationMs": 0,
+          "conversionRate": 0,
+          "revenuePerVisitor": 0
+        },
+        {
+          "ts": 1792800000000,
+          "visitors": 0,
+          "sessions": 0,
+          "pageviews": 0,
+          "revenue": 0,
+          "orders": 0,
+          "bounceRate": 0,
+          "avgDurationMs": 0,
+          "conversionRate": 0,
+          "revenuePerVisitor": 0
+        },
+        {
+          "ts": 1792886400000,
+          "visitors": 0,
+          "sessions": 0,
+          "pageviews": 0,
+          "revenue": 0,
+          "orders": 0,
+          "bounceRate": 0,
+          "avgDurationMs": 0,
+          "conversionRate": 0,
+          "revenuePerVisitor": 0
+        },
+        {
+          "ts": 1792972800000,
+          "visitors": 0,
+          "sessions": 0,
+          "pageviews": 0,
+          "revenue": 0,
+          "orders": 0,
+          "bounceRate": 0,
+          "avgDurationMs": 0,
+          "conversionRate": 0,
+          "revenuePerVisitor": 0
+        },
+        {
+          "ts": 1793059200000,
+          "visitors": 0,
+          "sessions": 0,
+          "pageviews": 0,
+          "revenue": 0,
+          "orders": 0,
+          "bounceRate": 0,
+          "avgDurationMs": 0,
+          "conversionRate": 0,
+          "revenuePerVisitor": 0
+        },
+        {
+          "ts": 1793145600000,
+          "visitors": 0,
+          "sessions": 0,
+          "pageviews": 0,
+          "revenue": 0,
+          "orders": 0,
+          "bounceRate": 0,
+          "avgDurationMs": 0,
+          "conversionRate": 0,
+          "revenuePerVisitor": 0
+        },
+        {
+          "ts": 1793232000000,
+          "visitors": 0,
+          "sessions": 0,
+          "pageviews": 0,
+          "revenue": 0,
+          "orders": 0,
+          "bounceRate": 0,
+          "avgDurationMs": 0,
+          "conversionRate": 0,
+          "revenuePerVisitor": 0
+        },
+        {
+          "ts": 1793318400000,
+          "visitors": 0,
+          "sessions": 0,
+          "pageviews": 0,
+          "revenue": 0,
+          "orders": 0,
+          "bounceRate": 0,
+          "avgDurationMs": 0,
+          "conversionRate": 0,
+          "revenuePerVisitor": 0
+        },
+        {
+          "ts": 1793404800000,
+          "visitors": 0,
+          "sessions": 0,
+          "pageviews": 0,
+          "revenue": 0,
+          "orders": 0,
+          "bounceRate": 0,
+          "avgDurationMs": 0,
+          "conversionRate": 0,
+          "revenuePerVisitor": 0
+        },
+        {
+          "ts": 1793491200000,
+          "visitors": 0,
+          "sessions": 0,
+          "pageviews": 0,
+          "revenue": 0,
+          "orders": 0,
+          "bounceRate": 0,
+          "avgDurationMs": 0,
+          "conversionRate": 0,
+          "revenuePerVisitor": 0
+        },
+        {
+          "ts": 1793577600000,
+          "visitors": 0,
+          "sessions": 0,
+          "pageviews": 0,
+          "revenue": 0,
+          "orders": 0,
+          "bounceRate": 0,
+          "avgDurationMs": 0,
+          "conversionRate": 0,
+          "revenuePerVisitor": 0
+        },
+        {
+          "ts": 1793664000000,
+          "visitors": 0,
+          "sessions": 0,
+          "pageviews": 0,
+          "revenue": 0,
+          "orders": 0,
+          "bounceRate": 0,
+          "avgDurationMs": 0,
+          "conversionRate": 0,
+          "revenuePerVisitor": 0
+        },
+        {
+          "ts": 1793750400000,
+          "visitors": 0,
+          "sessions": 0,
+          "pageviews": 0,
+          "revenue": 0,
+          "orders": 0,
+          "bounceRate": 0,
+          "avgDurationMs": 0,
+          "conversionRate": 0,
+          "revenuePerVisitor": 0
+        },
+        {
+          "ts": 1793836800000,
+          "visitors": 0,
+          "sessions": 0,
+          "pageviews": 0,
+          "revenue": 0,
+          "orders": 0,
+          "bounceRate": 0,
+          "avgDurationMs": 0,
+          "conversionRate": 0,
+          "revenuePerVisitor": 0
+        },
+        {
+          "ts": 1793923200000,
+          "visitors": 0,
+          "sessions": 0,
+          "pageviews": 0,
+          "revenue": 0,
+          "orders": 0,
+          "bounceRate": 0,
+          "avgDurationMs": 0,
+          "conversionRate": 0,
+          "revenuePerVisitor": 0
+        },
+        {
+          "ts": 1794009600000,
+          "visitors": 0,
+          "sessions": 0,
+          "pageviews": 0,
+          "revenue": 0,
+          "orders": 0,
+          "bounceRate": 0,
+          "avgDurationMs": 0,
+          "conversionRate": 0,
+          "revenuePerVisitor": 0
+        },
+        {
+          "ts": 1794096000000,
+          "visitors": 0,
+          "sessions": 0,
+          "pageviews": 0,
+          "revenue": 0,
+          "orders": 0,
+          "bounceRate": 0,
+          "avgDurationMs": 0,
+          "conversionRate": 0,
+          "revenuePerVisitor": 0
+        },
+        {
+          "ts": 1794182400000,
+          "visitors": 0,
+          "sessions": 0,
+          "pageviews": 61,
+          "revenue": 0,
+          "orders": 0,
+          "bounceRate": 0,
+          "avgDurationMs": 0,
+          "conversionRate": 0,
+          "revenuePerVisitor": 0
+        }
+      ],
+      "pages": [
+        {
+          "key": "/",
+          "pageviews": 61,
+          "revenue": 0,
+          "orders": 0,
+          "conversionRate": null
+        }
+      ],
+      "referrers": [
+        {
+          "key": "",
+          "pageviews": 61,
+          "revenue": 0,
+          "orders": 0,
+          "conversionRate": null
+        }
+      ],
+      "from": 1791676800000,
+      "to": 1794235329893,
+      "timeZone": "UTC"
+    },
+    "pageviews": 61,
+    "passed": true,
+    "finalState": {
+      "oom": false,
+      "exit": 0,
+      "running": true
+    },
+    "hostUptimeAfter": "15:42:10 up  5:21,  1 user,  load average: 2.21, 2.52, 2.94"
+  }
+]

@@ -1,14 +1,8 @@
 #!/usr/bin/env bash
-# Build the Honker SQLite loadable extension for local development.
-#
-# The extension (durable job queue + scheduler) is NOT committed to git; it is
-# a compiled binary. Run this once after cloning to produce
-# vendor/libhonker_ext.dylib (macOS) or vendor/libhonker_ext.so (Linux), which
-# db/jobs.js loads via HONKER_EXTENSION_PATH. The production Docker image builds
-# the Linux .so itself (see Dockerfile), so this script is for local dev.
-#
-# Requires: git, Rust toolchain (cargo).
-#   HONKER_REF=<branch|tag>  override the source ref (default: main)
+# Build the local Honker queue and scheduler extension. Requires Git and Cargo.
+# Creates vendor/libhonker_ext.dylib on macOS or vendor/libhonker_ext.so on Linux.
+# The compiled library is not committed. Docker builds its own Linux library.
+# HONKER_REF selects a branch or tag and defaults to main.
 set -euo pipefail
 
 REF="${HONKER_REF:-main}"

@@ -1,0 +1,286 @@
+[
+  {
+    "name": "@base-ui/react",
+    "current": "1.9.0",
+    "latest": "1.9.0",
+    "peers": {
+      "react": "^17 || ^18 || ^19",
+      "date-fns": "^4.0.0",
+      "react-dom": "^17 || ^18 || ^19",
+      "@date-fns/tz": "^1.2.0",
+      "@types/react": "^17 || ^18 || ^19"
+    },
+    "engines": {
+      "node": ">=14.0.0"
+    }
+  },
+  {
+    "name": "@codemirror/autocomplete",
+    "current": "^6.20.4",
+    "latest": "6.20.4"
+  },
+  {
+    "name": "@codemirror/commands",
+    "current": "^6.11.1",
+    "latest": "6.11.1"
+  },
+  {
+    "name": "@codemirror/lang-css",
+    "current": "^6.3.1",
+    "latest": "6.3.1"
+  },
+  {
+    "name": "@codemirror/lint",
+    "current": "^6.9.7",
+    "latest": "6.9.7"
+  },
+  {
+    "name": "@codemirror/state",
+    "current": "^6.7.6",
+    "latest": "6.7.6"
+  },
+  {
+    "name": "@codemirror/view",
+    "current": "^6.43.15",
+    "latest": "6.43.15"
+  },
+  {
+    "name": "@fontsource/inter",
+    "current": "^5.3.0",
+    "latest": "5.3.0"
+  },
+  {
+    "name": "@fontsource/work-sans",
+    "current": "^5.3.0",
+    "latest": "5.3.0"
+  },
+  {
+    "name": "@journeyapps/sqlcipher",
+    "current": "^6.0.0",
+    "latest": "6.0.0"
+  },
+  {
+    "name": "@puckeditor/core",
+    "current": "0.24.0",
+    "latest": "0.24.0",
+    "peers": {
+      "react": "^18.0.0 || ^19.0.0"
+    },
+    "engines": {
+      "node": ">=20.0.0"
+    }
+  },
+  {
+    "name": "@tiptap/core",
+    "current": "^3.33.0",
+    "latest": "3.33.0",
+    "peers": {
+      "@tiptap/pm": "3.33.0"
+    }
+  },
+  {
+    "name": "@tiptap/extension-character-count",
+    "current": "^3.33.0",
+    "latest": "3.33.0",
+    "peers": {
+      "@tiptap/extensions": "3.33.0"
+    }
+  },
+  {
+    "name": "@tiptap/extension-link",
+    "current": "^3.33.0",
+    "latest": "3.33.0",
+    "peers": {
+      "@tiptap/pm": "3.33.0",
+      "@tiptap/core": "3.33.0"
+    }
+  },
+  {
+    "name": "@tiptap/extension-placeholder",
+    "current": "^3.33.0",
+    "latest": "3.33.0",
+    "peers": {
+      "@tiptap/extensions": "3.33.0"
+    }
+  },
+  {
+    "name": "@tiptap/extension-underline",
+    "current": "^3.33.0",
+    "latest": "3.33.0",
+    "peers": {
+      "@tiptap/core": "3.33.0"
+    }
+  },
+  {
+    "name": "@tiptap/pm",
+    "current": "^3.33.0",
+    "latest": "3.33.0"
+  },
+  {
+    "name": "@tiptap/react",
+    "current": "^3.33.0",
+    "latest": "3.33.0",
+    "peers": {
+      "react": "^17.0.0 || ^18.0.0 || ^19.0.0",
+      "react-dom": "^17.0.0 || ^18.0.0 || ^19.0.0",
+      "@tiptap/pm": "3.33.0",
+      "@tiptap/core": "3.33.0",
+      "@types/react": "^17.0.0 || ^18.0.0 || ^19.0.0",
+      "@types/react-dom": "^17.0.0 || ^18.0.0 || ^19.0.0"
+    }
+  },
+  {
+    "name": "@tiptap/starter-kit",
+    "current": "^3.33.0",
+    "latest": "3.33.0"
+  },
+  {
+    "name": "analytik",
+    "current": "1.19.0",
+    "latest": "1.22.0",
+    "peers": {
+      "pg": "^8.0.0",
+      "hono": "^4.13.0",
+      "react": "^19.0.0",
+      "motion": "^14.6.0",
+      "postgres": "^3.4.0 || ^4.0.0",
+      "recharts": "^3.10.1",
+      "react-dom": "^19.0.0",
+      "@base-ui/react": "^1.9.0"
+    },
+    "engines": {
+      "node": ">=22.19"
+    }
+  },
+  {
+    "name": "css-tree",
+    "current": "^3.2.1",
+    "latest": "3.2.1",
+    "engines": {
+      "node": "^10 || ^12.20.0 || ^14.13.0 || >=15.0.0"
+    }
+  },
+  {
+    "name": "date-fns",
+    "current": "^4.4.0",
+    "latest": "4.4.0"
+  },
+  {
+    "name": "hono",
+    "current": "^4.13.17",
+    "latest": "4.13.17",
+    "engines": {
+      "node": ">=16.9.0"
+    }
+  },
+  {
+    "name": "jose",
+    "current": "^6.2.12",
+    "latest": "6.2.16"
+  },
+  {
+    "name": "juice",
+    "current": "^11.1.1",
+    "latest": "12.2.1",
+    "engines": {
+      "node": ">=22.12.0"
+    }
+  },
+  {
+    "name": "nodemailer",
+    "current": "^9.1.1",
+    "latest": "10.4.0",
+    "engines": {
+      "node": ">=20.0.0"
+    }
+  },
+  {
+    "name": "postgres",
+    "current": "^3.4.9",
+    "latest": "4.1.0",
+    "engines": {
+      "node": ">=18"
+    }
+  },
+  {
+    "name": "react",
+    "current": "^18.3.1",
+    "latest": "19.3.1",
+    "engines": {
+      "node": ">=0.10.0"
+    }
+  },
+  {
+    "name": "react-day-picker",
+    "current": "^10.0.1",
+    "latest": "10.0.2",
+    "peers": {
+      "react": ">=16.8.0",
+      "@types/react": ">=16.8.0"
+    },
+    "engines": {
+      "node": ">=18"
+    }
+  },
+  {
+    "name": "react-dom",
+    "current": "^18.3.1",
+    "latest": "19.3.1",
+    "peers": {
+      "react": "^19.3.1"
+    }
+  },
+  {
+    "name": "sanitize-html",
+    "current": "^2.18.1",
+    "latest": "2.18.1",
+    "engines": {
+      "node": ">=22.12.0"
+    }
+  },
+  {
+    "name": "satori",
+    "current": "^0.63.2",
+    "latest": "0.63.2",
+    "engines": {
+      "node": ">=16"
+    }
+  },
+  {
+    "name": "sharp",
+    "current": "^0.35.5",
+    "latest": "0.35.5",
+    "engines": {
+      "node": ">=20.9.0"
+    }
+  },
+  {
+    "name": "prettier",
+    "current": "^3.9.10",
+    "latest": "3.9.10",
+    "engines": {
+      "node": ">=14"
+    }
+  },
+  {
+    "name": "puppeteer",
+    "current": "^25.11.0",
+    "latest": "25.16.0",
+    "engines": {
+      "node": ">=22.12.0"
+    }
+  },
+  {
+    "name": "undici",
+    "current": "^6.28.0",
+    "latest": "8.12.4",
+    "engines": {
+      "node": ">=22.19.0"
+    }
+  },
+  {
+    "name": "prosemirror-model",
+    "current": "1.25.12",
+    "latest": "1.25.13"
+  }
+]

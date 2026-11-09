@@ -1,3 +1,4 @@
+import { SelectControl } from "./ui.jsx";
 import { useEffect, useMemo, useState } from "react";
 import cfg, { LANG, DEFAULT_LANG } from "../config/letter.config.js";
 import { fillText } from "../config/ui.js";
@@ -66,8 +67,7 @@ export default function UnsubscribeApp() {
         setState({
           loading: false,
           data: null,
-          error:
-            cfg.ui.settings.offline,
+          error: cfg.ui.settings.offline,
         });
         return;
       }
@@ -106,7 +106,9 @@ export default function UnsubscribeApp() {
       errors.name = cfg.ui.settings.errNameLong;
     }
     if (values.kv.length > 80) {
-      errors.kv = fillText(cfg.ui.settings.errKvLong, { region: region().name });
+      errors.kv = fillText(cfg.ui.settings.errKvLong, {
+        region: region().name,
+      });
     }
     if (values.occupation.length > 80) {
       errors.occupation = cfg.ui.settings.errOccupationLong;
@@ -172,27 +174,19 @@ export default function UnsubscribeApp() {
       });
       if (!res.ok) {
         const payload = await res.json().catch(() => ({}));
-        setResult(
-          payload.error ||
-            cfg.ui.settings.actionFailed,
-        );
+        setResult(payload.error || cfg.ui.settings.actionFailed);
         return;
       }
       const messages = {
-        "newsletter-opt-out":
-          cfg.ui.settings.doneNewsletter,
-        "zoom-opt-out":
-          cfg.ui.settings.doneZoom,
+        "newsletter-opt-out": cfg.ui.settings.doneNewsletter,
+        "zoom-opt-out": cfg.ui.settings.doneZoom,
         all: cfg.ui.settings.doneAll,
-        delete:
-          cfg.ui.settings.doneDelete,
+        delete: cfg.ui.settings.doneDelete,
       };
       setResult(messages[action] || cfg.ui.settings.done);
       setState((current) => ({ ...current, data: null }));
     } catch {
-      setResult(
-        cfg.ui.settings.actionFailedConnection,
-      );
+      setResult(cfg.ui.settings.actionFailedConnection);
     } finally {
       setBusy("");
     }
@@ -258,9 +252,7 @@ export default function UnsubscribeApp() {
                 {d.editable !== false && (d.hasSigner || d.hasZoom) && (
                   <form onSubmit={save} noValidate>
                     <h2>{cfg.ui.settings.detailsHeading}</h2>
-                    <p className="sub2">
-                      {cfg.ui.settings.detailsIntro}
-                    </p>
+                    <p className="sub2">{cfg.ui.settings.detailsIntro}</p>
 
                     {saveError && (
                       <div className="err" role="alert">
@@ -274,7 +266,9 @@ export default function UnsubscribeApp() {
                     )}
 
                     <div className="field">
-                      <label htmlFor="edit-name">{cfg.ui.settings.nameLabel}</label>
+                      <label htmlFor="edit-name">
+                        {cfg.ui.settings.nameLabel}
+                      </label>
                       <input
                         id="edit-name"
                         type="text"
@@ -302,7 +296,7 @@ export default function UnsubscribeApp() {
                         <span className="opt"> {cfg.ui.settings.optional}</span>
                       </label>
                       {region().options ? (
-                        <select
+                        <SelectControl
                           id="edit-kv"
                           value={form.kv}
                           onChange={(e) =>
@@ -320,7 +314,7 @@ export default function UnsubscribeApp() {
                               {o}
                             </option>
                           ))}
-                        </select>
+                        </SelectControl>
                       ) : (
                         <input
                           id="edit-kv"
@@ -396,9 +390,7 @@ export default function UnsubscribeApp() {
                                   }))
                                 }
                               />
-                              <span>
-                                {cfg.ui.settings.inviteShowName}
-                              </span>
+                              <span>{cfg.ui.settings.inviteShowName}</span>
                             </label>
                           )}
                           <label className="check">
@@ -428,9 +420,7 @@ export default function UnsubscribeApp() {
                               }))
                             }
                           />
-                          <span>
-                            {cfg.ui.settings.delegierter}
-                          </span>
+                          <span>{cfg.ui.settings.delegierter}</span>
                         </label>
                       )}
                     </div>
@@ -494,17 +484,13 @@ export default function UnsubscribeApp() {
                   )}
 
                   {!hasOptions && d.hasSigner && (
-                    <p>
-                      {cfg.ui.settings.alreadyUnsubscribed}
-                    </p>
+                    <p>{cfg.ui.settings.alreadyUnsubscribed}</p>
                   )}
                 </div>
 
                 {d.canDeleteSigner && (
                   <div className="form-card-footer">
-                    <p className="sub2">
-                      {cfg.ui.settings.deleteIntro}
-                    </p>
+                    <p className="sub2">{cfg.ui.settings.deleteIntro}</p>
                     <button
                       type="button"
                       className="admin-danger"

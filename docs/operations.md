@@ -1,159 +1,131 @@
 # Operations
 
-## Deployment (Docker / Dokploy)
+## Deployment
 
-The database is a single encrypted SQLite file on a persistent volume; there is
-no separate database service.
+Run one application instance. Its encrypted SQLite database lives on a persistent volume; it needs no separate database service.
 
-### Production
+Set these values in the deployment environment or `.env`:
+
+| Setting                                                                | Value                                                                                                                                                                |
+| ---------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `DATABASE_ENCRYPTION_KEY`                                              | Database key. Generate it with `openssl rand -hex 32`.                                                                                                               |
+| `BACKUP_ENCRYPTION_KEY`                                                | A separate backup key, required in production.                                                                                                                       |
+| `ADMIN_PATH`, `ADMIN_PASSWORD`, `ADMIN_JWT_SECRET`, `API_TOKEN_SECRET` | Admin route and authentication secrets. Use a password of at least 16 characters, a JWT secret of at least 32 characters, and distinct admin/public signing secrets. |
+| `BASE_URL`                                                             | Public URL, such as `https://letter.example.org`.                                                                                                                    |
+| `RESEND_API_KEY`                                                       | Sending key when using Resend. `RESEND_FROM` or `EMAIL_FROM` can override the verified sender.                                                                       |
+| `EMAIL_PROVIDER=smtp` and `SMTP_*`                                     | SMTP provider and connection settings when using SMTP.                                                                                                               |
 
 ```bash
 docker compose up --build
 ```
 
-Set in Dokploy UI or `.env`:
+The `data` volume contains `diaetendeckel.db`; the `backups` volume contains encrypted hourly snapshots. Store their keys separately. Startup runs `db/setup.js`. `/api/health` returns 200 only when the database and durable jobs are ready. It returns 503 during initialization, job failure, or shutdown.
 
-- `DATABASE_ENCRYPTION_KEY`: SQLCipher key (required). Generate: `openssl rand -hex 32`
-- `BACKUP_ENCRYPTION_KEY`: distinct key for backups (required in production)
-- `ADMIN_PATH`, `ADMIN_PASSWORD` (≥ 16 chars), `ADMIN_JWT_SECRET` (≥ 32 chars), `API_TOKEN_SECRET`
-- `BASE_URL`: public URL (e.g. `https://diaetendeckel.example.de`)
-- `RESEND_API_KEY`: Resend API key with send access (when `provider=resend`)
-- `RESEND_FROM` / `EMAIL_FROM`: optional verified sender override
-- For SMTP instead: set `EMAIL_PROVIDER=smtp` + `SMTP_HOST`, `SMTP_PORT`,
-  `SMTP_SECURE`, `SMTP_USER`, `SMTP_PASS`
-
-The `data` volume holds `diaetendeckel.db`; the `backups` volume holds the hourly
-encrypted snapshots. Back up the key separately from both.
-
-### Dev / Demo
+For a local demo:
 
 ```bash
-cp .env.example .env    # compose reads it; the placeholder values work for a demo
+cp .env.example .env
 docker compose -f docker-compose.dev.yml up --build
 ```
 
-This builds the encrypted SQLite database, auto-seeds 200 verified signers, and trickles a new one every 6 seconds. It uses dev defaults for `DATABASE_ENCRYPTION_KEY` / `API_TOKEN_SECRET` when they aren't set.
+The demo creates 200 verified signers and adds another every six seconds. Development defaults supply database and API secrets if they are unset. Use real provider credentials to test email delivery.
 
-In all cases, the app runs `db/setup.js` on startup to ensure the schema exists. Health check at `/api/health` confirms DB connectivity.
+## Commands
 
-## Scripts
+| Command                               | Purpose                                                          |
+| ------------------------------------- | ---------------------------------------------------------------- |
+| `bun run dev`                         | Start development with file watching and hot module replacement. |
+| `bun run start`                       | Start the production server.                                     |
+| `bun run db:setup`                    | Create or update the database schema. Safe to repeat.            |
+| `bun run db:seed`                     | Add 200 demo signers, then one every six seconds.                |
+| `bun run db:migrate`                  | Copy an existing Postgres database into encrypted SQLite.        |
+| `bun run db:restore <file\|--latest>` | Restore an encrypted backup into `DATABASE_PATH`.                |
+| `bun run test`                        | Run the test suite.                                              |
+| `bun run honker:build`                | Build the local Honker SQLite extension.                         |
+| `bun run og`                          | Regenerate `public/og.png` from the running site.                |
 
-| Command            | Description                                       |
-| ------------------ | ------------------------------------------------- |
-| `bun run dev`      | Start dev server with watch mode + HMR            |
-| `bun run start`    | Start production server                           |
-| `bun run db:setup` | Apply database schema (idempotent)                |
-| `bun run db:seed`  | Seed 200 demo signers + trickle new ones every 6s |
-| `bun run db:migrate` | One-time migrate from Postgres (`SOURCE_DATABASE_URL`) into encrypted SQLite |
-| `bun run db:restore <file\|--latest>` | Restore an encrypted backup into `DATABASE_PATH` |
-| `bun run test`     | Run the test suite (`bun test`) |
-| `bun run honker:build` | Build the Honker SQLite extension from source |
-| `bun run og`       | Regenerate `public/og.png` from the running site |
+See [publishing verification](publishing.md#verify-and-restore) for focused and full-application checks.
 
 ## Backups
 
-Hourly backups write a consistent, SQLCipher-encrypted snapshot to `BACKUP_DIR`
-(default `/app/backups`), keeping `BACKUP_KEEP` hours of them (default
-`privacy.backupRetentionHours`, 48). Each snapshot is produced via SQLCipher's `sqlcipher_export()` into an
-ATTACHed keyed file, then gzipped (`.sqlite.gz`). Because the snapshot is itself
-SQLCipher-encrypted, backups are encrypted at rest with no extra step.
+The hourly job writes a consistent SQLCipher snapshot to `BACKUP_DIR`, which defaults to `/app/backups`. It uses `sqlcipher_export()` with a keyed attached database, then compresses the encrypted file as `.sqlite.gz`. `BACKUP_GZIP=false` disables compression.
 
-Backups use `BACKUP_ENCRYPTION_KEY`, which is required in production; in
-development it falls back to `DATABASE_ENCRYPTION_KEY`. **Store the key securely and separately from the backups**:
-without it, a backup cannot be opened.
+`BACKUP_KEEP` sets retention in hours. Its default is `privacy.backupRetentionHours`, normally 48. It cannot exceed the erasure-log retention period. An unsafe override fails startup. Pre-restore copies follow the same retention period.
 
-### Restoring a backup
+Production requires `BACKUP_ENCRYPTION_KEY`. Development falls back to `DATABASE_ENCRYPTION_KEY`. Without the backup key, you cannot open a backup. Store the key separately from the snapshots.
+
+### Restore a backup
+
+Stop the application first. To restore the newest backup:
 
 ```bash
-# Restore the most recent backup (app stopped). Moves any existing DB aside
-# to <path>.pre-restore-<timestamp> first, then verifies row counts. The
-# aside copy is pruned with the backups after BACKUP_KEEP hours.
 DATABASE_PATH=/app/data/diaetendeckel.db DATABASE_ENCRYPTION_KEY=… \
   bun run db:restore --latest
+```
 
-# Or a specific file:
+To restore a named file:
+
+```bash
 bun run db:restore /app/backups/backup-2026-06-09T12-00-00.sqlite.gz
 ```
 
-The restore re-keys the snapshot to `DATABASE_ENCRYPTION_KEY`, so it works even
-if the backup used a separate `BACKUP_ENCRYPTION_KEY`.
+Restoration checks row counts, publication documents, and asset hashes. It moves an existing database to `<path>.pre-restore-<timestamp>` and re-keys the restored data with `DATABASE_ENCRYPTION_KEY`. The backup may use a different key.
 
-A backup predates any deletion or opt-out made after it. So before replacing the
-database, the restore reads its `erasure_log` (an HMAC of the address, what
-happened, and when; kept `privacy.erasureLogDays`) and afterwards re-applies it
-to the restored data: erased addresses are deleted again, newsletter and Treffen
-opt-outs and names taken off the public list are applied again. Rows created
-after the logged event are left alone.
-If the old database can't be read, the restore says so loudly; then re-apply
-those requests by hand before starting the app. Other edits on the settings page
-(name, Kreisverband, occupation) are not logged and are lost with a restore:
-the log holds no personal data to restore them from.
+Before replacement, restoration reads the old database's `erasure_log`. Afterward, it reapplies later erasures, newsletter and meeting opt-outs, and requests to hide names. Erasure covers registrations, pending requests, queued messages, delivery logs, and identifiable send attempts. Rows created after a logged event remain unchanged. The log stores an HMAC of the address, the action, and its time for `privacy.erasureLogDays`.
+
+If the old database cannot be read, restoration reports that it could not recover the log. Reapply those requests before restarting. Other profile edits, such as a changed name, regional affiliation, or occupation, are not in the log and cannot be recovered this way.
+
+Restoration marks email validation stale. Revalidate delivery before releasing waiting mail. Startup rebuilds derived image caches. Browser drafts do not replace database backups.
 
 ## Data retention
 
-Retention periods and link lifetimes are set per letter in `privacy` of the
-letter config (defaults and validation in `config/privacy.js`). The privacy
-policy quotes the same values, so change them there, not in code.
+Set retention periods and link lifetimes in the letter's `privacy` configuration. `config/privacy.js` defines and validates the defaults. The privacy policy uses the same values.
 
-| Key | Default | Enforced by |
-| --- | --- | --- |
-| `confirmationLinkHours` | 24 | sign-up, Treffen and deletion links expire; unconfirmed rows are swept every 5 min |
-| `settingsLinkDays` | 90 | a signer's unsubscribe link can show/edit/delete data for this long after the last mail carrying it; opting out never expires. Treffen links work for as long as the registration exists |
-| `emailJobRetentionHours` | 24 | queued mail jobs expire; dead-lettered mail jobs are deleted hourly after this |
-| `treffenRetentionDays` | 14 | all Treffen registrations are deleted this long after the event date |
-| `signerRetentionYears` | 3 | daily job deletes signatures and Treffen registrations older than this |
-| `backupRetentionHours` | 48 | hourly backups (and pre-restore copies) are deleted after this; `BACKUP_KEEP` overrides it |
-| `erasureLogDays` | 7 | erasures/opt-outs are kept (hashed) this long so a restore can re-apply them; must cover `backupRetentionHours` |
-| `deliveryLogDays` | 30 | campaign/Treffen mailings log which address got the mail, so an interrupted send resumes without repeats; rows are deleted this long after sending, and an aborted campaign can only be retried within it |
+| Key                      | Default | Effect                                                                                                                                                                                       |
+| ------------------------ | ------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `confirmationLinkHours`  | 24      | Signature, meeting, and deletion links expire. Pending records are swept every five minutes.                                                                                                 |
+| `settingsLinkDays`       | 90      | A signer can view, edit, or delete data through a settings link for this long after the last email containing it. Opt-out does not expire. Meeting links work while the registration exists. |
+| `emailJobRetentionHours` | 24      | Queued messages expire. An hourly job deletes dead-letter messages after this period.                                                                                                        |
+| `treffenRetentionDays`   | 14      | Meeting registrations are deleted this many days after the event.                                                                                                                            |
+| `signerRetentionYears`   | 3       | A daily job deletes older signatures and meeting registrations.                                                                                                                              |
+| `backupRetentionHours`   | 48      | Old backups and pre-restore copies are deleted. `BACKUP_KEEP` overrides this value.                                                                                                          |
+| `erasureLogDays`         | 7       | Hashed erasure and opt-out records remain available for restoration. Must cover backup retention.                                                                                            |
+| `deliveryLogDays`        | 30      | Delivery records prevent repeat sending after interruption. They expire after this period, which also limits campaign retries.                                                               |
 
 ### Ending a campaign
 
-The privacy policy promises complete deletion when the campaign ends. Nothing
-does that automatically. When the campaign is over:
+The privacy policy promises deletion when the campaign ends. The app does not perform this closure automatically.
 
-1. Export anything that must be kept (aggregate numbers only, no personal data).
-2. Stop the app and delete the database file (`DATABASE_PATH` plus `-wal`/`-shm`)
-   and any `*.pre-restore-*` copies next to it.
-3. Delete every file in `BACKUP_DIR`, and any off-site copies of it.
-4. Delete any signer or Treffen lists copied out of the admin (the app has no
-   export, but tables get copied into spreadsheets, mails and shared drives) and
-   ask everyone who received one to do the same.
-5. Delete the analytics data for the site. The mail provider deletes sent mail
-   after `email.providerRetentionDays` (Resend: 30) on its own; delete it
-   earlier in its dashboard if needed.
-6. Note the date and what was deleted, in case someone asks.
+1. Keep only the aggregate figures you need.
+2. Stop the app. Delete `DATABASE_PATH`, its `-wal` and `-shm` files, and adjacent `*.pre-restore-*` copies.
+3. Delete backups in `BACKUP_DIR` and any off-site copies.
+4. Delete copied signer and meeting lists from spreadsheets, email, or shared drives. Ask recipients of those copies to delete them too.
+5. Delete the site's analytics data. Check the mail provider's retention period, configured as `email.providerRetentionDays`, and delete retained mail earlier if needed.
+6. Record the deletion date and the data removed.
 
-## Durable jobs (Honker)
+## Durable jobs
 
-Background work (scheduled **campaign sends**, **zoom event mailings**, and
-**hourly backups**) runs on durable [Honker](https://honker.dev) queues instead
-of in-memory timers. The Honker SQLite extension is loaded into the app's
-SQLCipher-keyed connection and driven via its `honker_*` SQL functions, so job
-rows live inside the **same encrypted database** (encrypted at rest) and survive
-restarts, with automatic retries and dead-lettering.
+[Honker](https://honker.dev) stores scheduled campaigns, meeting mailings, email work, and hourly backup jobs in the same encrypted database. Its SQLite extension runs through `honker_*` SQL functions. Jobs survive restarts and support retries and dead-lettering.
 
-- Creating a campaign enqueues a `campaigns` job delivered at its scheduled time;
-  a reconciler re-enqueues any due/failed campaign so sends survive restarts.
-- A cron scheduler fires the zoom-mailing check (every 60s) and the hourly backup.
-- The extension binary is **not on npm**, so it ships with this repo / image:
-  - **Local dev (macOS, Apple Silicon):** a prebuilt `vendor/libhonker_ext.dylib`
-    is committed and loaded by default (`bun run dev` works with no extra steps).
-  - **Docker / Linux:** the images build the Linux `libhonker_ext.so` from source
-    in a Rust stage and set `HONKER_EXTENSION_PATH` automatically.
-  - **Other local platforms (Linux/Intel macOS):** build it from the
-    [Honker repo](https://github.com/russellromney/honker)
-    (`cargo build --release -p honker-extension`) and point `HONKER_EXTENSION_PATH`
-    at the resulting `libhonker_ext.{dylib,so}`.
+Operations that require email commit their data changes and job together. The server never sends that mail inline as a fallback. A queue outage returns 503 before accepting a signup, replacing a confirmation or deletion token, or creating a campaign. Public reading, opt-out, and authorized erasure remain available. The email settings show the job outage instead of an empty queue count.
 
-## Migrating from Postgres (zero data loss)
+Creating a campaign enqueues a job for its scheduled time. Reconciliation recovers due work after restart. A cron scheduler checks meeting mail every 60 seconds and starts hourly backups. These maintenance jobs cannot run while Honker is unavailable. Restore readiness before treating the service as operational.
+
+On SIGTERM or SIGINT, the server rejects new requests, drains accepted requests and active workers, and closes its database connections. Workers stop between recipients. Allow enough shutdown time for a provider request already in progress and any active backup. A forced kill can leave provider acceptance uncertain and require reconciliation.
+
+The extension is not an npm package. Docker builds the Linux library in a Rust stage and sets `HONKER_EXTENSION_PATH`. For local development, run `bun run honker:build` with Git and Rust installed. It creates `vendor/libhonker_ext.dylib` on macOS or `vendor/libhonker_ext.so` on Linux. `HONKER_REF` can select a source ref. You can also build `honker-extension` from the [Honker repository](https://github.com/russellromney/honker) and set `HONKER_EXTENSION_PATH` to the resulting library.
+
+See [delivery and storage ownership](architecture.md) for transaction, retry, consent, and event identity rules.
+
+## Migrate from Postgres
+
+Stop the app for the migration.
 
 ```bash
-SOURCE_DATABASE_URL=postgres://…  DATABASE_PATH=/app/data/diaetendeckel.db \
-DATABASE_ENCRYPTION_KEY=…  bun run db:migrate
+SOURCE_DATABASE_URL=postgres://… DATABASE_PATH=/app/data/diaetendeckel.db \
+DATABASE_ENCRYPTION_KEY=… bun run db:migrate
 ```
 
-Copies every table preserving primary-key ids, converting booleans, timestamps,
-and the `recipient_ids` array, then prints per-table source vs destination row
-counts and aborts on any mismatch. Run it during a brief maintenance window with
-the app stopped, then start the app pointed at the new file.
+The script checks for the source application schema before opening the target. An unrelated database is rejected, while an empty application database is valid. The script preserves primary-key IDs and converts booleans, timestamps, and `recipient_ids`. It compares source and destination row counts for each copied table and stops on a mismatch. Check the report before starting the app with the new database path.
 
+`bun run verify:migration` checks the production migration against a disposable PostgreSQL 18 container and encrypted SQLite files. It covers type conversion, IDs, foreign keys, reruns, row counts, and invalid source or target databases. It requires Docker and loopback access. The command prints the path to its evidence and removes its own test databases and container.

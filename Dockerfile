@@ -1,4 +1,4 @@
-FROM oven/bun:latest AS base
+FROM oven/bun:1.4.4 AS base
 WORKDIR /app
 
 FROM base AS build-tools
@@ -7,7 +7,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends python3 python-
 FROM build-tools AS deps
 COPY package.json bun.lock* ./
 ENV PYTHON=python3
-RUN bun install --production
+RUN bun install --production --frozen-lockfile
 
 # Build the Honker SQLite loadable extension (libhonker_ext.so) from source.
 FROM rust:1-bookworm AS honker
@@ -43,4 +43,4 @@ ARG GIT_COMMIT=unknown
 ENV GIT_COMMIT=${GIT_COMMIT}
 EXPOSE 3000
 
-CMD ["sh", "-c", "bun db/setup.js && bun server/index.js"]
+CMD ["sh", "-c", "bun db/setup.js && exec bun server/index.js"]

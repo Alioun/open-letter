@@ -1,0 +1,219 @@
+{
+  "project": "openletter-perf-1794219377835-49728",
+  "date": "2026-11-09T10:16:17.838Z",
+  "cpus": [
+    {
+      "times": {
+        "user": 29590,
+        "nice": 0,
+        "sys": 32030,
+        "idle": 1639020,
+        "irq": 0
+      },
+      "model": "AMD Ryzen 5 5600X 6-Core Processor",
+      "speed": 0
+    },
+    {
+      "times": {
+        "user": 30410,
+        "nice": 0,
+        "sys": 25820,
+        "idle": 1563800,
+        "irq": 0
+      },
+      "model": "AMD Ryzen 5 5600X 6-Core Processor",
+      "speed": 0
+    },
+    {
+      "times": {
+        "user": 48760,
+        "nice": 0,
+        "sys": 31710,
+        "idle": 1606160,
+        "irq": 0
+      },
+      "model": "AMD Ryzen 5 5600X 6-Core Processor",
+      "speed": 0
+    },
+    {
+      "times": {
+        "user": 47470,
+        "nice": 0,
+        "sys": 22240,
+        "idle": 1737100,
+        "irq": 0
+      },
+      "model": "AMD Ryzen 5 5600X 6-Core Processor",
+      "speed": 0
+    },
+    {
+      "times": {
+        "user": 45340,
+        "nice": 0,
+        "sys": 31480,
+        "idle": 1668230,
+        "irq": 0
+      },
+      "model": "AMD Ryzen 5 5600X 6-Core Processor",
+      "speed": 0
+    },
+    {
+      "times": {
+        "user": 39890,
+        "nice": 0,
+        "sys": 22240,
+        "idle": 1742230,
+        "irq": 0
+      },
+      "model": "AMD Ryzen 5 5600X 6-Core Processor",
+      "speed": 0
+    },
+    {
+      "times": {
+        "user": 33070,
+        "nice": 0,
+        "sys": 32800,
+        "idle": 1690220,
+        "irq": 0
+      },
+      "model": "AMD Ryzen 5 5600X 6-Core Processor",
+      "speed": 0
+    },
+    {
+      "times": {
+        "user": 25320,
+        "nice": 0,
+        "sys": 23630,
+        "idle": 1769270,
+        "irq": 0
+      },
+      "model": "AMD Ryzen 5 5600X 6-Core Processor",
+      "speed": 0
+    },
+    {
+      "times": {
+        "user": 34210,
+        "nice": 0,
+        "sys": 31080,
+        "idle": 1708290,
+        "irq": 0
+      },
+      "model": "AMD Ryzen 5 5600X 6-Core Processor",
+      "speed": 0
+    },
+    {
+      "times": {
+        "user": 25850,
+        "nice": 0,
+        "sys": 23680,
+        "idle": 1776580,
+        "irq": 0
+      },
+      "model": "AMD Ryzen 5 5600X 6-Core Processor",
+      "speed": 0
+    },
+    {
+      "times": {
+        "user": 33920,
+        "nice": 0,
+        "sys": 30320,
+        "idle": 1732690,
+        "irq": 0
+      },
+      "model": "AMD Ryzen 5 5600X 6-Core Processor",
+      "speed": 0
+    },
+    {
+      "times": {
+        "user": 29080,
+        "nice": 0,
+        "sys": 22750,
+        "idle": 1766420,
+        "irq": 0
+      },
+      "model": "AMD Ryzen 5 5600X 6-Core Processor",
+      "speed": 0
+    }
+  ],
+  "totalMemory": 16723521536,
+  "kernel": "6.18.54.1-microsoft-standard-WSL2",
+  "arch": "x64",
+  "dataset": 1000,
+  "tiers": [
+    "1:1g"
+  ],
+  "repeats": 1,
+  "hold": 10,
+  "tabs": 100,
+  "signupRate": 1,
+  "uptime": " 11:16:17 up 31 min,  1 user,  load average: 1.16, 2.18, 1.72\n",
+  "docker": "{\"Platform\":{\"Name\":\"\"},\"Version\":\"29.1.3\",\"ApiVersion\":\"1.52\",\"MinAPIVersion\":\"1.44\",\"Os\":\"linux\",\"Arch\":\"amd64\",\"Components\":[{\"Name\":\"Engine\",\"Version\":\"29.1.3\",\"Details\":{\"ApiVersion\":\"1.52\",\"Arch\":\"amd64\",\"BuildTime\":\"Wed Apr 29 16:41:06 2026\",\"Experimental\":\"false\",\"GitCommit\":\"29.1.3-0ubuntu3~24.04.2\",\"GoVersion\":\"go1.24.4\",\"KernelVersion\":\"6.18.54.1-microsoft-standard-WSL2\",\"MinAPIVersion\":\"1.44\",\"Os\":\"linux\"}},{\"Name\":\"containerd\",\"Version\":\"2.2.1\",\"Details\":{\"GitCommit\":\"\"}},{\"Name\":\"runc\",\"Version\":\"1.3.4-0ubuntu1~24.04.1\",\"Details\":{\"GitCommit\":\"\"}},{\"Name\":\"docker-init\",\"Version\":\"0.19.0\",\"Details\":{\"GitCommit\":\"\"}}],\"GitCommit\":\"29.1.3-0ubuntu3~24.04.2\",\"GoVersion\":\"go1.24.4\",\"KernelVersion\":\"6.18.54.1-microsoft-standard-WSL2\",\"BuildTime\":\"2026-04-29T16:41:06.000000000+00:00\"}\n",
+  "image": "\"sha256:4ee4bc53752ffcd67b714b946be8a4a4bb5401a32df26c6c623376d3dfbc6511\"\n",
+  "packages": {
+    "name": "diaetendeckel",
+    "private": true,
+    "license": "MIT",
+    "type": "module",
+    "scripts": {
+      "test": "bun test",
+      "dev": "bun scripts/dev.js",
+      "start": "NODE_ENV=production bun server/index.js",
+      "db:setup": "bun db/setup.js",
+      "db:seed": "bun db/seed.js",
+      "db:migrate": "bun db/migrate-pg-to-sqlite.js",
+      "db:restore": "bun db/restore-backup.js",
+      "honker:build": "bash scripts/build-honker.sh",
+      "og": "bun scripts/generate-og.js",
+      "verify:publishing": "bun test --timeout 30000 test/publications.test.js test/email-setup.test.js test/email-tls.test.js test/statistics.test.js",
+      "verify:app": "bun scripts/verify-publishing.js",
+      "format:publishing": "prettier --check config/publication.js config/css-policy.js config/faq.js server/publications.js server/email-setup.js server/frontend.js src/publishing src/ui.jsx"
+    },
+    "trustedDependencies": [
+      "@journeyapps/sqlcipher"
+    ],
+    "overrides": {
+      "undici": "^8.12.4",
+      "prosemirror-model": "1.25.13"
+    },
+    "dependencies": {
+      "@base-ui/react": "1.9.0",
+      "@codemirror/autocomplete": "^6.20.4",
+      "@codemirror/commands": "^6.11.1",
+      "@codemirror/lang-css": "^6.3.1",
+      "@codemirror/lint": "^6.9.7",
+      "@codemirror/state": "^6.7.6",
+      "@codemirror/view": "^6.43.15",
+      "@fontsource/inter": "^5.3.0",
+      "@fontsource/work-sans": "^5.3.0",
+      "@journeyapps/sqlcipher": "^6.0.0",
+      "@puckeditor/core": "0.24.0",
+      "@tiptap/core": "^3.33.0",
+      "@tiptap/extension-character-count": "^3.33.0",
+      "@tiptap/extension-link": "^3.33.0",
+      "@tiptap/extension-placeholder": "^3.33.0",
+      "@tiptap/extension-underline": "^3.33.0",
+      "@tiptap/pm": "^3.33.0",
+      "@tiptap/react": "^3.33.0",
+      "@tiptap/starter-kit": "^3.33.0",
+      "analytik": "1.22.0",
+      "css-tree": "^3.2.1",
+      "date-fns": "^4.4.0",
+      "hono": "^4.13.17",
+      "jose": "^6.2.16",
+      "juice": "^12.2.1",
+      "nodemailer": "^10.4.0",
+      "postgres": "^4.1.0",
+      "react": "^19.3.1",
+      "react-day-picker": "^10.0.2",
+      "react-dom": "^19.3.1",
+      "sanitize-html": "^2.18.1",
+      "satori": "^0.63.2",
+      "sharp": "^0.35.5"
+    },
+    "devDependencies": {
+      "prettier": "^3.9.10",
+      "puppeteer": "^25.16.0"
+    },
+    "packageManager": "bun@1.4.4"
+  }
+}

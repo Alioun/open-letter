@@ -156,12 +156,70 @@ describe("cached read endpoints", () => {
   });
 
   test("different query parameters get separate cache entries", async () => {
-    await addVerifiedSigner({ name: "Dana Fischer", email: "d@example.org", kreisverband: "Köln" });
-    await addVerifiedSigner({ name: "Erik Vogel", email: "e@example.org", kreisverband: "" });
+    await addVerifiedSigner({
+      name: "Dana Fischer",
+      email: "d@example.org",
+      kreisverband: "Köln",
+    });
+    await addVerifiedSigner({
+      name: "Erik Vogel",
+      email: "e@example.org",
+      kreisverband: "",
+    });
 
     const all = await q.getSigners({ filter: "alle" });
     const kvOnly = await q.getSigners({ filter: "kv" });
     expect(all.total).toBe(2);
     expect(kvOnly.total).toBe(1);
   });
+});
+
+test("CTE writes and parameterless writes invalidate cached public reads", async () => {
+  const { db } = await import("../db/connection.js");
+  await addVerifiedSigner({ name: "Before" });
+  expect((await q.getStats()).total).toBe(1);
+  await db
+    .query(
+      "WITH old AS (SELECT id FROM signers) DELETE FROM signers WHERE id IN (SELECT id FROM old)",
+    )
+    .run();
+  expect((await q.getStats()).total).toBe(0);
+  await addVerifiedSigner();
+  expect((await q.getStats()).total).toBe(1);
+  await db.run("DELETE FROM signers");
+  expect((await q.getStats()).total).toBe(0);
+});
+
+test("a neutral marker cannot suppress invalidation for a public consent write", async () => {
+  const { db } = await import("../db/connection.js");
+  await addVerifiedSigner({ show_publicly: 1 });
+  expect((await q.getSigners({ limit: 10 })).total).toBe(1);
+  await db
+    .query("UPDATE signers /* public-neutral */ SET show_publicly=0")
+    .run();
+  expect((await q.getSigners({ limit: 10 })).total).toBe(0);
+});
+
+test("a private write cannot hide a later public write in the same SQL script", async () => {
+  const { db } = await import("../db/connection.js");
+  await addVerifiedSigner();
+  expect((await q.getStats()).total).toBe(1);
+  await db.run(
+    "UPDATE signers /* public-neutral */ SET invite_count=0; DELETE FROM signers;",
+  );
+  expect((await q.getStats()).total).toBe(0);
+});
+
+test("transactions bypass shared cache without publishing uncommitted values", async () => {
+  const { db } = await import("../db/connection.js");
+  await addVerifiedSigner();
+  await q.getStats();
+  await expect(
+    db.transaction(async () => {
+      await db.query("DELETE FROM signers").run();
+      expect((await q.getStats()).total).toBe(0);
+      throw new Error("rollback fixture");
+    }),
+  ).rejects.toThrow("rollback fixture");
+  expect((await q.getStats()).total).toBe(1);
 });

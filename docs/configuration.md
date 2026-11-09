@@ -1,33 +1,46 @@
 # Configuration
 
-Everything specific to a campaign lives in `config/letters/<name>/`: `index.js` holds the data and `content.jsx` holds the letter body and FAQ. An optional `letter.css` next to them is bundled into that letter's pages; scope its rules to `[data-letter="<name>"]` (the attribute sits on `<html>`) so they win over the base styles and never reach another letter. The admin panel does not load it. Secrets and deployment settings come from env.
+Each letter has a directory under `config/letters/<name>/`. Its `index.js` defines the initial configuration; `content.jsx` contains the letter and FAQ. Environment variables supply secrets and server settings.
 
-## Letter config (`index.js`)
+An optional `letter.css` in that directory is bundled with public pages. Scope its rules to `[data-letter="<name>"]`, the attribute on `<html>`. The admin interface does not load it.
 
-| Key | What it controls |
-| --- | --- |
-| `brand` | `name`, `wordmark`, `lang`, `locale` |
-| `theme` | `colors` (palette → CSS variables), `fonts` (`display`/`body`), `style` (`shadowOffset` (`"none"` also drops the shadow on link pages), `radius`, `borderWidth` (corners are rounded by default: cards 16px, buttons and inputs 10px; set the radius keys to `"0"` for sharp corners), plus optional `shadow: "soft"` for blurred drop shadows instead of offset blocks, `cardRadius`, `buttonRadius`, `headlineMaxWidth`, `inputRadius`, `checkRadius`, `bannerRadius`, `bannerPadBottom`); optional colours `onAkzent`, `ctaBg`, `ctaFg`, `goalFill`, `ctaHoverBg`, `ctaHoverFg`, `heroBg`, `statBg` recolour the counter card, primary buttons, hero and stats; the theme drives the page, emails, and generated images |
-| `meta` | `<head>`: title, description, canonical, OG/Twitter, favicon, JSON-LD `schemaAbout`, optional `analytics` `{src, websiteId, retentionMonths}` |
-| `privacy` | retention periods and link lifetimes, enforced by the server and quoted in the privacy policy; see [Data retention](operations.md#data-retention) |
-| `hero` | headline lines, CTA labels, counter/goal labels, seed `milestones` |
-| `nav` / `navCta` / `list` | nav items, top-bar CTA, signer-list heading |
-| `sign` | section heading, `criteria`, `privacyNote`, form copy, and `fields` (labels/placeholders for the two optional `kreisverband`/`occupation` columns). `kreisverband` can be renamed and restricted with `options` (fixed list, shown as a dropdown and enforced server-side), `selectPlaceholder`, `pluralLabel`, `noneLabel` and `rowPrefix` |
-| `footer` / `legal` | footer blurb + contact; Impressum/Datenschutz responsible entity, address, contact, disclaimer |
-| `email` | `from`, `signoff`, `provider` (`resend`/`smtp`) + `smtp` connection details, `providerRetentionDays` (how long the provider keeps sent mail; quoted in the privacy policy), `pacing` (rate-limit delays), and the `templates` map (seeded into the DB, admin-editable) |
-| `pages` | copy for the server-rendered pages behind mail links (confirm, delete, Treffen); defaults in `server/pages.js` |
-| `features` | `kreisverbandField`, `occupationField`, `germanyMap`, `stateResolution`, `zoomEvent`, `inviteLinks`, `multiLanguage`: toggle the optional modules (see [Languages](#languages)) |
-| `ui` | interface texts that have no section of their own (buttons, modals, list, sign form, email settings page, user-facing errors, public server wording under `ui.server`); per-language defaults (`de`, `en`) in `config/ui.js`, the letter's `ui` block still overrides any key |
-| `invite` | invite-link texts and how exact the private stats are: `statsMode` (`"ranges"` default, `"threshold"`, `"exact"`), `statsRanges`, `statsThreshold` (only read when `features.inviteLinks`); omitted keys use the defaults in `config/invite.js`. Placeholders: `{firstName}`, `{title}`, `{url}` |
-| `zoom` | event label/date/duration (only read when `features.zoomEvent`) |
-| `languages` / `i18n` | only with `features.multiLanguage`: the languages the letter is published in and each language's copy; see [Languages](#languages) |
+After the first publication, the database supplies published content and templates. Changing deployment defaults does not replace a publication. See [publishing](publishing.md) for runtime editing.
 
+## Letter config
 
-The rich letter body and FAQ are React components in the sibling `content.jsx`.
+| Key                     | Purpose                                                                                                                               |
+| ----------------------- | ------------------------------------------------------------------------------------------------------------------------------------- |
+| `brand`                 | Name, wordmark, language, and locale.                                                                                                 |
+| `theme`                 | Colors, fonts, spacing, borders, and shadows. See below.                                                                              |
+| `meta`                  | Page title, descriptions, canonical URL, social metadata, favicon, JSON-LD `schemaAbout`, and optional external `analytics` settings. |
+| `privacy`               | Retention periods and link lifetimes. The server enforces them and the privacy policy quotes them.                                    |
+| `hero`                  | Headline lines, buttons, counter labels, and initial `milestones`.                                                                    |
+| `nav`, `navCta`, `list` | Navigation items, main navigation button, and signer-list heading.                                                                    |
+| `sign`                  | Heading, participation criteria, privacy note, form copy, and optional field definitions.                                             |
+| `footer`, `legal`       | Footer, contact, responsible entity, address, and legal notice.                                                                       |
+| `email`                 | Sender, signoff, provider, SMTP defaults, provider retention, pacing, and initial templates.                                          |
+| `pages`                 | Copy for confirmation, deletion, and meeting pages. Defaults are in `server/pages.js`.                                                |
+| `features`              | Optional modules listed below.                                                                                                        |
+| `ui`                    | Other public interface copy, including server messages under `ui.server`. Language defaults are in `config/ui.js`.                    |
+| `invite`                | Invitation copy and private statistics rules. Defaults are in `config/invite.js`.                                                     |
+| `zoom`                  | Meeting label, date, and duration when `features.zoomEvent` is enabled.                                                               |
+| `languages`, `i18n`     | Enabled languages and overrides when `features.multiLanguage` is enabled.                                                             |
+
+### Theme and form fields
+
+`theme.colors` becomes CSS variables. Optional colors include `onAkzent`, `ctaBg`, `ctaFg`, `goalFill`, `ctaHoverBg`, `ctaHoverFg`, `heroBg`, and `statBg`. The theme also supplies email and generated-image styling.
+
+`theme.fonts` selects `display` and `body` fonts. `theme.style` accepts `shadowOffset`, `radius`, and `borderWidth`, plus `cardRadius`, `buttonRadius`, `headlineMaxWidth`, `inputRadius`, `checkRadius`, `bannerRadius`, and `bannerPadBottom`. Cards default to 16 px corners; buttons and inputs default to 10 px. Set radius values to `"0"` for square corners. `shadowOffset: "none"` removes offset shadows, including on mail-link pages. `shadow: "soft"` selects blurred shadows.
+
+`sign.fields` controls labels and placeholders for `kreisverband` and `occupation`. The regional field also accepts `options` for a server-validated fixed list, `selectPlaceholder`, `pluralLabel`, `noneLabel`, and `rowPrefix`.
+
+Feature flags are `kreisverbandField`, `occupationField`, `germanyMap`, `stateResolution`, `zoomEvent`, `inviteLinks`, and `multiLanguage`. The map and state resolver currently use Germany.
+
+Invitation statistics use `statsMode` with `ranges` as the default, or `threshold` or `exact`. Configure `statsRanges` or `statsThreshold` for the chosen mode. Invitation copy accepts `{firstName}`, `{title}`, and `{url}`.
 
 ## Languages
 
-A letter is published in one language, `brand.lang`, unless it turns on `features.multiLanguage`:
+Without `features.multiLanguage`, the letter uses `brand.lang`. With the flag enabled, declare the languages and their overrides:
 
 ```js
 features: { multiLanguage: true },
@@ -41,104 +54,82 @@ i18n: {
 },
 ```
 
-- The first entry of `languages` is the default and is served at `/`; every other one at `/<lang>` (`/en`). Each page gets `<html lang>`, its own canonical URL and `<link rel="alternate" hreflang>` for every language plus `x-default`. A "DE | EN" switch appears in the top bar (in the menu below 480px) and keeps the section the reader is on.
-- `i18n.<lang>` is a partial letter config deep-merged over the letter: objects merge key by key, arrays and strings replace.
-- Texts for a language resolve in this order, later wins: the defaults for that language (`uiDefaults(lang)` in `config/ui.js`, `defaultPageCopy(lang)` in `server/pages.js`), the letter config, the letter's `i18n.<lang>` block (including `i18n.<lang>.ui`), then the admin overrides.
-- Admin overrides (**Texte & Modus**) are per language: a language switch at the top of the tab picks which one is edited, and an override for one language never shows in another. The default language is stored as `copy:<path>` in `app_settings` (as with one language), every other one as `copy:<lang>:<path>`; resetting a field clears only that language's override.
-- The page sends its language to the API (`X-Lang` header or `?lang=`, only when it is not the default), so `/api/boot` and user-facing error messages follow it. Unknown values fall back to the default.
-- A letter's `content.jsx` may export `en = { LetterArticle, FaqContent }` (one per further language) for the letter body and FAQ.
-- **Person language.** Signers, Treffen registrants and deletion requests store the language of the page they used (`lang` column, normalised to one of `languages`; NULL means the default). Every mail to them (confirmation, invite, already-signed, deletion, Treffen mails and reminders, campaigns) is written in it: that language's `ui.server` strings and admin overrides, dates in its locale, and links to its pages. The mail-link pages (confirm, delete, Treffen) answer in it with `<html lang>` set; API links carry `?lang=<lang>` so a page still knows the language once the row is gone. The email settings page is served at `/<lang>/abmelden/<token>` and the invite page at `/<lang>/i/<code>`; the invite mail links the inviter's language, and an invitee signs up in the language of the page they opened. The Treffen calendar file (`/api/termin.ics?lang=<lang>`) follows too. Default-language URLs are unchanged.
-- Mail templates per language: `i18n.<lang>.email.templates.<slug>` (a partial template keeps the default's other fields) is seeded as `<slug>.<lang>` by `db/setup.js` and edited in the admin like any template. A language without its own template gets the default one (with that language's footer and meeting texts).
-- **Campaign languages.** With several languages the campaign forms show a template and a subject per further language (admin in German). Each recipient gets their language's version; a language without its own template gets the default template, and without its own subject that template's subject, else the default subject. Stored in `campaigns.i18n` as `{"<lang>": {"templateId", "subject"}}`.
+The first language is the default at `/`. Other languages use `/<lang>`. Each page sets its document language, canonical URL, and `hreflang` alternates, including `x-default`. The language switch keeps the current section. Below 480 px it appears in the menu.
 
-With the flag off, `languages` and `i18n` are ignored and the page is exactly as before (the `ui` defaults are the German table, as they always were).
+`i18n.<lang>` merges objects by key and replaces arrays and strings. Copy resolves in this order, with later values taking precedence:
 
-## Admin-editable settings
+1. Language defaults in `config/ui.js` and `server/pages.js`.
+2. The letter configuration.
+3. `i18n.<lang>`, including its `ui` block.
+4. Published admin overrides.
 
-The admin dashboard (served at the secret `/${ADMIN_PATH}` route) can edit, at runtime without redeploying:
+Publication content is localized. Layout and appearance are shared across languages. Legacy `copy:` values and template IDs migrate into the first publication. Later edits publish as complete revisions.
 
-- **Milestones** (Einstellungen tab): the goal thresholds for the progress bar; seeded from `hero.milestones`, stored in `app_settings`, served via `/api/stats`.
-- **Email templates** and **campaigns**; and the **Zoom event** settings when that module is enabled.
+The page sends a non-default language through `X-Lang` or `?lang=`. `/api/boot` and public errors follow it; unknown languages use the default. For rich content, `content.jsx` can export an object such as `en = { LetterArticle, FaqContent }` for each additional language.
 
-## Environment Variables
+### Recipient languages
 
-| Variable           | Required   | Default                 | Description                                                                                                           |
-| ------------------ | ---------- | ----------------------- | --------------------------------------------------------------------------------------------------------------------- |
-| `LETTER_CONFIG`    | No         | `example`               | Which open letter to serve: a directory name under `config/letters/`                                                |
-| `DATABASE_PATH`    | No         | `./data/diaetendeckel.db` | Path to the encrypted SQLite database file                                                                          |
-| `DATABASE_ENCRYPTION_KEY` | Yes | -                       | SQLCipher passphrase. The app fails closed (won't start) without it.                                                 |
-| `HONKER_EXTENSION_PATH` | No    | platform default        | Path to the Honker SQLite extension (`libhonker_ext.{dylib,so}`) for durable jobs                                    |
-| `SOURCE_DATABASE_URL` | Migration only | -                | Old Postgres connection string, read by `db:migrate`                                                                |
-| `PORT`             | No         | `3000`                  | Server port                                                                                                           |
-| `BASE_URL`         | No         | `http://localhost:3000` | Public URL (used in verification emails)                                                                              |
-| `NODE_ENV`         | No         | `development`           | `production` enables CSP headers + asset minification                                                                 |
-| `ADMIN_PATH`       | Yes        | -                       | Secret single-segment admin path, without leading or trailing slashes. Use `my-secret-panel`, not `/my-secret-panel`. |
-| `ADMIN_PASSWORD`   | Yes        | -                       | Admin login password                                                                                                  |
-| `ADMIN_JWT_SECRET` | Yes        | -                       | Random secret for admin session JWTs, at least 32 characters. In production it must be **distinct** from `API_TOKEN_SECRET` (fails closed if equal). |
-| `API_TOKEN_SECRET` | Yes (prod) | -                       | Secret for signing public API session JWTs. Must be **distinct** from `ADMIN_JWT_SECRET` in production.               |
-| `REQUIRE_API_TOKEN`| No         | `true`                  | Gate public read endpoints behind a session token from `/api/session`. Set `false` to disable the gate (escape hatch). |
-| `ALLOWED_ORIGINS`  | No         | `BASE_URL`              | Comma-separated CORS allowlist for public API responses. Origins not listed fall back to `BASE_URL`.                  |
-| `TRUST_PROXY`      | No         | `false`                 | Trust `X-Forwarded-For` for the client IP; set `true` behind a reverse proxy so per-IP rate-limiting is accurate. Warns at startup in production when unset. |
-| `DATABASE_JOURNAL_MODE` | No    | SQLite default (`DELETE` in compose) | SQLite journal mode (`PRAGMA journal_mode`). Compose sets `DELETE`.                                   |
-| `GIT_COMMIT`       | No         | -                       | Commit SHA surfaced at `/api/version`. Falls back to `COMMIT_SHA`, `SOURCE_COMMIT`, `GIT_SHA`, `SOURCE_VERSION`, and PaaS vars (`RAILWAY_`/`RENDER_`/`VERCEL_GIT_COMMIT_SHA`). |
-| `EMAIL_PROVIDER`   | No         | `email.provider` (config) | Mail transport: `resend` or `smtp`. In production it must match the letter config's `email.provider` (the app refuses to start otherwise), because the privacy policy names the processor from the config. |
-| `EMAIL_FROM`       | No         | `email.from` (config)   | Verified sender for either provider (alias of `RESEND_FROM`)                                                          |
-| `RESEND_API_KEY`   | Yes when provider=resend (prod) | -          | Resend API key used to send transactional email                                                                       |
-| `RESEND_FROM`      | No         | `email.from` (config)   | Verified sender used for outbound email (alias of `EMAIL_FROM`)                                                       |
-| `SMTP_HOST`        | Yes when provider=smtp (prod) | `email.smtp.host` (config) | SMTP server hostname                                                                                       |
-| `SMTP_PORT`        | No         | `email.smtp.port` or `587` | SMTP port (`465` = implicit TLS, `587` = STARTTLS)                                                                  |
-| `SMTP_SECURE`      | No         | `email.smtp.secure` or `false` | `true` for implicit TLS (port 465); `false` uses STARTTLS                                                       |
-| `SMTP_USER`        | No         | -                       | SMTP username (omit for an unauthenticated relay)                                                                     |
-| `SMTP_PASS`        | No         | -                       | SMTP password                                                                                                         |
-| `EMAIL_MESSAGE_DELAY_MS` | No   | `email.pacing.messageDelayMs` or `550` | Delay (ms) between one-by-one sends (zoom link mailing)                                            |
-| `EMAIL_BATCH_DELAY_MS` | No     | `email.pacing.batchDelayMs` or `1000` | Delay (ms) between 100-email batch chunks (campaigns, reminders)                                    |
-| `BACKUP_ENCRYPTION_KEY` | Yes (prod) | `DATABASE_ENCRYPTION_KEY` | Separate SQLCipher key for backup files. Required in production; falls back to the live DB key in development. |
-| `BACKUP_DIR`       | No         | `/app/backups`          | Directory for database backup files                                                                                   |
-| `BACKUP_KEEP`      | No         | `privacy.backupRetentionHours` (48) | Hours of hourly backups to retain. Overrides the letter config, which the privacy policy quotes; the server warns when they differ |
-| `BACKUP_GZIP`      | No         | `true`                  | Gzip the encrypted backup snapshot                                                                                    |
+Signatures, meeting registrations, and deletion requests store a normalized `lang`. `NULL` means the default language. Email uses that person's language for text, dates, footer, and links. Confirmation, deletion, and meeting links carry `?lang=<lang>` so the result page can retain its language after a row is removed.
 
-See [`.env.example`](../.env.example) for a template.
+Settings pages use `/<lang>/abmelden/<token>` and invitation pages use `/<lang>/i/<code>`. Invitation email uses the inviter's language; the invitee signs in the language of the page they opened. `/api/termin.ics?lang=<lang>` localizes calendar output. Default-language URLs keep their existing form.
 
-## Email
+Define localized templates under `i18n.<lang>.email.templates.<slug>`. Partial templates inherit other fields from the default. Setup stores them as `<slug>.<lang>`. Missing variants use the default template with the recipient language's footer and meeting text.
 
-The mail transport is chosen per letter via `email.provider` in the config.
-`EMAIL_PROVIDER` can override it outside production; in production the two must
-match, because the Datenschutzerklärung names the email processor from the
-config, and the server refuses to start on a mismatch. Two providers are
-supported:
+The German campaign forms allow a template and subject for each additional language. A missing template uses the default template. A missing subject uses the language template's subject if available, then the default subject. Campaign overrides are stored in `campaigns.i18n` as `{"<lang>": {"templateId", "subject"}}`.
 
-- **`resend`** (default): Resend's HTTP Email API. Set `RESEND_API_KEY`. See
-  [`resend-email-setup.txt`](../resend-email-setup.txt) for domain verification and deployment setup.
-- **`smtp`**: any SMTP server (mailbox.org, a self-hosted relay, Gmail, etc.)
-  via [nodemailer](https://nodemailer.com). Non-secret connection details
-  (`host`/`port`/`secure`) live in the letter config under `email.smtp` or in
-  `SMTP_HOST`/`SMTP_PORT`/`SMTP_SECURE`; credentials come from `SMTP_USER` /
-  `SMTP_PASS` only. SMTP has no batch endpoint, so batch sends loop per message.
+When multilingual support is disabled, `languages` and `i18n` are ignored and the legacy German UI defaults apply.
 
-In both cases **secrets stay in env**; never put API keys or SMTP passwords in
-the committed config. The sender address is `email.from` (override with
-`EMAIL_FROM` / `RESEND_FROM`).
+## Runtime settings
 
-**Pacing:** the mailing workers insert delays to stay under provider rate limits:
-`email.pacing.messageDelayMs` between one-by-one sends and
-`email.pacing.batchDelayMs` between 100-email batch chunks (defaults `550`/`1000`
-ms, tuned for Resend's ~2/s). Override per-deployment with
-`EMAIL_MESSAGE_DELAY_MS` / `EMAIL_BATCH_DELAY_MS`; raise them for a stricter SMTP
-relay, or lower them if your provider allows faster sends.
+Open `/<ADMIN_PATH>` to publish content, layouts, appearance, metadata, CSS, and email templates. Changes stay in a browser draft until publication. The server stores no drafts.
 
-**Dev/demo:** point `provider=smtp` at a local catcher like
-[Mailpit](https://github.com/axllent/mailpit)/MailHog on `localhost:1025`
-(`SMTP_SECURE=false`), or set `RESEND_API_KEY` to test real Resend delivery.
-Without a configured provider, development starts but email submission fails when
-a route tries to send mail.
+The admin also manages campaigns, signature goals, email delivery, optional statistics, and enabled meeting settings. Goals start from `hero.milestones`, then live in `app_settings` and appear through `/api/stats`. See [publishing and email administration](publishing.md) for approval and recovery behavior.
 
-**Production:** the selected provider's credentials are required: `RESEND_API_KEY`
-for `resend`, or `SMTP_HOST` (plus `SMTP_USER`/`SMTP_PASS` for authenticated
-relays) for `smtp`. The app fails closed at startup if they're missing.
+## Environment variables
 
+| Variable                  | Required                        | Default                                | Description                                                                                                                                                                                         |
+| ------------------------- | ------------------------------- | -------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `LETTER_CONFIG`           | No                              | `example`                              | Letter directory under `config/letters/`.                                                                                                                                                           |
+| `DATABASE_PATH`           | No                              | `./data/diaetendeckel.db`              | Encrypted SQLite file path.                                                                                                                                                                         |
+| `DATABASE_ENCRYPTION_KEY` | Yes                             | -                                      | SQLCipher passphrase. Startup requires it.                                                                                                                                                          |
+| `HONKER_EXTENSION_PATH`   | No                              | platform default                       | Honker SQLite extension path, `libhonker_ext.dylib` or `libhonker_ext.so`.                                                                                                                          |
+| `SOURCE_DATABASE_URL`     | Migration only                  | -                                      | Source Postgres connection string for `db:migrate`.                                                                                                                                                 |
+| `PORT`                    | No                              | `3000`                                 | HTTP server port.                                                                                                                                                                                   |
+| `BASE_URL`                | No                              | `http://localhost:3000`                | Public URL (used in verification emails)                                                                                                                                                            |
+| `NODE_ENV`                | No                              | `development`                          | `production` enables CSP headers + asset minification                                                                                                                                               |
+| `ADMIN_PATH`              | Yes                             | -                                      | Secret single-segment admin path, without leading or trailing slashes. Use `my-secret-panel`, not `/my-secret-panel`.                                                                               |
+| `ADMIN_PASSWORD`          | Yes                             | -                                      | Admin password.                                                                                                                                                                                     |
+| `ADMIN_JWT_SECRET`        | Yes                             | -                                      | Admin signing secret, at least 32 characters. Production rejects a value equal to `API_TOKEN_SECRET`.                                                                                               |
+| `API_TOKEN_SECRET`        | Yes (prod)                      | -                                      | Public API signing secret. Must differ from `ADMIN_JWT_SECRET` in production.                                                                                                                       |
+| `REQUIRE_API_TOKEN`       | No                              | `true`                                 | Require a session token from `/api/session` for public reads. Set `false` to disable.                                                                                                               |
+| `ALLOWED_ORIGINS`         | No                              | `BASE_URL`                             | Comma-separated CORS origins. Responses to unlisted origins use `BASE_URL`.                                                                                                                         |
+| `TRUST_PROXY`             | No                              | `false`                                | Read the client IP from `X-Forwarded-For`. Enable behind a trusted reverse proxy. Production warns when unset.                                                                                      |
+| `DATABASE_JOURNAL_MODE`   | No                              | `WAL`                                  | SQLite journal mode. Production and development Compose use WAL. The SQLCipher adapter queues operations and complete transactions across connections to the same database file within the process. |
+| `GIT_COMMIT`              | No                              | -                                      | Commit shown at `/api/version`. Falls back to `COMMIT_SHA`, `SOURCE_COMMIT`, `GIT_SHA`, `SOURCE_VERSION`, and Railway, Render, or Vercel commit variables.                                          |
+| `EMAIL_PROVIDER`          | No                              | `email.provider` (config)              | Initial provider, `resend` or `smtp`. A database-managed profile replaces the complete deployment profile.                                                                                          |
+| `EMAIL_FROM`              | No                              | `email.from` (config)                  | Verified sender for either provider. Alias of `RESEND_FROM`.                                                                                                                                        |
+| `RESEND_API_KEY`          | Yes when provider=resend (prod) | -                                      | Resend sending key.                                                                                                                                                                                 |
+| `RESEND_FROM`             | No                              | `email.from` (config)                  | Verified sender. Alias of `EMAIL_FROM`.                                                                                                                                                             |
+| `SMTP_HOST`               | Yes when provider=smtp (prod)   | `email.smtp.host` (config)             | SMTP hostname.                                                                                                                                                                                      |
+| `SMTP_PORT`               | No                              | `email.smtp.port` or `587`             | SMTP port. Use 465 for implicit TLS or 587 for required STARTTLS.                                                                                                                                   |
+| `SMTP_SECURE`             | No                              | `email.smtp.secure` or `false`         | Use `true` for implicit TLS or `false` for required STARTTLS.                                                                                                                                       |
+| `SMTP_USER`               | No                              | -                                      | SMTP login. Connections require authentication and encryption.                                                                                                                                      |
+| `SMTP_PASS`               | No                              | -                                      | SMTP password or app password.                                                                                                                                                                      |
+| `EMAIL_MESSAGE_DELAY_MS`  | No                              | `email.pacing.messageDelayMs` or `550` | Milliseconds between individual sends, including Zoom link mail.                                                                                                                                    |
+| `EMAIL_BATCH_DELAY_MS`    | No                              | `email.pacing.batchDelayMs` or `1000`  | Milliseconds between batches of 100 emails for campaigns and reminders.                                                                                                                             |
+| `BACKUP_ENCRYPTION_KEY`   | Yes (prod)                      | `DATABASE_ENCRYPTION_KEY`              | Backup encryption key. Required in production. Development falls back to the database key.                                                                                                          |
+| `BACKUP_DIR`              | No                              | `/app/backups`                         | Backup directory.                                                                                                                                                                                   |
+| `BACKUP_KEEP`             | No                              | `privacy.backupRetentionHours` (48)    | Backup retention in hours. Overrides the value quoted in the privacy policy and warns if they differ. Cannot exceed `privacy.erasureLogDays * 24`.                                                  |
+| `BACKUP_GZIP`             | No                              | `true`                                 | Compress encrypted snapshots with gzip.                                                                                                                                                             |
 
-## Editing texts at runtime
+Use [`.env.example`](../.env.example) as the local template.
 
-The admin panel's **Texte & Modus** tab edits texts and two presentation switches without a redeploy: success mode, the collapsed sections, hero/success/sign/list/footer/Treffen texts, navigation labels, the link pages, invite texts and every `ui` key. Which paths are editable is listed in `config/editable.js`. Overrides are stored per path in `app_settings` (`copy:<path>`) and apply from the next page load. "Standard wiederherstellen" removes an override, so the value from the letter config applies again.
+## Email profiles
 
-Stays config-only: features that add routes or workers, retention periods, email transport, head/meta and social preview, theme, letter body and FAQ, invite stats precision, and the privacy notice text.
+The initial deployment profile uses `EMAIL_PROVIDER`, `EMAIL_FROM` or `RESEND_FROM`, and the provider credentials. Empty environment values are ignored. An administrator can import that profile into database management, then save and test a complete replacement. Environment fields do not supplement a database-managed profile.
+
+Generic SMTP, mailbox.org, and Resend are supported. SMTP always requires certificate-validated TLS, including in development. Port 465 uses implicit TLS; port 587 requires STARTTLS. Use a trusted TLS mail catcher or the local test fixtures. Saved credentials never appear in settings or previews. Generic SMTP asks for the operator and processing region because the protocol cannot establish them.
+
+Provider acceptance, confirmed receipt, activation, and readiness are separate states. Failed credentials can pause delivery while admin access remains available. Restoring a database invalidates validation. Activation updates the protected email-processing facts in the privacy disclosure.
+
+Transactional and campaign mail share persisted account cooldowns. `EMAIL_MESSAGE_DELAY_MS` and `EMAIL_BATCH_DELAY_MS` still control worker pacing. Quota deferrals do not consume permanent-error attempts. See [email setup](publishing.md#configure-email-delivery) for replacement, DNS checks, and reconciliation.

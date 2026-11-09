@@ -1,3 +1,4 @@
+import { inDatabaseTransaction } from "../db/connection.js";
 // Tiny in-process cache for the public read endpoints.
 //
 // Every visible tab polls /api/stats + /api/signers every 10s, and those run
@@ -47,6 +48,7 @@ function refresh(fn, ttlMs, entry) {
 }
 
 export function cached(key, fn, ttlMs = DEFAULT_TTL_MS) {
+  if (inDatabaseTransaction()) return fn();
   if (ttlMs <= 0) return fn();
   const now = Date.now();
   let entry = entries.get(key);
@@ -61,7 +63,10 @@ export function cached(key, fn, ttlMs = DEFAULT_TTL_MS) {
         // Stale: kick off one refresh, but answer from the old value now. A
         // failing refresh must not reject this caller, nor poison the entry.
         refresh(fn, ttlMs, entry).catch((err) => {
-          console.error(`[cache] refresh failed for ${key}:`, err?.message || err);
+          console.error(
+            `[cache] refresh failed for ${key}:`,
+            err?.message || err,
+          );
         });
       }
       return Promise.resolve(entry.value);

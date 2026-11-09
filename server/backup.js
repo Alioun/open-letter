@@ -1,9 +1,6 @@
-// Encrypted SQLCipher backups.
-//
-// Produces a consistent, SQLCipher-encrypted snapshot of the live database using
-// `sqlcipher_export()` into an ATTACHed, keyed backup file. The backup file is
-// itself encrypted at rest (no separate encryption step needed). Optionally
-// gzips the result. Old backups are pruned to BACKUP_KEEP.
+// Export a consistent SQLCipher snapshot with sqlcipher_export().
+// The attached destination uses the backup key. Optionally gzip the encrypted
+// file, then delete snapshots older than BACKUP_KEEP hours.
 import { mkdir, readdir, unlink, rename } from "node:fs/promises";
 import { createReadStream, createWriteStream } from "node:fs";
 import { join, dirname, basename } from "node:path";
@@ -23,20 +20,18 @@ if (BACKUP_KEEP !== privacy.backupRetentionHours) {
     `[backup] BACKUP_KEEP=${BACKUP_KEEP} differs from privacy.backupRetentionHours=${privacy.backupRetentionHours}, which the privacy policy states`,
   );
 }
-if (BACKUP_KEEP > privacy.erasureLogDays * 24) {
-  console.warn(
-    `[backup] backups are kept longer (${BACKUP_KEEP}h) than the erasure log (${privacy.erasureLogDays}d): restoring the oldest backups could bring back erased data`,
-  );
-}
 const BACKUP_GZIP = process.env.BACKUP_GZIP !== "false"; // gzip by default
-// Resolve the backup key the same way restore does: prefer a dedicated
-// BACKUP_ENCRYPTION_KEY, else fall back to DATABASE_ENCRYPTION_KEY. This keeps
-// backup.js and restore-backup.js in agreement and guarantees a backup is never
-// written with an empty key (which SQLCipher treats as "no encryption").
+// Match restoration key selection. An empty SQLCipher key disables encryption,
+// so exportEncrypted rejects it before creating a backup.
 const BACKUP_KEY =
-  process.env.BACKUP_ENCRYPTION_KEY || process.env.DATABASE_ENCRYPTION_KEY || "";
-// Production still requires a *separate* backup key for defence-in-depth.
-if (process.env.NODE_ENV === "production" && !process.env.BACKUP_ENCRYPTION_KEY) {
+  process.env.BACKUP_ENCRYPTION_KEY ||
+  process.env.DATABASE_ENCRYPTION_KEY ||
+  "";
+// Production requires an explicit backup key.
+if (
+  process.env.NODE_ENV === "production" &&
+  !process.env.BACKUP_ENCRYPTION_KEY
+) {
   throw new Error(
     "BACKUP_ENCRYPTION_KEY must be set in production to protect encrypted backups.",
   );
@@ -47,7 +42,7 @@ const sqlQuote = (s) => `'${String(s).replace(/'/g, "''")}'`;
 
 // Write a consistent encrypted snapshot to `destPath` (a SQLCipher DB file).
 export async function exportEncrypted(destPath) {
-  // Fail closed: never emit a plaintext backup (ATTACH … KEY '' = unencrypted).
+  // Reject an empty key to avoid writing an unencrypted backup.
   if (!BACKUP_KEY) {
     throw new Error(
       "No backup encryption key (set BACKUP_ENCRYPTION_KEY or DATABASE_ENCRYPTION_KEY); refusing to write an unencrypted backup.",

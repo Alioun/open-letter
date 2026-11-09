@@ -17,7 +17,6 @@ import { join, dirname } from "node:path";
 import { fileURLToPath } from "node:url";
 import process from "node:process";
 import postgres from "postgres";
-import { openEncrypted, DB_PATH } from "./connection.js";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 
@@ -63,7 +62,25 @@ async function main() {
     : { rejectUnauthorized: false };
   const sql = postgres(sourceUrl, { ssl });
 
-  const db = await openEncrypted(DB_PATH);
+  if (!(await tableExists(sql, "signers"))) {
+    await sql.end();
+    throw new Error(
+      "Source database has no signers table. Select the application's PostgreSQL database.",
+    );
+  }
+  const columns = await sql`
+    SELECT column_name FROM information_schema.columns
+    WHERE table_schema='public' AND table_name='signers'
+  `;
+  const names = new Set(columns.map((column) => column.column_name));
+  if (!["id", "name", "email"].every((column) => names.has(column))) {
+    await sql.end();
+    throw new Error(
+      "Source signers table does not match the application schema.",
+    );
+  }
+
+  const { db, DB_PATH } = await import("./connection.js");
   console.log(`[migrate] target: ${DB_PATH}`);
 
   // Apply the SQLite schema first.
@@ -94,7 +111,9 @@ async function main() {
       });
     }
 
-    const dstCount = (await db.query(`SELECT COUNT(*) AS c FROM ${table}`).get()).c;
+    const dstCount = (
+      await db.query(`SELECT COUNT(*) AS c FROM ${table}`).get()
+    ).c;
     report[table] = { src: srcCount, dst: dstCount };
     const ok = srcCount === dstCount;
     if (!ok) failed = true;
@@ -108,9 +127,11 @@ async function main() {
 
   console.log("[migrate] summary:", JSON.stringify(report));
   if (failed) {
-    throw new Error("Row-count mismatch: migration incomplete, DO NOT cut over.");
+    throw new Error(
+      "Row counts differ. Migration is incomplete. Keep the app on the source database.",
+    );
   }
-  console.log("[migrate] OK: all tables migrated with matching counts.");
+  console.log("[migrate] migration complete; all table counts match.");
 }
 
 main().catch((err) => {

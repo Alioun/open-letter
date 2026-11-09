@@ -1,8 +1,9 @@
+import { FreeTextChoice } from "./ui.jsx";
 // Zoom event signup form, rendered in the #zoom section of App.jsx when
 // features.zoomEvent is enabled. If a letter has the feature off and nothing
 // imports this file, the bundler excludes it from that build automatically.
 
-import { useState, useMemo, useRef, memo } from "react";
+import { useState, useRef, memo } from "react";
 import cfg from "../config/letter.config.js";
 
 // Config-driven form copy, with fallbacks so a letter that omits zoom.form still
@@ -10,6 +11,7 @@ import cfg from "../config/letter.config.js";
 const F = () => cfg.zoom?.form || {};
 
 export const ZoomForm = memo(function ZoomForm({
+  config = cfg,
   onSubmit,
   serverError,
   kvNames,
@@ -17,29 +19,21 @@ export const ZoomForm = memo(function ZoomForm({
   // runtime (delivered via /api/zoom-count), defaults handled by the caller.
   showDelegierter = false,
 }) {
+  const cfg = config;
+  const F = () => cfg.zoom?.form || {};
   const [name, setName] = useState("");
   const [email, setEmail] = useState("");
   const [kv, setKv] = useState("");
   const [delegierter, setDelegierter] = useState(false);
-  const [showSuggest, setShowSuggest] = useState(false);
-  const [kvActiveIndex, setKvActiveIndex] = useState(-1);
   const [errors, setErrors] = useState({});
   const [submitting, setSubmitting] = useState(false);
   const [done, setDone] = useState(false);
   const nameRef = useRef(null);
   const emailRef = useRef(null);
-  const kvInputRef = useRef(null);
-
-  const kvMatches = useMemo(() => {
-    if (!kv) return [];
-    const q = kv.toLowerCase();
-    return kvNames.filter((k) => k.toLowerCase().includes(q)).slice(0, 6);
-  }, [kv, kvNames]);
 
   function validate() {
     const e = {};
-    if (name.trim().length < 2)
-      e.name = cfg.ui.signForm.errName;
+    if (name.trim().length < 2) e.name = cfg.ui.signForm.errName;
     if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email))
       e.email = cfg.ui.signForm.errEmail;
     setErrors(e);
@@ -159,79 +153,13 @@ export const ZoomForm = memo(function ZoomForm({
           {cfg.ui.zoomForm.kvLabel}{" "}
           <span className="opt"> {cfg.ui.zoomForm.kvHint}</span>
         </label>
-        <input
+        <FreeTextChoice
           id="zoom-kv"
-          ref={kvInputRef}
-          type="text"
           value={kv}
-          onChange={(e) => {
-            setKv(e.target.value);
-            setShowSuggest(true);
-            setKvActiveIndex(-1);
-          }}
-          onFocus={() => setShowSuggest(true)}
-          onBlur={() => {
-            setTimeout(() => {
-              setShowSuggest(false);
-              setKvActiveIndex(-1);
-            }, 150);
-            setKv((v) => v.replace(/^KV\s*/i, ""));
-          }}
-          onKeyDown={(e) => {
-            if (!showSuggest || !kvMatches.length) return;
-            if (e.key === "ArrowDown") {
-              e.preventDefault();
-              setKvActiveIndex((i) => Math.min(i + 1, kvMatches.length - 1));
-            } else if (e.key === "ArrowUp") {
-              e.preventDefault();
-              setKvActiveIndex((i) => Math.max(i - 1, 0));
-            } else if (e.key === "Enter" && kvActiveIndex >= 0) {
-              e.preventDefault();
-              setKv(kvMatches[kvActiveIndex]);
-              setShowSuggest(false);
-              setKvActiveIndex(-1);
-            } else if (e.key === "Escape") {
-              setShowSuggest(false);
-              setKvActiveIndex(-1);
-              kvInputRef.current?.focus();
-            }
-          }}
-          placeholder="z. B. Berlin-Neukölln"
-          autoComplete="off"
-          role="combobox"
-          aria-expanded={showSuggest && kv && kvMatches.length > 0}
-          aria-autocomplete="list"
-          aria-controls="zoom-kv-listbox"
-          aria-activedescendant={
-            kvActiveIndex >= 0 ? `zoom-kv-option-${kvActiveIndex}` : undefined
-          }
+          onChange={setKv}
+          items={kvNames}
+          placeholder={cfg.sign.fields.kreisverband.placeholder}
         />
-        {showSuggest && kv && kvMatches.length > 0 && (
-          <div
-            id="zoom-kv-listbox"
-            role="listbox"
-            className="autocomplete-dropdown"
-          >
-            {kvMatches.map((k, i) => (
-              <div
-                key={k}
-                id={`zoom-kv-option-${i}`}
-                role="option"
-                aria-selected={i === kvActiveIndex}
-                onMouseDown={() => {
-                  setKv(k);
-                  setShowSuggest(false);
-                  setKvActiveIndex(-1);
-                }}
-                className={
-                  "autocomplete-option" + (i === kvActiveIndex ? " active" : "")
-                }
-              >
-                {k}
-              </div>
-            ))}
-          </div>
-        )}
       </div>
 
       {showDelegierter && (

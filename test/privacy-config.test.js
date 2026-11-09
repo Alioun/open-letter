@@ -10,7 +10,9 @@ import { interpolateTemplate } from "../server/email.js";
 describe("privacy config", () => {
   test("missing keys fall back to the defaults", () => {
     const p = resolvePrivacy({});
-    expect(p.confirmationLinkHours).toBe(PRIVACY_DEFAULTS.confirmationLinkHours);
+    expect(p.confirmationLinkHours).toBe(
+      PRIVACY_DEFAULTS.confirmationLinkHours,
+    );
     expect(p.settingsLinkMs).toBe(90 * 24 * 3600 * 1000);
     expect(p.emailJobRetentionS).toBe(24 * 3600);
   });
@@ -22,9 +24,9 @@ describe("privacy config", () => {
     expect(p.treffenRetentionMs).toBe(30 * 24 * 3600 * 1000);
     expect(p.confirmationLinkMs).toBe(48 * 3600 * 1000);
     expect(p.settingsLinkDays).toBe(90);
-    expect(resolvePrivacy({ privacy: { deliveryLogDays: 10 } }).deliveryLogMs).toBe(
-      10 * 24 * 3600 * 1000,
-    );
+    expect(
+      resolvePrivacy({ privacy: { deliveryLogDays: 10 } }).deliveryLogMs,
+    ).toBe(10 * 24 * 3600 * 1000);
   });
 
   test("invalid values fail loudly", () => {
@@ -42,17 +44,21 @@ describe("privacy config", () => {
     expect(backupKeepHours(p, "")).toBe(72); // docker-compose passes an empty value
     expect(backupKeepHours(p, "24")).toBe(24);
     expect(backupKeepHours(p, "nonsense")).toBe(72);
+    expect(backupKeepHours(p, "168")).toBe(168);
+    expect(() => backupKeepHours(p, "169")).toThrow("erasureLogDays");
   });
 
   test("retention years must be whole years", () => {
-    expect(() => resolvePrivacy({ privacy: { signerRetentionYears: 1.5 } })).toThrow(
-      /whole number/,
-    );
+    expect(() =>
+      resolvePrivacy({ privacy: { signerRetentionYears: 1.5 } }),
+    ).toThrow(/whole number/);
   });
 
   test("the erasure log must outlive the backups", () => {
     expect(() =>
-      resolvePrivacy({ privacy: { backupRetentionHours: 200, erasureLogDays: 7 } }),
+      resolvePrivacy({
+        privacy: { backupRetentionHours: 200, erasureLogDays: 7 },
+      }),
     ).toThrow(/erasureLogDays/);
   });
 
@@ -63,7 +69,10 @@ describe("privacy config", () => {
     ).toThrow(/retentionMonths/);
     expect(() =>
       resolvePrivacy(
-        withAnalytics({ src: "https://stats.example.org/s.js", retentionMonths: 12 }),
+        withAnalytics({
+          src: "https://stats.example.org/s.js",
+          retentionMonths: 12,
+        }),
       ),
     ).not.toThrow();
     expect(() => resolvePrivacy(withAnalytics({ src: "" }))).not.toThrow();

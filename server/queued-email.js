@@ -1,8 +1,3 @@
-// Transactional mail queued as Honker jobs. The job payload carries only ids
-// ({ kind, signerId | requestId, baseUrl }): name, address and tokens are read
-// from the database when the mail is sent. A job that fails for good therefore
-// leaves no personal data in the dead-letter table, and erasing someone makes
-// their pending mails no-ops.
 import {
   getSignerForMail,
   getSignerIdByEmail,
@@ -12,11 +7,41 @@ import {
   getZoomRegistrationForMail,
   issueUnsubscribeToken,
   issueZoomUnsubscribeToken,
-  issueInviteStatsToken,
 } from "./db.js";
 import { buildUnsubscribeHeaders, pageUrl } from "./email.js";
 
 const notExpired = (at) => Boolean(at) && at > new Date().toISOString();
+
+const legacySubjects = {
+  verification: ["signers", "signerId"],
+  "already-signed": ["signers", "signerId"],
+  invite: ["signers", "signerId"],
+  deletion: ["deletion_requests", "requestId"],
+  "treffen-verification": ["zoom_pending", "pendingId"],
+  "treffen-already-registered": ["zoom_registrations", "registrationId"],
+};
+
+export async function normalizeQueuedEmailPayload(connection, payload) {
+  if (!payload.to) return payload;
+  const subject = legacySubjects[payload.kind];
+  if (!subject || typeof payload.to !== "string")
+    throw new Error("Unsupported legacy email payload");
+  const [table, field] = subject;
+  const row = await connection
+    .query(
+      `SELECT id FROM ${table} WHERE email=?${payload[field] ? " AND id=?" : ""}`,
+    )
+    .get(payload.to, ...(payload[field] ? [payload[field]] : []));
+  if (!row) return null;
+  const normalized = {
+    kind: payload.kind,
+    [field]: row.id,
+    baseUrl: payload.baseUrl,
+  };
+  for (const key of ["messageId", "token", "statsToken", "inviteCode"])
+    if (payload[key]) normalized[key] = payload[key];
+  return normalized;
+}
 
 // Unsubscribe link for a mail to `signerId` / `email`: the signer's token when
 // there is a signature, otherwise the Treffen registration's. The settings page
@@ -42,25 +67,19 @@ async function unsubscribeArgs(baseUrl, { signerId, email, lang }) {
   };
 }
 
-// A fresh stats token, issued as the mail goes out: the job payload carries
-// only the signer id, and a retried job just issues another one.
-async function inviteArgs(signerId) {
-  const issued = await issueInviteStatsToken(signerId);
-  if (!issued) return {};
-  return { inviteCode: issued.inviteCode, statsToken: issued.token };
-}
-
 // Returns the arguments for the mail's send function, or null when the mail
 // should no longer go out (row deleted, already confirmed, link expired).
 export async function prepareQueuedEmail(payload) {
-  // Jobs enqueued before payloads were reduced still carry the full arguments.
-  if (payload.to) return payload;
-
   const { kind, baseUrl } = payload;
 
   if (kind === "deletion") {
     const req = await getDeletionRequestForMail(payload.requestId);
-    if (!req || !notExpired(req.expires_at)) return null;
+    if (
+      !req ||
+      !notExpired(req.expires_at) ||
+      (payload.token && payload.token !== req.token)
+    )
+      return null;
     return {
       kind,
       to: req.email,
@@ -77,7 +96,12 @@ export async function prepareQueuedEmail(payload) {
 
   if (kind === "treffen-verification") {
     const pending = await getZoomPendingForMail(payload.pendingId);
-    if (!pending || !notExpired(pending.expires_at)) return null;
+    if (
+      !pending ||
+      !notExpired(pending.expires_at) ||
+      (payload.token && payload.token !== pending.token)
+    )
+      return null;
     // No unsubscribe link: nothing is registered yet, and the mail is sent
     // only once per sign-up.
     return {
@@ -103,18 +127,31 @@ export async function prepareQueuedEmail(payload) {
       headers: buildUnsubscribeHeaders(
         `${baseUrl}/api/zoom-abmelden/${token}/opt-out`,
       ),
-      unsubscribeUrl: pageUrl(baseUrl, `/abmelden/${token}?from=zoom`, reg.lang),
+      unsubscribeUrl: pageUrl(
+        baseUrl,
+        `/abmelden/${token}?from=zoom`,
+        reg.lang,
+      ),
     };
   }
 
   const signer = await getSignerForMail(payload.signerId);
   if (!signer) return null;
   if (kind === "verification") {
-    if (signer.verified || !notExpired(signer.token_expires_at)) return null;
+    if (
+      signer.verified ||
+      !notExpired(signer.token_expires_at) ||
+      (payload.token && payload.token !== signer.verification_token)
+    )
+      return null;
   } else if (kind === "already-signed") {
     if (!signer.verified) return null;
   } else if (kind === "invite") {
     if (!signer.verified || !signer.invite_code) return null;
+    if (!payload.statsToken || !payload.inviteCode)
+      throw new Error(
+        "Invite credentials must be persisted before preparing mail",
+      );
   } else {
     throw new Error(`unknown email kind: ${kind}`);
   }
@@ -126,7 +163,10 @@ export async function prepareQueuedEmail(payload) {
     baseUrl,
     lang: signer.lang,
     ...(kind === "verification" && { token: signer.verification_token }),
-    ...(kind === "invite" && (await inviteArgs(signer.id))),
+    ...(kind === "invite" && {
+      inviteCode: payload.inviteCode,
+      statsToken: payload.statsToken,
+    }),
     ...(await unsubscribeArgs(baseUrl, {
       signerId: signer.id,
       lang: signer.lang,

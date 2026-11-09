@@ -60,6 +60,13 @@ export function localizeConfig(letter, lang) {
   const l = normalizeLang(letter, lang);
   const over = letter.i18n?.[l] || {};
   const merged = deepMerge(letter, over);
+  merged.brand = {
+    ...merged.brand,
+    lang: l,
+    locale:
+      over.brand?.locale ||
+      (letter.brand?.locale?.split(/[-_]/)[0] === l ? letter.brand.locale : l),
+  };
   merged.ui = deepMerge(
     deepMerge(uiDefaults(l), letter.ui || {}),
     over.ui || {},

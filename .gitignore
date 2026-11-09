@@ -28,4 +28,8 @@ design-export
 
 # Load test: throwaway secrets and raw run output
 loadtest/.env.loadtest
+loadtest/.tls/
 loadtest/results/*/raw/
+
+# Locally built Honker extension
+vendor/libhonker_ext.so

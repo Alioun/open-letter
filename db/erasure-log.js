@@ -10,7 +10,9 @@
 //
 // Every function takes the connection explicitly: the restore script works on
 // connections of its own.
-import { createHmac } from "node:crypto";
+import { emailHmac } from "./email-identity.js";
+import { eraseSubject, erasureTables } from "./erasure.js";
+export { emailHmac } from "./email-identity.js";
 
 // Same definition as in db/schema.sql; repeated so a restored pre-log backup
 // gets the table.
@@ -27,24 +29,12 @@ export const TREFFEN_OPT_OUT = "treffen-opt-out";
 export const HIDE_PUBLICLY = "hide-publicly"; // name taken off the public list
 export const HIDE_INVITE_NAME = "hide-invite-name"; // first name off the invite link
 
-function hmacKey() {
-  const key = process.env.DATABASE_ENCRYPTION_KEY || "";
-  if (!key) throw new Error("DATABASE_ENCRYPTION_KEY is required for the erasure log");
-  return createHmac("sha256", key).update("erasure-log").digest();
-}
-
-export function emailHmac(email) {
-  return createHmac("sha256", hmacKey())
-    .update(String(email).trim().toLowerCase())
-    .digest("hex");
-}
-
 export async function recordErasure(db, email, kind, at = new Date()) {
   await db
     .query(
       `INSERT INTO erasure_log /* public-neutral */ (email_hmac, kind, at)
        VALUES (?, ?, ?)
-       ON CONFLICT (email_hmac, kind) DO UPDATE SET at = excluded.at`,
+       ON CONFLICT (email_hmac, kind) DO UPDATE SET at = MAX(erasure_log.at, excluded.at)`,
     )
     .run(emailHmac(email), kind, at.toISOString());
 }
@@ -75,11 +65,6 @@ export async function purgeErasureLog(db, before) {
 // after being erased keeps their new signature. The entries themselves are
 // carried over, so a second restore is covered too. Returns counts per kind.
 export async function applyErasureLog(db, entries) {
-  const byHmac = new Map();
-  for (const e of entries) {
-    if (!byHmac.has(e.email_hmac)) byHmac.set(e.email_hmac, []);
-    byHmac.get(e.email_hmac).push(e);
-  }
   const applied = {
     [ERASE]: 0,
     [NEWSLETTER_OPT_OUT]: 0,
@@ -87,86 +72,55 @@ export async function applyErasureLog(db, entries) {
     [HIDE_PUBLICLY]: 0,
     [HIDE_INVITE_NAME]: 0,
   };
-  if (byHmac.size === 0) return applied;
-
-  // A backup from before a table existed simply doesn't have it.
-  const existing = new Set(
-    (await db.query(`SELECT name FROM sqlite_master WHERE type = 'table'`).all()).map(
-      (r) => r.name,
-    ),
-  );
-  await db.run(ERASURE_LOG_DDL);
-  const has = (t) => existing.has(t);
-  // A backup from before invite links has no invite_show_name to reset.
-  const hasInviteName =
-    has("signers") &&
-    (await db.query(`PRAGMA table_info(signers)`).all()).some(
-      (c) => c.name === "invite_show_name",
-    );
-  const emails = new Set();
-  for (const t of ["signers", "zoom_registrations", "zoom_pending", "deletion_requests"].filter(has)) {
-    for (const row of await db.query(`SELECT email FROM ${t}`).all()) {
-      emails.add(row.email);
-    }
-  }
-
-  for (const email of emails) {
-    const matches = byHmac.get(emailHmac(email));
-    if (!matches) continue;
-    for (const { kind, at } of matches) {
-      if (kind === ERASE) {
-        let changed = 0;
-        for (const t of ["signers", "zoom_registrations", "zoom_pending"].filter(has)) {
-          const res = await db
-            .query(`DELETE FROM ${t} WHERE email = ? AND created_at < ?`)
-            .run(email, at);
-          changed += res?.changes ?? 0;
+  if (!entries.length) return applied;
+  return db.transaction(
+    async () => {
+      await db.run(ERASURE_LOG_DDL);
+      const tables = await erasureTables(db);
+      const signerColumns = tables.has("signers")
+        ? new Set(
+            (await db.query("PRAGMA table_info(signers)").all()).map(
+              (c) => c.name,
+            ),
+          )
+        : new Set();
+      const choices = {
+        [NEWSLETTER_OPT_OUT]: ["signers", "newsletter"],
+        [HIDE_PUBLICLY]: ["signers", "show_publicly"],
+        [HIDE_INVITE_NAME]: ["signers", "invite_show_name"],
+        [TREFFEN_OPT_OUT]: ["zoom_registrations", null],
+      };
+      for (const { email_hmac, kind, at } of entries) {
+        if (kind === ERASE) {
+          if (await eraseSubject(db, { subjectHmac: email_hmac, before: at }))
+            applied[kind]++;
+        } else if (choices[kind]) {
+          const [table, column] = choices[kind];
+          if (tables.has(table) && (!column || signerColumns.has(column))) {
+            let changed = false;
+            const rows = await db
+              .query(`SELECT id,email FROM ${table} WHERE created_at <= ?`)
+              .all(at);
+            for (const row of rows) {
+              if (emailHmac(row.email) !== email_hmac) continue;
+              const sql = column
+                ? `UPDATE ${table} SET ${column}=0 WHERE id=? AND ${column}=1`
+                : `DELETE FROM ${table} WHERE id=?`;
+              const result = await db.query(sql).run(row.id);
+              if (result.changes) changed = true;
+            }
+            if (changed) applied[kind]++;
+          }
         }
-        if (has("deletion_requests")) {
-          await db.query(`DELETE FROM deletion_requests WHERE email = ?`).run(email);
-        }
-        if (changed) applied[kind]++;
-      } else if (kind === NEWSLETTER_OPT_OUT) {
-        const res = await db
+        await db
           .query(
-            `UPDATE signers SET newsletter = 0
-             WHERE email = ? AND newsletter = 1 AND created_at < ?`,
+            `INSERT INTO erasure_log (email_hmac,kind,at) VALUES (?,?,?)
+        ON CONFLICT(email_hmac,kind) DO UPDATE SET at=MAX(erasure_log.at,excluded.at)`,
           )
-          .run(email, at);
-        if (res?.changes) applied[kind]++;
-      } else if (kind === HIDE_PUBLICLY) {
-        const res = await db
-          .query(
-            `UPDATE signers SET show_publicly = 0
-             WHERE email = ? AND show_publicly = 1 AND created_at < ?`,
-          )
-          .run(email, at);
-        if (res?.changes) applied[kind]++;
-      } else if (kind === HIDE_INVITE_NAME && hasInviteName) {
-        const res = await db
-          .query(
-            `UPDATE signers SET invite_show_name = 0
-             WHERE email = ? AND invite_show_name = 1 AND created_at < ?`,
-          )
-          .run(email, at);
-        if (res?.changes) applied[kind]++;
-      } else if (kind === TREFFEN_OPT_OUT) {
-        const res = await db
-          .query(`DELETE FROM zoom_registrations WHERE email = ? AND created_at < ?`)
-          .run(email, at);
-        if (res?.changes) applied[kind]++;
+          .run(email_hmac, kind, at);
       }
-    }
-  }
-
-  for (const e of entries) {
-    await db
-      .query(
-        `INSERT INTO erasure_log (email_hmac, kind, at) VALUES (?, ?, ?)
-         ON CONFLICT (email_hmac, kind) DO UPDATE
-           SET at = MAX(erasure_log.at, excluded.at)`,
-      )
-      .run(e.email_hmac, e.kind, e.at);
-  }
-  return applied;
+      return applied;
+    },
+    { immediate: true },
+  );
 }

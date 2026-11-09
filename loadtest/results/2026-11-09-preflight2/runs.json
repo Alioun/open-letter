@@ -1,0 +1,26 @@
+[
+  {
+    "name": "current-n1000-cpu1-mem1g-r1",
+    "cpu": 1,
+    "memory": "1g",
+    "repetition": 1,
+    "started": "2026-11-09T10:16:29.505Z",
+    "limits": {
+      "nanoCpus": 1000000000,
+      "memory": 1073741824,
+      "swap": 1073741824
+    },
+    "startupMs": 11203,
+    "startupResources": "{\"BlockIO\":\"0B / 1.74MB\",\"CPUPerc\":\"0.61%\",\"Container\":\"767f7b72fcf4df2f54334c1e7e5cd9b9ecec2be6b2cc524fd87a69c44bf1e2d1\",\"ID\":\"767f7b72fcf4\",\"MemPerc\":\"9.01%\",\"MemUsage\":\"92.21MiB / 1GiB\",\"Name\":\"openletter-perf-1794219377835-49728-app-1\",\"NetIO\":\"1.76kB / 1.47kB\",\"PIDs\":\"13\"}",
+    "loadMs": 41281,
+    "k6Exit": 99,
+    "endLoadResources": "{\"BlockIO\":\"0B / 5.04MB\",\"CPUPerc\":\"6.94%\",\"Container\":\"767f7b72fcf4df2f54334c1e7e5cd9b9ecec2be6b2cc524fd87a69c44bf1e2d1\",\"ID\":\"767f7b72fcf4\",\"MemPerc\":\"10.37%\",\"MemUsage\":\"106.2MiB / 1GiB\",\"Name\":\"openletter-perf-1794219377835-49728-app-1\",\"NetIO\":\"189kB / 11.5MB\",\"PIDs\":\"10\"}",
+    "passed": false,
+    "error": "docker compose exited 1: SQLITE_BUSY: database is locked\n errno: 5,\n  code: \"SQLITE_BUSY\"\n\n\nBun v1.4.4 (Linux x64)\n",
+    "finalState": {
+      "oom": false,
+      "exit": 0,
+      "running": true
+    }
+  }
+]

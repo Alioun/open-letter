@@ -4,15 +4,21 @@ import { fileURLToPath } from "url";
 import { db } from "./connection.js";
 import { applyDataMigrations } from "./data-migrations.js";
 import cfg from "../config/letter.config.js";
+import { ensureCampaignSubmissionKeys } from "./campaign-submissions.js";
+import { ensureEmailAttemptSubjects } from "./email-attempts.js";
 import { letterTemplates } from "../config/i18n.js";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 
 // [table, column, declaration]: keep in sync with db/schema.sql.
 const ADDED_COLUMNS = [
+  ["email_templates", "revision", "INTEGER NOT NULL DEFAULT 1"],
   ["campaigns", "attempts", "INTEGER NOT NULL DEFAULT 0"],
   ["campaigns", "heartbeat_at", "TEXT"],
+  ["campaigns", "failure", "TEXT"],
+  ["campaigns", "delivery_expires_at", "TEXT"],
   ["zoom_event_mailings", "attempts", "INTEGER NOT NULL DEFAULT 0"],
+  ["zoom_event_mailings", "failure", "TEXT"],
   ["signers", "invite_code", "TEXT"],
   ["signers", "invite_stats_hash", "TEXT"],
   ["signers", "invite_show_name", "INTEGER NOT NULL DEFAULT 0"],
@@ -46,10 +52,10 @@ const templates = Object.entries(letterTemplates(cfg)).map(([slug, t]) => ({
   htmlBody: t.html_body,
 }));
 
-
 try {
   const schema = readFileSync(join(__dirname, "schema.sql"), "utf-8");
   await db.run(schema);
+  await db.run(readFileSync(join(__dirname, "publishing.sql"), "utf-8"));
   // CREATE TABLE IF NOT EXISTS leaves existing tables as they are, so columns
   // added to schema.sql later are added here for databases created before.
   for (const [table, column, decl] of ADDED_COLUMNS) {
@@ -59,6 +65,13 @@ try {
     }
   }
   for (const sql of ADDED_INDEXES) await db.run(sql);
+  await ensureCampaignSubmissionKeys(db);
+  const attempts = await ensureEmailAttemptSubjects(db);
+  if (attempts.unmatched) {
+    console.warn(
+      `Retaining ${attempts.unmatched} unmatched legacy email attempts until attempt retention expires to prevent duplicate retries.`,
+    );
+  }
   const insert = db.query(
     `INSERT INTO email_templates (slug, name, subject, html_body)
      VALUES (?, ?, ?, ?) ON CONFLICT (slug) DO NOTHING`,
@@ -74,9 +87,9 @@ try {
   for (const key of await applyDataMigrations(db)) {
     console.log(`Applied data migration ${key}.`);
   }
-  console.log("Database schema applied successfully.");
+  console.log("Database schema is up to date.");
 } catch (err) {
-  console.error("Failed to apply database schema:", err.message);
+  console.error("Database schema update failed:", err.message);
   process.exit(1);
 } finally {
   await db.close();

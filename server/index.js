@@ -1,3 +1,28 @@
+import { createRequestDrain } from "./request-drain.js";
+import { createCampaignDelivery } from "./campaign-delivery.js";
+import { db as sqlDb, openEncrypted, DB_PATH } from "../db/connection.js";
+import { ensureCampaignSubmissionKeys } from "../db/campaign-submissions.js";
+import { isCampaignTemplate } from "../config/campaign-templates.js";
+import { campaignSchedule } from "../config/campaign-schedule.js";
+import {
+  createPublicationStore,
+  initialDocument,
+  publicationFields,
+  configFromDocument,
+} from "./publications.js";
+import { buildFrontend, documentHtml, adminHtml } from "./frontend.js";
+import { normalizeImage, generateOg, assetPath } from "./assets.js";
+import { createAssetLifecycle } from "./asset-lifecycle.js";
+import { sanitizeRich } from "./rich-content.js";
+import {
+  installTemplates,
+  memoryTemplate,
+  memoryTemplates,
+} from "./template-snapshot.js";
+import { createEmailManager, deliveryContext } from "./email-setup.js";
+import { checkMailboxDns, ownershipToken } from "./mailbox-dns.js";
+import { createStatistics, eligibleRequest } from "./statistics.js";
+import { createMeetingService } from "./meeting-service.js";
 import { timingSafeEqual, createHash } from "node:crypto";
 import { Buffer } from "node:buffer";
 import { existsSync, readFileSync, writeFileSync } from "node:fs";
@@ -21,7 +46,6 @@ import { resolvePrivacy, retentionCutoff } from "../config/privacy.js";
 import { resolveInvite, statsDisplay } from "../config/invite.js";
 import {
   editableFields,
-  applyOverrides,
   cleanValue,
   GROUPS as EDITABLE_GROUPS,
 } from "../config/editable.js";
@@ -30,13 +54,7 @@ import { fillText } from "../config/ui.js";
 // The config as deployed, before admin overrides ("Texte & Modus") are applied
 // onto `cfg` below. Taken first, so it never contains an override.
 const PRISTINE_CFG = structuredClone(cfg);
-import {
-  renderIndexHtml,
-  renderUnsubscribeHtml,
-  analyticsOrigin,
-  languageUrl,
-  languageAlternates,
-} from "../config/html.js";
+import { analyticsOrigin } from "../config/html.js";
 import {
   getSigners,
   getStats,
@@ -54,19 +72,26 @@ import {
   getZoomRecipients,
   issueZoomUnsubscribeToken,
   deleteZoomRegistrationByUnsubscribeToken,
+  deleteSignerByUnsubscribeToken,
+  issueInviteStatsToken,
+  getSignerForMail,
+  getDeletionRequestForMail,
+  getZoomPendingForMail,
+  getRecipientIdentity,
+  authorizeRecipient,
   getCurrentZoomRegistrationByEmail,
-  claimZoomMailing,
-  markZoomMailing,
   listZoomMailings,
-  resetZoomMailings,
   clearZoomRegistrations,
   getZoomSettings,
+  meetingRepository,
+  getZoomRegistrationForMail,
+  issueUnsubscribeTokenForRecipient,
+  markDeliveredForRecipient,
   setZoomSettings,
   confirmSigner,
   getPendingSignerByToken,
   getInviteByCode,
   getCopyOverrides,
-  setCopyOverrides,
   inviteDisplayName,
   getInviteStats,
   isInviteCode,
@@ -77,7 +102,6 @@ import {
   getDeletionRequestLang,
   deleteExpiredDeletionRequests,
   purgeZoomRegistrationsAfter,
-  scheduleTreffenPurge,
   purgePreviousTreffenRegistrations,
   insertZoomPending,
   getZoomPendingByToken,
@@ -89,13 +113,13 @@ import {
   close,
   listEmailTemplates,
   getEmailTemplate,
-  createEmailTemplate,
-  updateEmailTemplate,
-  deleteEmailTemplate,
   listCampaigns,
+  getCampaignById,
+  getCampaignRecipients,
   createCampaign,
   cancelCampaign,
   claimCampaignById,
+  deferCampaign,
   getDueCampaignIds,
   markCampaignSent,
   markCampaignFailed,
@@ -105,11 +129,12 @@ import {
   markDelivered,
   countDelivered,
   deleteOldDeliveries,
-  touchZoomMailing,
   getNewsletterRecipients,
+  getCampaignLanguageCounts,
   getNewsletterNotZoomRecipients,
   getNewsletterRecipientsByIds,
   listNewsletterSigners,
+  selectedNewsletterSigners,
   listNewsletterSignerIds,
   getNewsletterSignerFilters,
   getNewsletterRecipientByEmail,
@@ -145,12 +170,14 @@ import {
   normalizeOccupation,
 } from "./db.js";
 import {
+  installEmailManager,
   sendVerificationEmail,
   sendZoomConfirmationEmail,
   sendTreffenVerificationEmail,
   sendTreffenAlreadyRegisteredEmail,
   sendDeletionEmail,
   sendRenderedEmail,
+  dispatchEmail,
   sendBatchEmails,
   buildUnsubscribeHeaders,
   renderEmailHtml,
@@ -184,7 +211,11 @@ import {
   stopWorker,
   purgeDeadJobs,
 } from "../db/jobs.js";
-import { prepareQueuedEmail } from "./queued-email.js";
+import { createDurableWork } from "./durable-work.js";
+import {
+  prepareQueuedEmail,
+  normalizeQueuedEmailPayload,
+} from "./queued-email.js";
 import {
   enqueueStateResolution,
   startStateWorker,
@@ -258,7 +289,9 @@ function offsetPhrase(hours, lang) {
   if (hours % 24 === 0) {
     const days = hours / 24;
     if (days === 1) return serverText("oneDay", {}, lang);
-    const words = String(configFor(lang).ui.server.numberWords || "").split(",");
+    const words = String(configFor(lang).ui.server.numberWords || "").split(
+      ",",
+    );
     const n = (days <= 7 && words[days - 1]?.trim()) || days;
     return serverText("days", { n }, lang);
   }
@@ -299,9 +332,10 @@ function zoomIn(zc, lang) {
 // A deletion link's language: the request's while it exists (read only with
 // several languages, so a single-language letter makes no extra query).
 async function deletionLang(req) {
-  const own = LANGUAGES.length > 1
-    ? await getDeletionRequestLang(req.params.token)
-    : null;
+  const own =
+    LANGUAGES.length > 1
+      ? await getDeletionRequestLang(req.params.token)
+      : null;
   return linkLang(req, own);
 }
 
@@ -312,11 +346,12 @@ function linkLang(req, rowLang) {
 }
 
 // Effective Zoom config: DB settings override env defaults.
-async function getZoomConfig() {
+async function getZoomConfig({ strict = false } = {}) {
   let s = {};
   try {
     s = await getZoomSettings();
   } catch (err) {
+    if (strict) throw err;
     console.error("[zoom] getZoomSettings failed, using defaults:", err);
   }
   const rawEventAt = s.zoom_event_at || ZOOM_EVENT_AT_DEFAULT;
@@ -332,8 +367,10 @@ async function getZoomConfig() {
   const linkOffsetHours = parseInt(s.zoom_link_offset_hours || "24", 10);
   const reminderOffsetHours = parseInt(s.zoom_reminder_offset_hours || "2", 10);
   // Runtime-editable event fallback label (shown when no date is set yet).
-  const eventLabelFallback = s.zoom_event_label || cfg.zoom?.eventLabel || "";
+  const eventLabelFallback = cfg.zoom?.eventLabel || "";
   return {
+    revision: Number(s.zoom_revision || 0),
+    generation: Number(s.zoom_generation || 0),
     eventAt,
     eventAtIso: dateSet ? eventAt.toISOString() : null,
     dateSet,
@@ -351,7 +388,7 @@ async function getZoomConfig() {
       : "",
     icsUrl: ZOOM_ICS_URL,
     // Nav/CTA label for the Treffen (admin-editable, falls back to config).
-    navLabel: s.zoom_nav_label || cfg.zoom?.navLabel || serverText("meetingFallback"),
+    navLabel: cfg.zoom?.navLabel || serverText("meetingFallback"),
     // Delegate field toggle: admin-editable, seeded from the letter config.
     showDelegierter:
       s.zoom_show_delegierter != null
@@ -404,129 +441,27 @@ if (!isDev && API_TOKEN_SECRET === ADMIN_JWT_SECRET) {
   );
 }
 
-// Generate the homepage + admin HTML from the active letter config, then let
-// Bun bundle them. Writing only on change keeps git clean for the default
-// letter and avoids dev-watch reload loops. A read-only FS falls back to any
-// pre-existing generated file.
-function writeIfChanged(relPath, content) {
-  const path = fileURLToPath(new URL("../" + relPath, import.meta.url));
-  let existing = null;
-  try {
-    existing = readFileSync(path, "utf8");
-  } catch {}
-  if (existing === content) return;
-  try {
-    writeFileSync(path, content);
-  } catch (err) {
-    if (existing == null) throw err;
-    console.warn(
-      `[html] could not regenerate ${relPath}, using existing:`,
-      err.message,
-    );
-  }
-}
-
-// A letter can bring its own stylesheet: config/letters/<name>/letter.css.
-const letterCss = existsSync(
-  new URL(`../config/letters/${LETTER_NAME}/letter.css`, import.meta.url),
-);
-const indexTemplate = readFileSync(
-  new URL("../index.template.html", import.meta.url),
-  "utf8",
-);
-// Languages (features.multiLanguage): the default is served at "/", every
-// other at "/<lang>" from its own generated page. One language adds nothing.
+// Bundled assets are independent of the mutable, localized HTML publication.
+const frontend = await buildFrontend();
 const EXTRA_LANGS = LANGUAGES.filter((l) => l !== DEFAULT_LANG);
-const alternates = languageAlternates(cfg.meta.canonicalUrl, LANGUAGES, (l) =>
-  langPrefix(cfg, l),
+const languageRoutes = Object.fromEntries(
+  EXTRA_LANGS.flatMap((l) => [
+    [`/${l}`, publicPage],
+    [`/${l}/`, publicPage],
+    [`/${l}/abmelden/:token`, privatePage],
+  ]),
 );
-writeIfChanged(
-  "index.generated.html",
-  renderIndexHtml(indexTemplate, cfg, LETTER_NAME, {
-    preloadBoot: true,
-    letterCss,
-    lang: DEFAULT_LANG,
-    ...(alternates.length && { alternates }),
-  }),
+const languageInviteRoutes = Object.fromEntries(
+  EXTRA_LANGS.map((l) => [`/${l}/i/:code`, privatePage]),
 );
-for (const l of EXTRA_LANGS) {
-  writeIfChanged(
-    `index.${l}.generated.html`,
-    renderIndexHtml(indexTemplate, configFor(l), LETTER_NAME, {
-      preloadBoot: `/api/boot?lang=${l}`,
-      letterCss,
-      lang: l,
-      canonical: languageUrl(cfg.meta.canonicalUrl, langPrefix(cfg, l)),
-      alternates,
-    }),
-  );
-}
-writeIfChanged(
-  "unsubscribe.generated.html",
-  renderUnsubscribeHtml(indexTemplate, cfg, LETTER_NAME, {
-    letterCss,
-    lang: DEFAULT_LANG,
-  }),
-);
-// The email settings page and the invite page in each further language, at
-// /<lang>/abmelden/<token> and /<lang>/i/<code>.
-for (const l of EXTRA_LANGS) {
-  writeIfChanged(
-    `unsubscribe.${l}.generated.html`,
-    renderUnsubscribeHtml(indexTemplate, configFor(l), LETTER_NAME, {
-      letterCss,
-      lang: l,
-    }),
-  );
-  writeIfChanged(
-    `invite.${l}.generated.html`,
-    renderIndexHtml(indexTemplate, configFor(l), LETTER_NAME, {
-      analytics: false,
-      private: true,
-      letterCss,
-      lang: l,
-    }),
-  );
-}
-// /i/<code>: the normal page, minus analytics. The path carries the invite
-// code (and the stats link's fragment a token), which must not end up in
-// analytics as a per-person page view.
-writeIfChanged(
-  "invite.generated.html",
-  renderIndexHtml(indexTemplate, cfg, LETTER_NAME, {
-    analytics: false,
-    private: true,
-    letterCss,
-    lang: DEFAULT_LANG,
-  }),
-);
-writeIfChanged(
-  "admin.generated.html",
-  readFileSync(new URL("../admin.template.html", import.meta.url), "utf8")
-    .replace("{{LANG}}", cfg.brand.lang || "de")
-    .replace("{{LETTER}}", LETTER_NAME),
-);
-
-const { default: homepage } = await import("../index.generated.html");
-const { default: unsubscribePage } =
-  await import("../unsubscribe.generated.html");
-const { default: admin } = await import("../admin.generated.html");
-const { default: invitePage } = await import("../invite.generated.html");
-// "/en", "/en/" and "/en/abmelden/<token>" for each further language, and
-// "/en/i/<code>" with invite links on.
-const languageRoutes = {};
-const languageInviteRoutes = {};
-for (const l of EXTRA_LANGS) {
-  const { default: page } = await import(`../index.${l}.generated.html`);
-  languageRoutes[`/${l}`] = page;
-  languageRoutes[`/${l}/`] = page;
-  const { default: unsubscribe } = await import(
-    `../unsubscribe.${l}.generated.html`
-  );
-  languageRoutes[`/${l}/abmelden/:token`] = unsubscribe;
-  const { default: invite } = await import(`../invite.${l}.generated.html`);
-  languageInviteRoutes[`/${l}/i/:code`] = invite;
-}
+const admin = () =>
+  new Response(adminHtml(frontend.entries, LETTER_NAME, cfg), {
+    headers: {
+      "Content-Type": "text/html; charset=utf-8",
+      ...securityHeaders,
+      "Cache-Control": "no-store",
+    },
+  });
 
 const adminRoute = `/${ADMIN_PATH}`;
 const jwtSecret = new TextEncoder().encode(ADMIN_JWT_SECRET);
@@ -587,7 +522,7 @@ function sanitize(str, max = 100) {
 }
 
 function sanitizeHtml(str, max = 120000) {
-  return String(str || "").slice(0, max);
+  return sanitizeRich(String(str || "").slice(0, max));
 }
 
 // Parse the shared filter params for the admin newsletter-signer list.
@@ -639,7 +574,7 @@ const securityHeaders = {
   ...(isDev
     ? {}
     : {
-        "Content-Security-Policy": `default-src 'self'; font-src 'self'; style-src 'self' 'unsafe-inline'; script-src ${scriptSrc}; img-src 'self' data:; connect-src ${connectSrc}; frame-src 'self' about:`,
+        "Content-Security-Policy": `default-src 'self'; font-src 'self' data:; style-src 'self' 'unsafe-inline'; script-src ${scriptSrc}; img-src 'self' data:; connect-src ${connectSrc}; frame-src 'self' about:`,
         "Strict-Transport-Security": "max-age=31536000; includeSubDomains",
       }),
 };
@@ -711,9 +646,10 @@ function concatUint8Arrays(chunks) {
   return result;
 }
 
-async function parseJsonBody(req) {
+async function parseJsonBody(req, limit = MAX_BODY_BYTES) {
   const len = parseInt(req.headers.get("content-length") || "0", 10);
-  if (len > MAX_BODY_BYTES) throw new Error("Payload too large");
+  if (len > limit)
+    throw Object.assign(new Error("Payload too large"), { status: 413 });
 
   const bodyStream = req.body;
   if (bodyStream && typeof bodyStream.getReader === "function") {
@@ -725,7 +661,8 @@ async function parseJsonBody(req) {
       if (done) break;
       if (value) {
         size += value.byteLength || value.length || 0;
-        if (size > MAX_BODY_BYTES) throw new Error("Payload too large");
+        if (size > limit)
+          throw Object.assign(new Error("Payload too large"), { status: 413 });
         chunks.push(value);
       }
     }
@@ -864,6 +801,11 @@ async function adminJson(req, handler) {
   try {
     return await handler();
   } catch (err) {
+    if (err.status === 413) return json({ error: err.message }, 413);
+    if (err instanceof SyntaxError) return json({ error: "Invalid JSON" }, 400);
+    if (err.status === 409)
+      return json({ error: err.message, revision: err.revision }, 409);
+    if (err.status === 400) return json({ error: err.message }, 400);
     console.error("Admin API error:", err);
     return json({ error: "Internal server error" }, 500);
   }
@@ -919,10 +861,7 @@ function buildMeetingInfo(zc, { pending = false, timingText } = {}) {
   }
   // online
   if (pending) {
-    return (
-      serverText("linkPending", { timing: timingText }, lang) +
-      calBtn
-    );
+    return serverText("linkPending", { timing: timingText }, lang) + calBtn;
   }
   const safeLink = sanitizeUrl(zc?.link || "");
   // Only reveal the actual link once the link window has opened; otherwise the
@@ -979,198 +918,38 @@ function buildZoomEventIcs(zc, { includeLink = false } = {}) {
   });
 }
 
-// Idempotency key for one chunk of a mailing: derived from the chunk's
-// recipients, so a retry of the same recipients reuses it and Resend won't send
-// twice, while a chunk made of different recipients never collides with it.
-function chunkKey(prefix, emails) {
-  const digest = createHash("sha256")
-    .update([...emails].sort().join("\n"))
-    .digest("hex")
-    .slice(0, 32);
-  return `${prefix}/${digest}`;
-}
-
-async function sendCampaign(campaign) {
-  const template = await getEmailTemplate(campaign.template_id);
-  if (!template) {
-    console.error(
-      `[campaign] ${campaign.id} template ${campaign.template_id} not found, aborting`,
-    );
-    await markCampaignFailed(campaign.id);
-    return;
-  }
-
-  const audience = campaign.audience || "newsletter";
-  const isZoom = audience === "zoom" || audience === "zoom_delegates";
-  const isSelection = audience === "selection";
-  const isNotZoom = audience === "email_not_zoom";
-
-  const recipients = isZoom
-    ? await getZoomRecipients({ delegatesOnly: audience === "zoom_delegates" })
-    : isSelection
-      ? await getNewsletterRecipientsByIds(campaign.recipient_ids || [])
-      : isNotZoom
-        ? await getNewsletterNotZoomRecipients()
-        : await getNewsletterRecipients();
-  const stats = await getNewsletterStats();
-  const signerCount = stats.signerCount?.toLocaleString("de-DE") || "0";
-  const zoomCfg = await getZoomConfig();
-  const zoomLinkInfo = zoomCfg ? buildMeetingInfo(zoomCfg) : "";
-  // What a recipient in another language gets (features.multiLanguage): the
-  // campaign's template and subject for that language, each falling back to
-  // the default's, with dates, links and the meeting block in that language.
-  const inLang = new Map();
-  async function campaignFor(lang) {
-    const l = normalizeLang(cfg, lang);
-    if (l === DEFAULT_LANG) {
-      return {
-        lang: undefined,
-        template,
-        subject: campaign.subject,
-        signerCount,
-        zoomCfg,
-        linkInfo: zoomLinkInfo,
-      };
-    }
-    if (!inLang.has(l)) {
-      const zc = zoomIn(zoomCfg, l);
-      inLang.set(l, {
-        ...(await campaignVersion(campaign, template, l)),
-        signerCount: stats.signerCount?.toLocaleString(langLocale(l)) || "0",
-        zoomCfg: zc,
-        linkInfo: zc ? buildMeetingInfo(zc) : "",
-      });
-    }
-    return inLang.get(l);
-  }
-
-  // Resume by who was reached, not by list position: the audience is
-  // re-queried on every attempt, and opt-outs or late confirmations in between
-  // would shift positions.
-  const mailing = `campaign:${campaign.id}`;
-  const delivered = await getDeliveredEmails(mailing);
-  const todo = recipients.filter((r) => !delivered.has(r.email));
-  const onDelivered = async (emails) => {
-    await markDelivered(
-      mailing,
-      emails.map((e) => e.to),
-    );
+function emailPreviewVariables(eventLabel) {
+  return {
+    name: "Ada Beispiel",
+    firstName: "Ada",
+    confirmUrl: "https://preview.invalid/confirm/example",
+    deleteUrl: "https://preview.invalid/delete/example",
+    inviteUrl: "https://preview.invalid/invite/example",
+    statsUrl: "https://preview.invalid/invites/example",
+    linkHours: String(
+      resolvePrivacy(configFor(DEFAULT_LANG)).confirmationLinkHours,
+    ),
+    signerCount: "1.000",
+    unsubscribeUrl: "https://preview.invalid/preferences/example",
+    eventLabel,
+    eventWhen: "15. Dezember 2026, 18:00 Uhr (Europe/Berlin)",
+    zoomLink: "https://preview.invalid/meeting",
+    linkInfo:
+      '<p>Beispieltermin: 15. Dezember, 18:00 Uhr. <a href="https://preview.invalid/meeting">Am Treffen teilnehmen</a></p>',
+    zoomJaUrl: "https://preview.invalid/meeting/signup/example",
+    zoomJaDelegiertUrl: "https://preview.invalid/meeting/delegate/example",
   };
-
-  console.log(
-    `[campaign] ${campaign.id} starting (attempt ${campaign.attempts}): ${recipients.length} in audience, ${delivered.size} already reached, remaining=${todo.length}, audience=${audience}`,
-  );
-
-  // A failing chunk doesn't stop the run: later chunks still go out (a bad
-  // address at the front must not starve everyone behind it), and the run ends
-  // 'failed' so the next attempt retries exactly the recipients not reached.
-  let failures = 0;
-  for (let i = 0; i < todo.length; i += 100) {
-    const batch = todo.slice(i, i + 100);
-
-    const payloads = [];
-    for (const recipient of batch) {
-      try {
-        const firstName = recipient.name.split(/\s/)[0];
-        const text = await campaignFor(recipient.lang);
-        const zc = text.zoomCfg;
-        let variables;
-        let optOutUrl;
-        if (isZoom) {
-          const token = await issueZoomUnsubscribeToken(recipient.id);
-          const unsubscribeUrl = pageUrl(
-            BASE_URL,
-            `/abmelden/${token}?from=zoom`,
-            text.lang,
-          );
-          optOutUrl = `${BASE_URL}/api/zoom-abmelden/${token}/opt-out`;
-          variables = {
-            name: recipient.name,
-            firstName,
-            eventLabel: zc.label,
-            eventWhen: zc.whenPhrase,
-            zoomLink: zc.link,
-            linkInfo: text.linkInfo,
-            unsubscribeUrl,
-          };
-        } else {
-          const token = await issueUnsubscribeToken(recipient.id);
-          const unsubscribeUrl = pageUrl(BASE_URL, `/abmelden/${token}`, text.lang);
-          optOutUrl = `${BASE_URL}/api/unsubscribe/${token}/opt-out`;
-          variables = {
-            name: recipient.name,
-            firstName,
-            signerCount: text.signerCount,
-            eventLabel: zc?.label || "",
-            eventWhen: zc?.whenPhrase || "",
-            linkInfo: text.linkInfo,
-            unsubscribeUrl,
-            ...treffenSignupUrls(token, zc?.showDelegierter, text.lang),
-          };
-        }
-        payloads.push({
-          to: recipient.email,
-          subject: interpolateTemplate(text.subject, variables),
-          html: renderEmailHtml(text.template.html_body, variables, text.lang),
-          headers: buildUnsubscribeHeaders(optOutUrl),
-        });
-      } catch (prepErr) {
-        // Not logged as delivered, so the next attempt tries this recipient
-        // again; the attempt cap bounds a recipient that can never render.
-        failures++;
-        console.error(
-          `[campaign] ${campaign.id} skipping recipient ${recipient.id} (prep failed):`,
-          prepErr,
-        );
-      }
-    }
-
-    if (payloads.length > 0) {
-      try {
-        await sendBatchEmails(
-          payloads,
-          chunkKey(
-            `campaign-${campaign.id}`,
-            payloads.map((p) => p.to),
-          ),
-          { onDelivered },
-        );
-      } catch (sendErr) {
-        failures++;
-        console.error(`[campaign] ${campaign.id} batch send failed:`, sendErr);
-      }
-    }
-
-    const reached = await countDelivered(mailing);
-    await setCampaignProgress(campaign.id, reached);
-    console.log(
-      `[campaign] ${campaign.id} progress: ${reached} reached, ${todo.length - i - batch.length} remaining`,
-    );
-
-    if (i + 100 < todo.length) await sleep(batchDelayMs);
-  }
-
-  const reached = await countDelivered(mailing);
-  if (failures > 0) {
-    console.error(
-      `[campaign] ${campaign.id} attempt ${campaign.attempts} finished with ${failures} failure(s): ${reached} reached, will retry the rest`,
-    );
-    await setCampaignProgress(campaign.id, reached);
-    await markCampaignFailed(campaign.id);
-    return;
-  }
-  console.log(`[campaign] ${campaign.id} done: ${reached} reached`);
-  await markCampaignSent(campaign.id, reached);
 }
 
-// Campaign sending is driven by Honker durable jobs (see the boot section).
-// Each campaign is processed by a `campaigns` queue job; a reconciler re-enqueues
-// any due/failed campaign so sends survive restarts and transient failures.
-async function handleCampaignJob({ campaignId }) {
-  const campaign = await claimCampaignById(campaignId);
-  if (!campaign) return; // already sending/sent, or cancelled (row deleted)
-  await sendCampaign(campaign);
-}
+const campaignDelivery = createCampaignDelivery({
+  baseUrl: BASE_URL,
+  getZoomConfig,
+  zoomIn,
+  buildMeetingInfo,
+  treffenSignupUrls,
+  canContinue: () => durableWork.status.ready,
+});
+const handleCampaignJob = (payload) => campaignDelivery.handle(payload);
 
 // ---- Zoom event mailings (link 1 day before + ICS, reminder 2 hours before) ----
 
@@ -1220,138 +999,67 @@ async function buildZoomMailPayload(kind, recipient, token, zoomCfg) {
   return payload;
 }
 
-async function sendZoomSignupEmail({ regId, name, email, cfg: zoomCfg, lang }) {
-  const cfg = zoomIn(zoomCfg, lang);
-  const mailings = await listZoomMailings();
-  const reminderSent = mailings.some(
-    (m) => m.kind === "reminder" && m.status === "sent",
-  );
-  const linkSent = mailings.some(
-    (m) => m.kind === "link" && m.status === "sent",
-  );
-  // If the link window is already open, a fresh signup would otherwise get the
-  // "link comes later" confirmation and never receive the link (the scheduled
-  // link mail already went out). Send them the link mail right away instead.
-  const windowOpen = isLinkWindowOpen(cfg) && Boolean(cfg.link);
-
-  if (reminderSent || linkSent || windowOpen) {
-    const kind = reminderSent ? "reminder" : "link";
-    const unsubToken = await issueZoomUnsubscribeToken(regId);
-    const payload = await buildZoomMailPayload(
-      kind,
-      { name, email, lang },
-      unsubToken,
-      zoomCfg,
-    );
-    await sendRenderedEmail(payload);
-    // So a resumed run of that mailing doesn't send it to them again.
-    await markDelivered(`zoom-${kind}`, [email]);
-  } else {
-    const unsubToken = await issueZoomUnsubscribeToken(regId);
-    await sendZoomConfirmationEmail({
-      to: email,
-      name,
+async function buildMeetingMail(kind, recipient, token, config) {
+  if (kind !== "confirmation")
+    return buildZoomMailPayload(kind, recipient, token, config);
+  const localized = zoomIn(config, recipient.lang);
+  const rendered = await renderTemplateBySlug(
+    "zoom_confirmation",
+    {
+      name: recipient.name,
+      firstName: recipient.name.split(/\s/)[0],
+      eventLabel: localized.label,
+      eventWhen: localized.whenPhrase,
+      linkInfo: buildMeetingInfo(localized, {
+        pending: true,
+        timingText: offsetPhrase(localized.linkOffsetHours, localized.lang),
+      }),
       unsubscribeUrl: pageUrl(
         BASE_URL,
-        `/abmelden/${unsubToken}?from=zoom`,
-        cfg.lang,
+        `/abmelden/${token}?from=zoom`,
+        localized.lang,
       ),
-      headers: buildUnsubscribeHeaders(
-        `${BASE_URL}/api/zoom-abmelden/${unsubToken}/opt-out`,
-      ),
-      eventLabel: cfg.label,
-      eventWhen: cfg.whenPhrase,
-      linkInfo: buildMeetingInfo(cfg, {
-        pending: true,
-        timingText: offsetPhrase(cfg.linkOffsetHours, cfg.lang),
-      }),
-      lang: cfg.lang,
-    });
-  }
-}
-
-// Both Zoom mailings skip addresses already in the delivery log, so a run that
-// was interrupted or partly failed resumes with exactly the people not yet
-// reached. They throw when anyone was missed, which marks the mailing 'failed'
-// for a retry (up to MAX_MAILING_ATTEMPTS).
-async function sendZoomLinkMails(cfg) {
-  const mailing = "zoom-link";
-  const recipients = await getZoomRecipients();
-  const delivered = await getDeliveredEmails(mailing);
-  const todo = recipients.filter((r) => !delivered.has(r.email));
-  let failed = 0;
-  console.log(
-    `[zoom-mail] link mailing starting: ${recipients.length} recipients, ${delivered.size} already reached`,
+    },
+    localized.lang,
   );
-  for (const recipient of todo) {
-    try {
-      const token = await issueZoomUnsubscribeToken(recipient.id);
-      const payload = await buildZoomMailPayload("link", recipient, token, cfg);
-      await sendRenderedEmail(payload);
-      await markDelivered(mailing, [recipient.email]);
-    } catch (err) {
-      failed++;
-      console.error(`[zoom-mail] link send failed for one recipient:`, err);
-    }
-    await touchZoomMailing("link");
-    await sleep(messageDelayMs); // pace sends to respect provider rate limits
-  }
-  const reached = await countDelivered(mailing);
-  console.log(
-    `[zoom-mail] link mailing done: ${reached}/${recipients.length} reached`,
-  );
-  if (failed > 0) throw new Error(`${failed} link mail(s) failed`);
-  return reached;
-}
-
-async function sendZoomReminderMails(cfg) {
-  const mailing = "zoom-reminder";
-  const recipients = await getZoomRecipients();
-  const delivered = await getDeliveredEmails(mailing);
-  const todo = recipients.filter((r) => !delivered.has(r.email));
-  const onDelivered = (emails) =>
-    markDelivered(
-      mailing,
-      emails.map((e) => e.to),
-    );
-  let failed = 0;
-  console.log(
-    `[zoom-mail] reminder starting: ${recipients.length} recipients, ${delivered.size} already reached`,
-  );
-  for (let i = 0; i < todo.length; i += 100) {
-    const batch = todo.slice(i, i + 100);
-    try {
-      const payloads = [];
-      for (const recipient of batch) {
-        const token = await issueZoomUnsubscribeToken(recipient.id);
-        payloads.push(
-          await buildZoomMailPayload("reminder", recipient, token, cfg),
-        );
-      }
-      await sendBatchEmails(
-        payloads,
-        chunkKey(
-          "zoom-reminder",
-          payloads.map((p) => p.to),
-        ),
-        { onDelivered },
-      );
-    } catch (err) {
-      failed++;
-      console.error("[zoom-mail] reminder chunk failed:", err);
-    }
-    await touchZoomMailing("reminder");
-    if (i + 100 < todo.length) await sleep(batchDelayMs);
-  }
-  const reached = await countDelivered(mailing);
-  console.log(
-    `[zoom-mail] reminder done: ${reached}/${recipients.length} reached`,
-  );
-  if (failed > 0) throw new Error(`${failed} reminder chunk(s) failed`);
-  return reached;
+  return {
+    to: recipient.email,
+    subject: rendered.subject,
+    html: rendered.html,
+    headers: buildUnsubscribeHeaders(
+      `${BASE_URL}/api/zoom-abmelden/${token}/opt-out`,
+    ),
+  };
 }
 
 // Copy for the server-rendered link pages (letter config `pages`).
+const privacy = resolvePrivacy(cfg);
+const TREFFEN_RETENTION_MS = privacy.treffenRetentionMs;
+const confirmationExpiry = () =>
+  new Date(Date.now() + privacy.confirmationLinkMs);
+
+async function queuedCredentials(kind, args) {
+  if (kind === "invite") {
+    const issued = await issueInviteStatsToken(args.signerId);
+    return issued
+      ? { statsToken: issued.token, inviteCode: issued.inviteCode }
+      : {};
+  }
+  const row =
+    kind === "verification"
+      ? await getSignerForMail(args.signerId)
+      : kind === "deletion"
+        ? await getDeletionRequestForMail(args.requestId)
+        : kind === "treffen-verification"
+          ? await getZoomPendingForMail(args.pendingId)
+          : null;
+  return row ? { token: row.verification_token || row.token } : {};
+}
+const durableWork = createDurableWork(sqlDb, {
+  enqueue: enqueueJob,
+  ttl: privacy.emailJobRetentionS,
+  prepare: queuedCredentials,
+});
 let pages = pageCopy(cfg);
 
 // Admin-editable texts and presentation mode (config/editable.js). Overrides
@@ -1386,18 +1094,155 @@ async function currentOverrides(lang = DEFAULT_LANG) {
   );
 }
 
-async function refreshCopy() {
-  for (const l of LANGUAGES) {
-    applyOverrides(configFor(l), EDITABLE_BY_LANG[l].fields, await currentOverrides(l));
-  }
-  pages = pageCopy(cfg);
+await ensureCampaignSubmissionKeys(sqlDb);
+const publicationConnection = await openEncrypted(DB_PATH);
+const emailConnection = await openEncrypted(DB_PATH);
+const assetConnection = await openEncrypted(DB_PATH);
+await assetConnection.run(
+  readFileSync(new URL("../db/publishing.sql", import.meta.url), "utf8"),
+);
+const assetLifecycle = await createAssetLifecycle(assetConnection);
+let publications;
+const emailManager = await createEmailManager(emailConnection, cfg, {
+  onActivate() {
+    refreshEmailFacts();
+  },
+});
+installEmailManager(emailManager);
+function refreshEmailFacts() {
+  if (!publications) return;
+  for (const l of LANGUAGES)
+    Object.assign(configFor(l).email, emailManager.facts);
+  // HTML is derived from the current publication and current protected email facts.
+  rebuildHtml(publications.current);
 }
+function rebuildHtml(snapshot) {
+  snapshot.html = {};
+  snapshot.privateHtml = {};
+  for (const l of LANGUAGES) {
+    const config = configFor(l);
+    snapshot.html[l] = documentHtml(config, LETTER_NAME, frontend.entries);
+    snapshot.privateHtml[l] = documentHtml(
+      config,
+      LETTER_NAME,
+      frontend.entries,
+      { privatePage: true },
+    );
+  }
+}
+publications = await createPublicationStore(publicationConnection, {
+  assets: assetLifecycle,
+  async prepare(document, { mode }) {
+    const configs = {};
+    const generatedAssets = [];
+    for (const l of LANGUAGES) {
+      const config = configFromDocument(document, l, emailManager.facts);
+      const text =
+        document.metadata[l]?.imageText ||
+        (config.features.successMode
+          ? config.success?.headlineLines
+          : config.hero.headlineLines
+        )
+          ?.map((v) => v.text)
+          .join(" ");
+      if (!document.metadata[l]?.ogImage) {
+        const image = await generateOg(config, text);
+        config.meta.ogImage =
+          mode === "preview"
+            ? `data:${image.mime};base64,${image.bytes.toString("base64")}`
+            : `${BASE_URL}${assetPath(image.hash)}`;
+        generatedAssets.push(image);
+      }
+      config.publicationCss = document.appearance.css;
+      configs[l] = config;
+    }
+    // Render before the transaction: failures cannot leave the live snapshot half updated.
+    const html = Object.fromEntries(
+      LANGUAGES.map((l) => [
+        l,
+        documentHtml(configs[l], LETTER_NAME, frontend.entries),
+      ]),
+    );
+    const privateHtml = Object.fromEntries(
+      LANGUAGES.map((l) => [
+        l,
+        documentHtml(configs[l], LETTER_NAME, frontend.entries, {
+          privatePage: true,
+        }),
+      ]),
+    );
+    return { configs, html, privateHtml, generatedAssets };
+  },
+  onSwap(snapshot) {
+    for (const l of LANGUAGES) {
+      Object.assign(snapshot.configs[l].email, emailManager.facts);
+      Object.assign(configFor(l), snapshot.configs[l]);
+    }
+    rebuildHtml(snapshot);
+    installTemplates(snapshot.document.templates);
+    pages = pageCopy(cfg);
+  },
+});
+const migratedOverrides = Object.fromEntries(
+  await Promise.all(LANGUAGES.map(async (l) => [l, await currentOverrides(l)])),
+);
+const legacyEventCopy = await getZoomSettings();
+for (const l of LANGUAGES) {
+  for (const [key, path] of [
+    ["zoom_event_label", "zoom.eventLabel"],
+    ["zoom_nav_label", "zoom.navLabel"],
+  ]) {
+    if (legacyEventCopy[key] && migratedOverrides[l][path] == null)
+      migratedOverrides[l][path] = legacyEventCopy[key];
+  }
+}
+const completeTemplates = await sqlDb
+  .query("SELECT * FROM email_templates ORDER BY id")
+  .all();
+await publications.load(initialDocument(completeTemplates, migratedOverrides));
 
+let statistics = null;
 try {
-  await refreshCopy();
-} catch (err) {
-  // A database without app_settings yet (fresh setup) runs on the config.
-  console.error("[copy] overrides not applied:", err.message);
+  statistics = await createStatistics(await openEncrypted(DB_PATH), BASE_URL);
+} catch (e) {
+  console.error("[statistics] initialization failed:", e.message);
+}
+function publicationResponse(snapshot = publications.current) {
+  return {
+    nextTemplateId: publications.nextTemplateIdValue,
+    revision: snapshot.revision,
+    document: snapshot.document,
+    publishedAt: snapshot.publishedAt,
+  };
+}
+function pageLanguage(req) {
+  const first = new URL(req.url).pathname.split("/")[1];
+  return EXTRA_LANGS.includes(first) ? first : DEFAULT_LANG;
+}
+function publicPage(req) {
+  const lang = pageLanguage(req);
+  if (
+    statistics &&
+    publications.current.document.analytics.mode === "builtin" &&
+    eligibleRequest(req, EXTRA_LANGS)
+  )
+    statistics.track(req, getClientIp(req));
+  return new Response(publications.current.html[lang], {
+    headers: {
+      "Content-Type": "text/html; charset=utf-8",
+      ...securityHeaders,
+      "Cache-Control": "no-store",
+    },
+  });
+}
+function privatePage(req) {
+  return new Response(publications.current.privateHtml[pageLanguage(req)], {
+    headers: {
+      "Content-Type": "text/html; charset=utf-8",
+      ...securityHeaders,
+      "Cache-Control": "no-store",
+    },
+  });
 }
 
 // Link-page copy in `lang` (that language's admin overrides included); the
@@ -1410,7 +1255,9 @@ function pagesIn(lang) {
 function htmlPage(inner, status = 200, lang) {
   const l = normalizeLang(cfg, lang);
   const page =
-    l === DEFAULT_LANG ? simplePage(inner, cfg) : simplePage(inner, configFor(l), l);
+    l === DEFAULT_LANG
+      ? simplePage(inner, cfg)
+      : simplePage(inner, configFor(l), l);
   return new Response(page, {
     status,
     headers: { "Content-Type": "text/html; charset=utf-8", ...securityHeaders },
@@ -1525,28 +1372,13 @@ async function treffenAnmelden(req, { commit }) {
       );
     }
 
-    const isNew = !existing;
-    const reg = await insertZoomRegistration({
-      name: signer.name,
-      email: signer.email,
-      kv: signer.kreisverband,
+    const result = await meetingService.register({
+      signerToken: token,
       delegierter: delegiert,
-      lang: signer.lang,
+      force,
     });
-
-    if (isNew) {
-      try {
-        await sendZoomSignupEmail({
-          regId: reg.id,
-          name: signer.name,
-          email: signer.email,
-          cfg: zoomCfg,
-          lang: signer.lang,
-        });
-      } catch (mailErr) {
-        console.error("[treffen-anmelden] confirmation email failed:", mailErr);
-      }
-    }
+    if (!result) return treffenLinkExpired(lang);
+    const { isNew } = result;
 
     const done = pages.treffenDone;
     return htmlPage(
@@ -1569,74 +1401,31 @@ async function treffenAnmelden(req, { commit }) {
 
 // Retention periods and link lifetimes from the letter config; the privacy
 // policy quotes the same values.
-const privacy = resolvePrivacy(cfg);
-const TREFFEN_RETENTION_MS = privacy.treffenRetentionMs;
-const confirmationExpiry = () =>
-  new Date(Date.now() + privacy.confirmationLinkMs);
 
-let zoomMailingRunning = false;
-
-async function runZoomMailingWorker() {
-  if (zoomMailingRunning) return;
-  const cfg = await getZoomConfig();
-  if (!cfg.dateSet) return; // no date yet → nothing to schedule
-  const eventMs = cfg.eventAt.getTime();
-  if (Number.isNaN(eventMs)) return;
-  // Registrations are only kept until TREFFEN_RETENTION_MS after the event:
-  // the current one, and a previous one whose date was replaced afterwards.
-  try {
-    const purged =
-      (await purgePreviousTreffenRegistrations()) +
-      (await purgeZoomRegistrationsAfter(
-        new Date(eventMs + TREFFEN_RETENTION_MS),
-      ));
-    if (purged > 0) {
-      console.log(
-        `[purge] deleted ${purged} Treffen registration(s) after the event`,
-      );
-    }
-  } catch (err) {
-    console.error("[purge] Treffen registrations:", err);
-  }
-  const linkMs = cfg.linkOffsetHours * 60 * 60 * 1000;
-  const reminderMs = cfg.reminderOffsetHours * 60 * 60 * 1000;
-  const now = Date.now();
-  zoomMailingRunning = true;
-  try {
-    // Link + ICS (needs the actual Zoom link)
-    if (now >= eventMs - linkMs && now < eventMs) {
-      if (!cfg.link) {
-        console.warn(
-          "[zoom-mail] link window open but ZOOM_LINK is not set, skipping (will retry once configured)",
-        );
-      } else if (await claimZoomMailing("link")) {
-        try {
-          const count = await sendZoomLinkMails(cfg);
-          await markZoomMailing("link", "sent", count);
-        } catch (err) {
-          console.error("[zoom-mail] link mailing failed:", err);
-          await markZoomMailing("link", "failed");
-        }
-      }
-    }
-    // Reminder
-    if (now >= eventMs - reminderMs && now < eventMs) {
-      if (await claimZoomMailing("reminder")) {
-        try {
-          const count = await sendZoomReminderMails(cfg);
-          await markZoomMailing("reminder", "sent", count);
-        } catch (err) {
-          console.error("[zoom-mail] reminder failed:", err);
-          await markZoomMailing("reminder", "failed");
-        }
-      }
-    }
-  } catch (err) {
-    console.error("Zoom mailing worker error:", err);
-  } finally {
-    zoomMailingRunning = false;
-  }
-}
+const meetingService = createMeetingService({
+  repository: meetingRepository,
+  registrations: {
+    getSignerForZoomInvite,
+    getCurrentZoomRegistrationByEmail,
+    insertZoomRegistration,
+    confirmZoomPending,
+    getZoomRegistrationForMail,
+    getZoomRecipients,
+    purgePreviousTreffenRegistrations,
+    purgeZoomRegistrationsAfter,
+  },
+  durableWork,
+  getConfig: getZoomConfig,
+  dispatchEmail,
+  buildMail: buildMeetingMail,
+  getRecipientIdentity,
+  authorizeRecipient,
+  issueUnsubscribeTokenForRecipient,
+  markDeliveredForRecipient,
+  retentionMs: TREFFEN_RETENTION_MS,
+  canContinue: () => durableWork.status.ready,
+});
+const runZoomMailingWorker = () => meetingService.runWorker();
 
 // runZoomMailingWorker is invoked by the Honker `maintenance` queue (see boot).
 
@@ -1681,7 +1470,9 @@ function campaignI18n(raw) {
     const entry = raw[l];
     if (!entry || typeof entry !== "object") continue;
     const templateId = parseInt(entry.templateId, 10);
-    const subject = String(entry.subject ?? "").trim().slice(0, 500);
+    const subject = String(entry.subject ?? "")
+      .trim()
+      .slice(0, 500);
     const own = {
       ...(Number.isInteger(templateId) && templateId > 0 && { templateId }),
       ...(subject && { subject }),
@@ -1726,1927 +1517,7 @@ async function zoomPayload(lang) {
   };
 }
 
-const server = Bun.serve({
-  port: PORT,
-  development: isDev,
-
-  routes: {
-    "/": homepage,
-    [adminRoute]: admin,
-    "/abmelden/:token": unsubscribePage,
-    ...languageRoutes,
-    // Personal invite link: the normal page; the client shows the invite.
-    ...(INVITES_ENABLED && { "/i/:code": invitePage }),
-    ...(INVITES_ENABLED && languageInviteRoutes),
-
-    "/og.png": {
-      async GET() {
-        const { readFile } = await import("node:fs/promises");
-        try {
-          const buf = await readFile(
-            new URL("../public/og.png", import.meta.url),
-          );
-          return new Response(buf, {
-            headers: {
-              "Content-Type": "image/png",
-              "Cache-Control": "public, max-age=86400",
-            },
-          });
-        } catch {
-          return new Response("", { status: 404 });
-        }
-      },
-    },
-
-    "/api/version": {
-      GET(req) {
-        const blocked = denyRate(req, "version", 60, 60 * 1000);
-        if (blocked) return blocked;
-        return json(
-          {
-            commit: GIT_COMMIT,
-            letter: LETTER_NAME,
-            env: process.env.NODE_ENV || "development",
-            runtime: `bun ${Bun.version}`,
-            startedAt: SERVER_STARTED_AT,
-          },
-          200,
-          { "Cache-Control": "no-store" },
-        );
-      },
-    },
-
-    "/robots.txt": {
-      GET() {
-        const body = [
-          "User-agent: *",
-          "Allow: /",
-          "",
-          "Disallow: /api/",
-          `Disallow: /${ADMIN_PATH}`,
-          "",
-          `Sitemap: ${BASE_URL}/sitemap.xml`,
-        ].join("\n");
-        return new Response(body, {
-          headers: { "Content-Type": "text/plain; charset=utf-8" },
-        });
-      },
-    },
-
-    "/sitemap.xml": {
-      GET() {
-        const now = new Date().toISOString().split("T")[0];
-        const xml = [
-          '<?xml version="1.0" encoding="UTF-8"?>',
-          '<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">',
-          ...LANGUAGES.flatMap((l) => [
-            "  <url>",
-            `    <loc>${BASE_URL}${langPrefix(cfg, l)}/</loc>`,
-            `    <lastmod>${now}</lastmod>`,
-            "    <changefreq>daily</changefreq>",
-            "    <priority>1.0</priority>",
-            "  </url>",
-          ]),
-          "</urlset>",
-        ].join("\n");
-        return new Response(xml, {
-          headers: { "Content-Type": "application/xml; charset=utf-8" },
-        });
-      },
-    },
-
-    "/api/health": {
-      async GET() {
-        const db = await healthCheck();
-        return json({ ok: db, db }, db ? 200 : 503);
-      },
-    },
-
-    // Live initial state for the first render (counter, Treffen date), so the
-    // page never paints placeholders that flash. Preloaded from the homepage
-    // <head> and awaited in main.jsx; the fetches in App.jsx keep it live.
-    "/api/boot": {
-      async GET(req) {
-        // No token (the preload runs before one exists), so share the token-
-        // gated reads' per-IP budget instead of adding a separate one.
-        const blocked = denyRate(req, "public-read", 120, 60 * 1000);
-        if (blocked) return blocked;
-        try {
-          // The admin overrides for the page's language.
-          const lang = reqLang(req);
-          const [stats, zoom, copy] = await Promise.all([
-            statsPayload(),
-            cfg.features.zoomEvent ? zoomPayload(lang) : null,
-            currentOverrides(lang),
-          ]);
-          // Link pages are rendered on the server; the browser needs the rest.
-          for (const path of Object.keys(copy)) {
-            if (path.startsWith("pages.")) delete copy[path];
-          }
-          return json({ stats, zoom, copy }, 200, {
-            "Cache-Control": "no-store",
-          });
-        } catch (err) {
-          console.error("GET /api/boot error:", err);
-          return json({ error: "Internal server error" }, 500);
-        }
-      },
-    },
-
-    // Issues a short-lived public session token for the frontend. Rate-limited
-    // per IP so a bot can't farm tokens; the endpoints themselves are also
-    // per-IP rate-limited, which is the actual throttle on data access.
-    "/api/session": {
-      async GET(req) {
-        const ip = getClientIp(req);
-        const { allowed, retryAfter } = checkRateLimit(
-          ip,
-          "session",
-          60,
-          15 * 60 * 1000,
-        );
-        if (!allowed) {
-          return json({ error: reqUi(req).errors.tooMany }, 429, {
-            "Retry-After": String(retryAfter),
-          });
-        }
-        return json({
-          token: await createPublicToken(),
-          expiresIn: PUBLIC_TOKEN_TTL_SECONDS,
-        });
-      },
-    },
-
-    // What an invite link shows. Only the inviter's first name, and only when
-    // they opted in; the rate limit keeps codes from being enumerated.
-    "/api/invite/:code": {
-      async GET(req) {
-        if (!INVITES_ENABLED) return featureOff();
-        const blocked = await denyPublic(req, "invite-read", 30, 15 * 60 * 1000);
-        if (blocked) return blocked;
-        try {
-          const invite = await getInviteByCode(req.params.code);
-          if (!invite) return json({ error: "Not found" }, 404);
-          return json(invite, 200, { "Cache-Control": "no-store" });
-        } catch (err) {
-          console.error("GET /api/invite error:", err);
-          return json({ error: "Internal server error" }, 500);
-        }
-      },
-    },
-
-    // Private stats for an invite link. POST so the token stays out of URLs
-    // and logs; below the threshold only "fewer than N" is returned.
-    "/api/invite-stats": {
-      async POST(req) {
-        if (!INVITES_ENABLED) return featureOff();
-        const blocked = denyRate(req, "invite-stats", 20, 15 * 60 * 1000);
-        if (blocked) return blocked;
-        try {
-          if (bodyTooLarge(req))
-            return json({ error: "Payload too large" }, 413);
-          const body = await parseJsonBody(req);
-          const stats = await getInviteStats(body.code, body.token);
-          if (!stats) return json({ error: "Not found" }, 404);
-          return json(
-            statsDisplay(stats.count, resolveInvite(configFor(reqLang(req)))),
-            200,
-            { "Cache-Control": "no-store" },
-          );
-        } catch (err) {
-          console.error("POST /api/invite-stats error:", err);
-          return json({ error: "Internal server error" }, 500);
-        }
-      },
-    },
-
-    "/api/stats": {
-      async GET(req) {
-        const blocked = await denyPublic(req, "public-read", 120, 60 * 1000);
-        if (blocked) return blocked;
-        try {
-          return json(await statsPayload());
-        } catch (err) {
-          console.error("GET /api/stats error:", err);
-          return json({ error: "Internal server error" }, 500);
-        }
-      },
-    },
-
-    "/api/occupations": {
-      async GET(req) {
-        if (!OCCUPATION_ENABLED) return featureOff();
-        const blocked = await denyPublic(req, "public-read", 120, 60 * 1000);
-        if (blocked) return blocked;
-        try {
-          const occupations = await getOccupations();
-          return json(occupations);
-        } catch (err) {
-          console.error("GET /api/occupations error:", err);
-          return json({ error: "Internal server error" }, 500);
-        }
-      },
-    },
-
-    "/api/kreisverband-stats": {
-      async GET(req) {
-        if (!KV_ENABLED) return featureOff();
-        const blocked = await denyPublic(req, "public-read", 120, 60 * 1000);
-        if (blocked) return blocked;
-        try {
-          const stats = await getKreisverbandStats();
-          return json(stats);
-        } catch (err) {
-          console.error("GET /api/kreisverband-stats error:", err);
-          return json({ error: "Internal server error" }, 500);
-        }
-      },
-    },
-
-    "/api/state-stats": {
-      async GET(req) {
-        const blocked = await denyPublic(req, "public-read", 120, 60 * 1000);
-        if (blocked) return blocked;
-        try {
-          const stats = await getStateStats();
-          return json(stats);
-        } catch (err) {
-          console.error("GET /api/state-stats error:", err);
-          return json({ error: "Internal server error" }, 500);
-        }
-      },
-    },
-
-    "/api/signers": {
-      async GET(req) {
-        const blocked = await denyPublic(req, "public-read", 120, 60 * 1000);
-        if (blocked) return blocked;
-        try {
-          const url = new URL(req.url);
-          const filter = url.searchParams.get("filter") || "alle";
-          const search = url.searchParams.get("search") || "";
-          const limit = parseInt(url.searchParams.get("limit") || "18", 10);
-          const offset = parseInt(url.searchParams.get("offset") || "0", 10);
-          const sort = url.searchParams.get("sort") || "desc";
-          const result = await getSigners({
-            filter,
-            search,
-            limit,
-            offset,
-            sort,
-          });
-          return json(result);
-        } catch (err) {
-          console.error("GET /api/signers error:", err);
-          return json({ error: "Internal server error" }, 500);
-        }
-      },
-    },
-
-    "/api/sign": {
-      async POST(req) {
-        try {
-          const ip = getClientIp(req);
-          const { allowed, retryAfter } = checkRateLimit(
-            ip,
-            "sign",
-            30,
-            15 * 60 * 1000,
-          );
-          if (!allowed) {
-            return json(
-              { error: reqUi(req).errors.tooMany },
-              429,
-              { "Retry-After": String(retryAfter) },
-            );
-          }
-
-          if (bodyTooLarge(req))
-            return json({ error: "Payload too large" }, 413);
-          const body = await parseJsonBody(req);
-          const name = sanitize(body.name);
-          const email = sanitizeEmail(body.email);
-          const kv = KV_ENABLED ? normalizeKv(body.kv) : "";
-          const occupation = OCCUPATION_ENABLED
-            ? sanitize(body.occupation || "")
-            : "";
-          const newsletter = Boolean(body.newsletter);
-          const showPublicly = body.agree === true;
-          // Unknown codes are dropped at confirm (nothing matches them); a
-          // malformed one isn't stored at all.
-          const inviteRef =
-            INVITES_ENABLED && isInviteCode(body.ref) ? body.ref : null;
-          const inviteShowName = INVITES_ENABLED && body.inviteShowName === true;
-
-          if (name.length < 2) {
-            return json({ error: reqUi(req).errors.nameTooShort }, 400);
-          }
-          if (!isValidEmail(email)) {
-            return json(
-              { error: reqUi(req).errors.invalidEmail },
-              400,
-            );
-          }
-
-          const token = crypto.randomUUID();
-          const expiresAt = confirmationExpiry();
-
-          const { ok, alreadyVerified } = await insertSigner({
-            name,
-            email,
-            kv,
-            occupation,
-            newsletter,
-            showPublicly,
-            token,
-            expiresAt,
-            inviteRef,
-            inviteShowName,
-            // The page's language, for this person's mails and link pages.
-            lang: storedLang(cfg, reqLang(req)),
-          });
-
-          const signerId = await getSignerIdByEmail(email);
-          if (!ok && alreadyVerified) {
-            if (signerId) {
-              await queueEmail("already-signed", {
-                signerId,
-                baseUrl: getBaseUrl(req),
-              });
-            }
-            return json({ ok: true });
-          }
-
-          await queueEmail("verification", {
-            signerId,
-            baseUrl: getBaseUrl(req),
-          });
-
-          return json({ ok: true });
-        } catch (err) {
-          console.error("POST /api/sign error:", err);
-          return json({ error: "Internal server error" }, 500);
-        }
-      },
-    },
-
-    "/api/zoom-register": {
-      async POST(req) {
-        if (!ZOOM_ENABLED) return featureOff();
-        try {
-          const ip = getClientIp(req);
-          const { allowed, retryAfter } = checkRateLimit(
-            ip,
-            "zoom",
-            30,
-            15 * 60 * 1000,
-          );
-          if (!allowed) {
-            return json(
-              { error: reqUi(req).errors.tooMany },
-              429,
-              { "Retry-After": String(retryAfter) },
-            );
-          }
-
-          if (bodyTooLarge(req))
-            return json({ error: "Payload too large" }, 413);
-          const body = await parseJsonBody(req);
-          const name = sanitize(body.name);
-          const email = sanitizeEmail(body.email);
-          const kv = sanitize(body.kv || "").replace(/^KV\s*/i, "");
-          const zoomCfg = await getZoomConfig();
-          // Never accept a delegate flag while the field is turned off, even if a
-          // crafted request sends one.
-          const delegierter =
-            zoomCfg.showDelegierter && Boolean(body.delegierter);
-
-          if (name.length < 2) {
-            return json({ error: reqUi(req).errors.nameTooShort }, 400);
-          }
-          if (!isValidEmail(email)) {
-            return json(
-              { error: reqUi(req).errors.invalidEmail },
-              400,
-            );
-          }
-
-          // Double opt-in: nothing is registered (or overwritten) until the
-          // address confirms via the mailed link. Same answer either way, so
-          // the response doesn't reveal whether an address is registered.
-          const pending = await insertZoomPending({
-            name,
-            email,
-            kv,
-            delegierter,
-            token: crypto.randomUUID(),
-            expiresAt: confirmationExpiry(),
-            lang: storedLang(cfg, reqLang(req)),
-          });
-          if (pending.status === "pending") {
-            await queueEmail("treffen-verification", {
-              pendingId: pending.id,
-              baseUrl: getBaseUrl(req),
-            });
-          } else {
-            // Already registered: tell the address so, with its settings link,
-            // instead of leaving them waiting for a confirmation mail.
-            await queueEmail("treffen-already-registered", {
-              registrationId: pending.id,
-              baseUrl: getBaseUrl(req),
-            });
-          }
-
-          return json({ ok: true });
-        } catch (err) {
-          console.error("POST /api/zoom-register error:", err);
-          return json({ error: "Internal server error" }, 500);
-        }
-      },
-    },
-
-    "/api/zoom-count": {
-      async GET(req) {
-        if (!ZOOM_ENABLED) return featureOff();
-        const blocked = await denyPublic(req, "public-read", 120, 60 * 1000);
-        if (blocked) return blocked;
-        try {
-          return json(await zoomPayload(reqLang(req)));
-        } catch (err) {
-          console.error("GET /api/zoom-count error:", err);
-          return json({ error: "Internal server error" }, 500);
-        }
-      },
-    },
-
-    "/api/termin.ics": {
-      async GET(req) {
-        if (!ZOOM_ENABLED) return featureOff();
-        const blocked = denyRate(req, "ics", 60, 15 * 60 * 1000);
-        if (blocked) return blocked;
-        const lang = reqLang(req);
-        const cfg = zoomIn(await getZoomConfig(), lang);
-        if (!cfg.dateSet) {
-          return new Response(serverText("noDateYet", {}, lang), {
-            status: 404,
-          });
-        }
-        const ics = buildZoomEventIcs(cfg, {
-          includeLink: Boolean(cfg.link) && isLinkWindowOpen(cfg),
-        });
-        return new Response(ics, {
-          headers: {
-            "Content-Type": "text/calendar; charset=utf-8",
-            "Content-Disposition": 'attachment; filename="termin.ics"',
-            "Cache-Control": "public, max-age=300",
-          },
-        });
-      },
-    },
-
-    "/api/resend-verification": {
-      async POST(req) {
-        try {
-          const ip = getClientIp(req);
-          const { allowed, retryAfter } = checkRateLimit(
-            ip,
-            "resend",
-            12,
-            15 * 60 * 1000,
-          );
-          if (!allowed) {
-            return json(
-              { error: reqUi(req).errors.tooMany },
-              429,
-              { "Retry-After": String(retryAfter) },
-            );
-          }
-
-          if (bodyTooLarge(req))
-            return json({ error: "Payload too large" }, 413);
-          const body = await parseJsonBody(req);
-          const email = sanitizeEmail(body.email);
-          if (!isValidEmail(email)) return json({ ok: true });
-
-          const token = crypto.randomUUID();
-          const expiresAt = confirmationExpiry();
-          const name = await refreshVerificationToken(email, token, expiresAt);
-
-          if (name) {
-            await queueEmail("verification", {
-              signerId: await getSignerIdByEmail(email),
-              baseUrl: getBaseUrl(req),
-            });
-          }
-
-          return json({ ok: true });
-        } catch (err) {
-          console.error("POST /api/resend-verification error:", err);
-          return json({ error: "Internal server error" }, 500);
-        }
-      },
-    },
-
-    // Sign-up confirmation link. GET shows what will be published; confirming
-    // happens on the button's POST, so a mail security scanner that opens the
-    // link can't confirm a sign-up somebody else submitted for this address.
-    "/api/confirm/:token": {
-      async GET(req) {
-        const blocked = denyRate(req, "token-link", 120, 15 * 60 * 1000);
-        if (blocked) return blocked;
-        try {
-          const pending = await getPendingSignerByToken(req.params.token);
-          const lang = linkLang(req, pending?.lang);
-          if (!pending) {
-            return Response.redirect(
-              `${getBaseUrl(req)}${langPrefix(cfg, lang)}/?error=token-expired`,
-              302,
-            );
-          }
-          const copy = pagesIn(lang).confirmSignature;
-          const fields = configFor(lang).sign?.fields;
-          const yesNo = (v) => (v ? copy.yes : copy.no);
-          const rows = [
-            `${copy.nameLabel}: ${escapeHtml(pending.name)}`,
-            pending.kreisverband &&
-              `${escapeHtml(fields?.kreisverband?.label || "Kreisverband")}: ${escapeHtml(pending.kreisverband)}`,
-            pending.occupation &&
-              `${escapeHtml(fields?.occupation?.label || "Beruf")}: ${escapeHtml(pending.occupation)}`,
-            `${copy.publicLabel}: ${yesNo(pending.show_publicly)}`,
-            `${copy.newsletterLabel}: ${yesNo(pending.newsletter)}`,
-            INVITES_ENABLED &&
-              `${copy.inviteNameLabel}: ${
-                pending.invite_show_name
-                  ? escapeHtml(inviteDisplayName(pending.name))
-                  : copy.no
-              }`,
-          ].filter(Boolean);
-          return htmlPage(
-            heading(copy.heading) +
-              para(copy.intro) +
-              para(rows.join("<br>")) +
-              postButton(copy.button) +
-              para(copy.note),
-            200,
-            lang,
-          );
-        } catch (err) {
-          console.error("GET /api/confirm error:", err);
-          return Response.redirect(
-            `${BASE_URL}${langPrefix(cfg, reqLang(req))}/?error=server-error`,
-            302,
-          );
-        }
-      },
-      async POST(req) {
-        const blocked = denyRate(req, "token-link", 120, 15 * 60 * 1000);
-        if (blocked) return blocked;
-        let prefix = langPrefix(cfg, reqLang(req));
-        try {
-          const signer = await confirmSigner(req.params.token);
-          if (signer) {
-            prefix = langPrefix(cfg, linkLang(req, signer.lang));
-            if (cfg.features.stateResolution && signer.kreisverband) {
-              enqueueStateResolution(signer.id, signer.kreisverband);
-            }
-            if (INVITES_ENABLED && signer.inviteCode) {
-              // The signature is confirmed at this point: a failed mail (sent
-              // inline when the queue is down) must not turn that into an
-              // error page, since the token is already used up.
-              try {
-                await queueEmail("invite", {
-                  signerId: signer.id,
-                  baseUrl: getBaseUrl(req),
-                });
-              } catch (err) {
-                console.error("[email] invite mail failed:", err.message);
-              }
-              // The invite code isn't secret (it's what gets shared), but the
-              // invite page is the one without analytics. The stats token only
-              // goes out in the mail.
-              return Response.redirect(
-                `${getBaseUrl(req)}${prefix}/i/${signer.inviteCode}?confirmed=1`,
-                303,
-              );
-            }
-            return Response.redirect(
-              `${getBaseUrl(req)}${prefix}/?confirmed=1`,
-              303,
-            );
-          }
-          return Response.redirect(
-            `${getBaseUrl(req)}${prefix}/?error=token-expired`,
-            303,
-          );
-        } catch (err) {
-          console.error("POST /api/confirm error:", err);
-          return Response.redirect(`${BASE_URL}${prefix}/?error=server-error`, 303);
-        }
-      },
-    },
-
-    "/api/request-deletion": {
-      async POST(req) {
-        try {
-          const ip = getClientIp(req);
-          const { allowed, retryAfter } = checkRateLimit(
-            ip,
-            "deletion",
-            12,
-            15 * 60 * 1000,
-          );
-          if (!allowed) {
-            return json({ ok: true }, 200, {
-              "Retry-After": String(retryAfter),
-            });
-          }
-
-          if (bodyTooLarge(req))
-            return json({ error: "Payload too large" }, 413);
-          const body = await parseJsonBody(req);
-          const email = sanitizeEmail(body.email);
-
-          if (!isValidEmail(email)) {
-            return json({ ok: true });
-          }
-
-          const token = crypto.randomUUID();
-          const expiresAt = confirmationExpiry();
-
-          const requestId = await createDeletionRequest(
-            email,
-            token,
-            expiresAt,
-            storedLang(cfg, reqLang(req)),
-          );
-          if (requestId) {
-            await queueEmail("deletion", {
-              requestId,
-              baseUrl: getBaseUrl(req),
-            });
-          }
-
-          return json({ ok: true });
-        } catch (err) {
-          console.error("POST /api/request-deletion error:", err);
-          return json({ ok: true });
-        }
-      },
-    },
-
-    // Deletion link. GET only asks; deleting happens on the button's POST, so a
-    // mail scanner opening the link (e.g. after a stranger requested deletion
-    // for this address) can't erase anything.
-    "/api/delete/:token": {
-      async GET(req) {
-        const blocked = denyRate(req, "token-link", 120, 15 * 60 * 1000);
-        if (blocked) return blocked;
-        const lang = await deletionLang(req);
-        const copy = pagesIn(lang).deleteData;
-        return htmlPage(
-          heading(copy.heading) +
-            para(copy.text) +
-            postButton(copy.button) +
-            para(copy.note),
-          200,
-          lang,
-        );
-      },
-      async POST(req) {
-        const blocked = denyRate(req, "token-link", 120, 15 * 60 * 1000);
-        if (blocked) return blocked;
-        let prefix = langPrefix(cfg, reqLang(req));
-        try {
-          // Read before the request row goes with the deletion.
-          prefix = langPrefix(cfg, await deletionLang(req));
-          const deleted = await deleteByDeletionToken(req.params.token);
-          return Response.redirect(
-            `${getBaseUrl(req)}${prefix}/${deleted ? "?deleted=1" : "?error=delete-token-expired"}`,
-            303,
-          );
-        } catch (err) {
-          console.error("POST /api/delete error:", err);
-          return Response.redirect(`${BASE_URL}${prefix}/?error=server-error`, 303);
-        }
-      },
-    },
-
-    // ---- Unified unsubscribe (serves both newsletter and zoom tokens) ----
-
-    "/api/unsubscribe/:token": {
-      async GET(req) {
-        const blocked = denyRate(req, "unsub", 120, 15 * 60 * 1000);
-        if (blocked) return blocked;
-        try {
-          const url = new URL(req.url);
-          const source =
-            url.searchParams.get("from") === "zoom" ? "zoom" : "newsletter";
-          const state = await getUnifiedUnsubscribeState(
-            req.params.token,
-            source,
-          );
-          if (!state) return json({ ok: false }, 404);
-          return json({ ok: true, ...state });
-        } catch (err) {
-          console.error("GET /api/unsubscribe error:", err);
-          return json({ error: "Internal server error" }, 500);
-        }
-      },
-    },
-
-    // One-click List-Unsubscribe for newsletter (RFC 8058, no UI)
-    "/api/unsubscribe/:token/opt-out": {
-      async POST(req) {
-        const blocked = denyRate(req, "unsub", 120, 15 * 60 * 1000);
-        if (blocked) return blocked;
-        try {
-          const ok = await optOutNewsletter(req.params.token);
-          if (!ok) return json({ ok: false }, 404);
-          return json({ ok: true });
-        } catch (err) {
-          console.error("POST /api/unsubscribe/opt-out error:", err);
-          return json({ error: "Internal server error" }, 500);
-        }
-      },
-    },
-
-    // Granular actions via the unified page
-    "/api/unsubscribe/:token/newsletter-opt-out": {
-      async POST(req) {
-        const blocked = denyRate(req, "unsub", 120, 15 * 60 * 1000);
-        if (blocked) return blocked;
-        try {
-          const email = await resolveEmailFromToken(req.params.token, null, {
-            optOut: true,
-          });
-          if (!email) return json({ ok: false }, 404);
-          await optOutNewsletterByEmail(email);
-          return json({ ok: true });
-        } catch (err) {
-          console.error("POST /api/unsubscribe/newsletter-opt-out error:", err);
-          return json({ error: "Internal server error" }, 500);
-        }
-      },
-    },
-
-    "/api/unsubscribe/:token/zoom-opt-out": {
-      async POST(req) {
-        const blocked = denyRate(req, "unsub", 120, 15 * 60 * 1000);
-        if (blocked) return blocked;
-        try {
-          const email = await resolveEmailFromToken(req.params.token, null, {
-            optOut: true,
-          });
-          if (!email) return json({ ok: false }, 404);
-          await deleteZoomByEmail(email);
-          return json({ ok: true });
-        } catch (err) {
-          console.error("POST /api/unsubscribe/zoom-opt-out error:", err);
-          return json({ error: "Internal server error" }, 500);
-        }
-      },
-    },
-
-    "/api/unsubscribe/:token/all": {
-      async POST(req) {
-        const blocked = denyRate(req, "unsub", 120, 15 * 60 * 1000);
-        if (blocked) return blocked;
-        try {
-          const email = await resolveEmailFromToken(req.params.token, null, {
-            optOut: true,
-          });
-          if (!email) return json({ ok: false }, 404);
-          await Promise.all([
-            optOutNewsletterByEmail(email),
-            deleteZoomByEmail(email),
-          ]);
-          return json({ ok: true });
-        } catch (err) {
-          console.error("POST /api/unsubscribe/all error:", err);
-          return json({ error: "Internal server error" }, 500);
-        }
-      },
-    },
-
-    // Self-service field editing for the holder of an unsubscribe token.
-    // Possession of the token (sent only to the address itself) authorizes
-    // editing that address's signer and/or zoom registration fields.
-    "/api/unsubscribe/:token/update": {
-      async POST(req) {
-        try {
-          const ip = getClientIp(req);
-          const { allowed, retryAfter } = checkRateLimit(
-            ip,
-            "unsub-update",
-            30,
-            15 * 60 * 1000,
-          );
-          if (!allowed) {
-            return json(
-              { error: reqUi(req).errors.tooMany },
-              429,
-              { "Retry-After": String(retryAfter) },
-            );
-          }
-
-          if (bodyTooLarge(req))
-            return json({ error: "Payload too large" }, 413);
-
-          const email = await resolveEmailFromToken(req.params.token);
-          if (!email) return json({ ok: false }, 404);
-
-          const body = await parseJsonBody(req);
-          const name = sanitize(body.name || "");
-          const kv = KV_ENABLED
-            ? normalizeKv(body.kv, await getSignerKreisverband(email))
-            : "";
-          const occupation = OCCUPATION_ENABLED
-            ? sanitize(body.occupation || "")
-            : "";
-          const newsletter = Boolean(body.newsletter);
-          const showPublicly = Boolean(body.showPublicly);
-          // Only honor the delegate flag while the field is enabled.
-          const delegierter =
-            (await getShowDelegierter()) && Boolean(body.delegierter);
-
-          if (name.length < 2) {
-            return json({ error: reqUi(req).errors.nameTooShort }, 400);
-          }
-
-          await updateSignerByEmail(email, {
-            name,
-            kreisverband: kv,
-            occupation,
-            newsletter,
-            showPublicly,
-            inviteShowName: INVITES_ENABLED
-              ? Boolean(body.inviteShowName)
-              : undefined,
-          });
-          await updateZoomByEmail(email, {
-            name,
-            // The Treffen form collects a KV regardless of kreisverbandField.
-            kreisverband: sanitize(body.kv || "").replace(/^KV\s*/i, ""),
-            delegierter,
-          });
-
-          if (cfg.features.stateResolution && kv) {
-            const signer = await getSignerStateByEmail(email);
-            if (signer && !signer.state) {
-              enqueueStateResolution(signer.id, signer.kreisverband);
-            }
-          }
-
-          const url = new URL(req.url);
-          const source =
-            url.searchParams.get("from") === "zoom" ? "zoom" : "newsletter";
-          const state = await getUnifiedUnsubscribeState(
-            req.params.token,
-            source,
-          );
-          return json({ ok: true, ...state });
-        } catch (err) {
-          console.error("POST /api/unsubscribe/update error:", err);
-          return json({ error: "Internal server error" }, 500);
-        }
-      },
-    },
-
-    "/api/unsubscribe/:token/delete": {
-      async POST(req) {
-        const blocked = denyRate(req, "unsub", 120, 15 * 60 * 1000);
-        if (blocked) return blocked;
-        try {
-          const source =
-            new URL(req.url).searchParams.get("from") === "zoom"
-              ? "zoom"
-              : "newsletter";
-          const ok = await deleteSignerByUnsubscribeToken(
-            req.params.token,
-            source,
-          );
-          if (!ok) return json({ ok: false }, 404);
-          return json({ ok: true });
-        } catch (err) {
-          console.error("POST /api/unsubscribe/delete error:", err);
-          return json({ error: "Internal server error" }, 500);
-        }
-      },
-    },
-
-    // Confirmation link from the Treffen sign-up mail. GET only shows what will
-    // be registered; the registration happens on the button's POST, so a mail
-    // scanner following the link can't sign anyone up.
-    "/api/treffen-bestaetigen/:token": {
-      async GET(req) {
-        if (!ZOOM_ENABLED) return featureOff();
-        const blocked = denyRate(req, "token-link", 120, 15 * 60 * 1000);
-        if (blocked) return blocked;
-        let lang = linkLang(req);
-        try {
-          const pending = await getZoomPendingByToken(req.params.token);
-          lang = linkLang(req, pending?.lang);
-          if (!pending) return treffenLinkExpired(lang);
-          const zoomCfg = zoomIn(await getZoomConfig(), lang);
-          const copy = pagesIn(lang).treffenConfirm;
-          const fields = configFor(lang).sign?.fields;
-          const details = [
-            `${copy.nameLabel}: ${escapeHtml(pending.name)}`,
-            pending.kreisverband &&
-              `${escapeHtml(fields?.kreisverband?.label || "Kreisverband")}: ${escapeHtml(pending.kreisverband)}`,
-          ].filter(Boolean);
-          return htmlPage(
-            heading(copy.heading) +
-              para(
-                fill(copy.intro, {
-                  firstName: firstNameHtml(pending.name),
-                  when: escapeHtml(zoomCfg.whenPhrase),
-                }),
-              ) +
-              para(details.join("<br>")) +
-              (zoomCfg.showDelegierter && pending.delegierter
-                ? para(copy.delegate)
-                : "") +
-              postButton(copy.button),
-            200,
-            lang,
-          );
-        } catch (err) {
-          console.error("GET /api/treffen-bestaetigen error:", err);
-          return treffenLinkError(lang);
-        }
-      },
-      async POST(req) {
-        if (!ZOOM_ENABLED) return featureOff();
-        const blocked = denyRate(req, "token-link", 120, 15 * 60 * 1000);
-        if (blocked) return blocked;
-        let lang = linkLang(req);
-        try {
-          const reg = await confirmZoomPending(req.params.token);
-          if (!reg) return treffenLinkExpired(lang);
-          lang = linkLang(req, reg.lang);
-          const pages = pagesIn(lang);
-          const zoomCfg = zoomIn(await getZoomConfig(), lang);
-          try {
-            await sendZoomSignupEmail({
-              regId: reg.id,
-              name: reg.name,
-              email: reg.email,
-              cfg: zoomCfg,
-              lang: reg.lang,
-            });
-          } catch (mailErr) {
-            console.error(
-              "[treffen-bestaetigen] confirmation email failed:",
-              mailErr,
-            );
-          }
-          return htmlPage(
-            heading(pages.treffenDone.heading) +
-              para(
-                fill(pages.treffenDone.text, {
-                  firstName: firstNameHtml(reg.name),
-                }),
-              ) +
-              buildMeetingInfo(zoomCfg, {
-                pending: true,
-                timingText: serverText("shortly", {}, zoomCfg.lang),
-              }),
-            200,
-            lang,
-          );
-        } catch (err) {
-          console.error("POST /api/treffen-bestaetigen error:", err);
-          return treffenLinkError(lang);
-        }
-      },
-    },
-
-    // Redirect old zoom unsubscribe links to the unified page
-    "/api/zoom-abmelden/:token": {
-      GET(req) {
-        const blocked = denyRate(req, "token-link", 120, 15 * 60 * 1000);
-        if (blocked) return blocked;
-        const token = encodeURIComponent(req.params.token);
-        return Response.redirect(
-          `${getBaseUrl(req)}/abmelden/${token}?from=zoom`,
-          302,
-        );
-      },
-    },
-
-    // Back-compat: invite emails sent before the rename used /api/zoom-anmelden.
-    // Redirect (preserving any ?delegiert query) to the current path.
-    "/api/zoom-anmelden/:token": {
-      GET(req) {
-        if (!ZOOM_ENABLED) return featureOff();
-        const u = new URL(req.url);
-        const dest =
-          u.origin +
-          u.pathname.replace("/api/zoom-anmelden/", "/api/treffen-anmelden/") +
-          u.search;
-        return Response.redirect(dest, 301);
-      },
-    },
-
-    // One-click Treffen registration from a newsletter invite (see
-    // treffenAnmelden). These links don't expire with the token's age.
-    "/api/treffen-anmelden/:token": {
-      GET: (req) => treffenAnmelden(req, { commit: false }),
-      POST: (req) => treffenAnmelden(req, { commit: true }),
-    },
-
-    // One-click List-Unsubscribe for zoom (RFC 8058, no UI)
-    "/api/zoom-abmelden/:token/opt-out": {
-      async POST(req) {
-        const blocked = denyRate(req, "unsub", 120, 15 * 60 * 1000);
-        if (blocked) return blocked;
-        try {
-          await deleteZoomRegistrationByUnsubscribeToken(req.params.token);
-          return json({ ok: true });
-        } catch (err) {
-          console.error("POST /api/zoom-abmelden/opt-out error:", err);
-          return json({ error: "Internal server error" }, 500);
-        }
-      },
-    },
-
-    "/api/admin/login": {
-      async POST(req) {
-        try {
-          const ip = getClientIp(req);
-          const { allowed, retryAfter } = checkRateLimit(
-            ip,
-            "admin-login",
-            5,
-            15 * 60 * 1000,
-          );
-          if (!allowed) {
-            return json({ error: "Zu viele Anmeldeversuche." }, 429, {
-              "Retry-After": String(retryAfter),
-            });
-          }
-
-          if (bodyTooLarge(req))
-            return json({ error: "Payload too large" }, 413);
-          const body = await parseJsonBody(req);
-          const ok = await constantTimePasswordMatches(body.password);
-          if (!ok) return json({ error: "Unauthorized" }, 401);
-
-          return json({ token: await createAdminToken() });
-        } catch (err) {
-          console.error("POST /api/admin/login error:", err);
-          return json({ error: "Internal server error" }, 500);
-        }
-      },
-    },
-
-    "/api/admin/templates": {
-      async GET(req) {
-        return adminJson(req, async () => json(await listEmailTemplates()));
-      },
-      async POST(req) {
-        return adminJson(req, async () => {
-          if (bodyTooLarge(req))
-            return json({ error: "Payload too large" }, 413);
-          const body = await parseJsonBody(req);
-          const name = sanitize(body.name, 120);
-          const subject = sanitize(body.subject, 240);
-          const htmlBody = sanitizeHtml(body.html_body);
-          if (!name || !subject || !htmlBody) {
-            return json({ error: "Missing fields" }, 400);
-          }
-          return json(
-            await createEmailTemplate({ name, subject, htmlBody }),
-            201,
-          );
-        });
-      },
-    },
-
-    "/api/admin/templates/:id": {
-      async GET(req) {
-        return adminJson(req, async () => {
-          const template = await getEmailTemplate(parseInt(req.params.id, 10));
-          if (!template) return json({ error: "Not found" }, 404);
-          return json(template);
-        });
-      },
-      async PUT(req) {
-        return adminJson(req, async () => {
-          if (bodyTooLarge(req))
-            return json({ error: "Payload too large" }, 413);
-          const body = await parseJsonBody(req);
-          const subject = sanitize(body.subject, 240);
-          const htmlBody = sanitizeHtml(body.html_body);
-          if (!subject || !htmlBody)
-            return json({ error: "Missing fields" }, 400);
-          const template = await updateEmailTemplate(
-            parseInt(req.params.id, 10),
-            {
-              subject,
-              htmlBody,
-            },
-          );
-          if (!template) return json({ error: "Not found" }, 404);
-          return json(template);
-        });
-      },
-      async DELETE(req) {
-        return adminJson(req, async () => {
-          const deleted = await deleteEmailTemplate(
-            parseInt(req.params.id, 10),
-          );
-          if (!deleted) return json({ error: "Cannot delete template" }, 400);
-          return json({ ok: true });
-        });
-      },
-    },
-
-    "/api/admin/campaigns": {
-      async GET(req) {
-        return adminJson(req, async () => json(await listCampaigns()));
-      },
-      async POST(req) {
-        return adminJson(req, async () => {
-          if (bodyTooLarge(req))
-            return json({ error: "Payload too large" }, 413);
-          const body = await parseJsonBody(req);
-          const templateId = parseInt(body.template_id, 10);
-          const subject = sanitize(body.subject, 240);
-          const scheduledAt = new Date(body.scheduled_at);
-          const audience = [
-            "newsletter",
-            "zoom",
-            "zoom_delegates",
-            "selection",
-            "email_not_zoom",
-          ].includes(body.audience)
-            ? body.audience
-            : "newsletter";
-          if (!templateId || !subject || Number.isNaN(scheduledAt.getTime())) {
-            return json({ error: "Invalid campaign" }, 400);
-          }
-          let recipientIds = null;
-          if (audience === "selection") {
-            const raw = Array.isArray(body.recipient_ids)
-              ? body.recipient_ids
-              : [];
-            recipientIds = [
-              ...new Set(
-                raw
-                  .map((id) => parseInt(id, 10))
-                  .filter((id) => Number.isInteger(id) && id > 0),
-              ),
-            ];
-            if (recipientIds.length === 0) {
-              return json({ error: "Keine Empfänger*innen ausgewählt" }, 400);
-            }
-            if (recipientIds.length > 20000) {
-              return json(
-                { error: "Zu viele Empfänger*innen (max. 20000)" },
-                400,
-              );
-            }
-          }
-          const campaign = await createCampaign({
-            templateId,
-            subject,
-            scheduledAt,
-            audience,
-            recipientIds,
-            i18n: campaignI18n(body.i18n),
-          });
-          if (!campaign) return json({ error: "Template not found" }, 404);
-          // Durable send job, delivered at the scheduled time.
-          await enqueueJob(
-            "campaigns",
-            { campaignId: campaign.id },
-            { runAt: Math.floor(scheduledAt.getTime() / 1000), maxAttempts: 5 },
-          );
-          return json(campaign, 201);
-        });
-      },
-    },
-
-    "/api/admin/campaigns/:id": {
-      async DELETE(req) {
-        return adminJson(req, async () => {
-          const deleted = await cancelCampaign(parseInt(req.params.id, 10));
-          if (!deleted) return json({ error: "Cannot cancel campaign" }, 400);
-          return json({ ok: true });
-        });
-      },
-    },
-
-    // An aborted campaign gets a fresh set of attempts; recipients already
-    // reached stay in the delivery log and aren't mailed again.
-    "/api/admin/campaigns/:id/retry": {
-      async POST(req) {
-        return adminJson(req, async () => {
-          const ok = await retryAbortedCampaign(parseInt(req.params.id, 10));
-          if (!ok) {
-            return json(
-              {
-                error:
-                  "Kampagne ist nicht abgebrochen, oder ihr Versandprotokoll ist zu alt, um Doppelversand auszuschließen.",
-              },
-              400,
-            );
-          }
-          return json({ ok: true });
-        });
-      },
-    },
-
-    "/api/admin/newsletter-signers": {
-      async GET(req) {
-        return adminJson(req, async () => {
-          const filters = parseSignerFilters(req);
-          const limit = parseInt(
-            new URL(req.url).searchParams.get("limit") || "25",
-            10,
-          );
-          const offset = parseInt(
-            new URL(req.url).searchParams.get("offset") || "0",
-            10,
-          );
-          const result = await listNewsletterSigners({
-            ...filters,
-            limit: Number.isNaN(limit) ? 25 : limit,
-            offset: Number.isNaN(offset) ? 0 : offset,
-          });
-          return json(result);
-        });
-      },
-    },
-
-    "/api/admin/newsletter-signer-filters": {
-      async GET(req) {
-        return adminJson(req, async () =>
-          json(await getNewsletterSignerFilters()),
-        );
-      },
-    },
-
-    "/api/admin/newsletter-signer-ids": {
-      async GET(req) {
-        return adminJson(req, async () => {
-          const ids = await listNewsletterSignerIds(parseSignerFilters(req));
-          return json({ ids });
-        });
-      },
-    },
-
-    "/api/admin/stats": {
-      async GET(req) {
-        return adminJson(req, async () => {
-          const [newsletter, zoom] = await Promise.all([
-            getNewsletterStats(),
-            getZoomCounts(),
-          ]);
-          return json({ ...newsletter, ...zoom });
-        });
-      },
-    },
-
-    "/api/admin/zoom-registrations": {
-      async GET(req) {
-        return adminJson(req, async () => json(await listZoomRegistrations()));
-      },
-    },
-
-    "/api/admin/zoom-registrations/clear": {
-      async POST(req) {
-        return adminJson(req, async () => {
-          const removed = await clearZoomRegistrations();
-          return json({ ok: true, removed });
-        });
-      },
-    },
-
-    "/api/admin/zoom-mailings": {
-      async GET(req) {
-        return adminJson(req, async () => {
-          const cfg = await getZoomConfig();
-          return json({
-            eventAt: cfg.eventAtIso,
-            eventLabel: cfg.label,
-            durationMin: cfg.durationMin,
-            linkOffsetHours: cfg.linkOffsetHours,
-            reminderOffsetHours: cfg.reminderOffsetHours,
-            link: cfg.link,
-            hasLink: Boolean(cfg.link),
-            showDelegierter: cfg.showDelegierter,
-            mode: cfg.mode,
-            location: cfg.location,
-            eventLabelFallback: cfg.eventLabelFallback,
-            navLabel: cfg.navLabel,
-            durationMin: cfg.durationMin,
-            mailings: await listZoomMailings(),
-          });
-        });
-      },
-    },
-
-    "/api/admin/zoom-settings": {
-      async POST(req) {
-        return adminJson(req, async () => {
-          if (bodyTooLarge(req))
-            return json({ error: "Payload too large" }, 413);
-          const body = await parseJsonBody(req);
-          const eventDate = new Date(body.eventAt);
-          if (Number.isNaN(eventDate.getTime())) {
-            return json({ error: "Ungültiges Datum" }, 400);
-          }
-          const linkOffsetHours = parseInt(body.linkOffsetHours, 10);
-          const reminderOffsetHours = parseInt(body.reminderOffsetHours, 10);
-          if (
-            !Number.isInteger(linkOffsetHours) ||
-            linkOffsetHours < 0 ||
-            !Number.isInteger(reminderOffsetHours) ||
-            reminderOffsetHours < 0
-          ) {
-            return json({ error: "Ungültige Timing-Werte" }, 400);
-          }
-          const durationMin =
-            body.durationMin == null ? null : parseInt(body.durationMin, 10);
-          if (durationMin != null && !(durationMin >= 5 && durationMin <= 1440)) {
-            return json({ error: "Dauer muss zwischen 5 und 1440 Minuten liegen" }, 400);
-          }
-
-          const prev = await getZoomConfig();
-          const eventChanged = eventDate.toISOString() !== prev.eventAtIso;
-          // Replacing the date of a Treffen that already took place: the current
-          // registrations belong to that event and are still deleted
-          // TREFFEN_RETENTION_MS after it, whatever the new date is.
-          if (
-            eventChanged &&
-            prev.dateSet &&
-            prev.eventAt.getTime() <= Date.now()
-          ) {
-            await scheduleTreffenPurge(
-              new Date(prev.eventAt.getTime() + TREFFEN_RETENTION_MS),
-            );
-          }
-
-          const zoomLink = String(body.zoomLink ?? "").trim();
-          await setZoomSettings({
-            zoom_event_at: eventDate.toISOString(),
-            zoom_link_offset_hours: linkOffsetHours,
-            zoom_reminder_offset_hours: reminderOffsetHours,
-            zoom_link: zoomLink,
-            // Ported operational settings (admin-editable, no redeploy).
-            zoom_show_delegierter: body.showDelegierter ? "1" : "0",
-            zoom_mode: body.mode === "inperson" ? "inperson" : "online",
-            zoom_location_name: String(body.locationName ?? "").trim(),
-            zoom_location_address: String(body.locationAddress ?? "").trim(),
-            zoom_location_maps_url: String(body.locationMapsUrl ?? "").trim(),
-            zoom_event_label: String(body.eventLabel ?? "").trim(),
-            zoom_nav_label: String(body.navLabel ?? "").trim(),
-            // null (older admin page) keeps the stored value.
-            zoom_duration_min: durationMin,
-          });
-          if (eventChanged) await resetZoomMailings();
-
-          const cfg = await getZoomConfig();
-          return json({
-            ok: true,
-            mailingsReset: eventChanged,
-            eventAt: cfg.eventAtIso,
-            eventLabel: cfg.label,
-            linkOffsetHours: cfg.linkOffsetHours,
-            reminderOffsetHours: cfg.reminderOffsetHours,
-            showDelegierter: cfg.showDelegierter,
-            mode: cfg.mode,
-            location: cfg.location,
-            eventLabelFallback: cfg.eventLabelFallback,
-            navLabel: cfg.navLabel,
-            durationMin: cfg.durationMin,
-          });
-        });
-      },
-    },
-
-    // "Texte & Modus": every editable field with its default and override.
-    "/api/admin/copy": {
-      async GET(req) {
-        return adminJson(req, async () => {
-          const lang = adminCopyLang(req);
-          if (!lang) return json({ error: "Sprache unbekannt" }, 400);
-          const overrides = await currentOverrides(lang);
-          return json({
-            groups: EDITABLE_GROUPS,
-            languages: LANGUAGES,
-            lang,
-            fields: EDITABLE_BY_LANG[lang].fields.map((f) => ({
-              ...f,
-              overridden: Object.prototype.hasOwnProperty.call(overrides, f.path),
-              value: overrides[f.path] ?? f.default,
-            })),
-          });
-        });
-      },
-      // { changes: { path: value | null }, lang? }; null restores the default
-      // for that language only.
-      async POST(req) {
-        return adminJson(req, async () => {
-          if (bodyTooLarge(req))
-            return json({ error: "Payload too large" }, 413);
-          const body = await parseJsonBody(req);
-          const changes = body?.changes;
-          if (!changes || typeof changes !== "object" || Array.isArray(changes)) {
-            return json({ error: "changes fehlt" }, 400);
-          }
-          const lang = adminCopyLang(req, body?.lang);
-          if (!lang) return json({ error: "Sprache unbekannt" }, 400);
-          const { byPath } = EDITABLE_BY_LANG[lang];
-          const clean = {};
-          try {
-            for (const [path, value] of Object.entries(changes)) {
-              const field = byPath.get(path);
-              if (!field) throw new Error(`${path}: nicht editierbar`);
-              clean[path] = value === null ? null : cleanValue(field, value);
-            }
-          } catch (e) {
-            return json({ error: e.message }, 400);
-          }
-          await setCopyOverrides(clean, storageLang(lang));
-          await refreshCopy();
-          return json({ ok: true });
-        });
-      },
-    },
-
-    "/api/admin/milestones": {
-      async GET(req) {
-        return adminJson(req, async () =>
-          json({ milestones: await getMilestones() }),
-        );
-      },
-      async POST(req) {
-        return adminJson(req, async () => {
-          if (bodyTooLarge(req))
-            return json({ error: "Payload too large" }, 413);
-          const body = await parseJsonBody(req);
-          if (!Array.isArray(body.milestones)) {
-            return json({ error: "milestones muss ein Array sein" }, 400);
-          }
-          try {
-            const milestones = await setMilestones(body.milestones);
-            return json({ ok: true, milestones });
-          } catch (e) {
-            return json({ error: e.message || "Ungültige Meilensteine" }, 400);
-          }
-        });
-      },
-    },
-
-    "/api/admin/zoom-test-send": {
-      async POST(req) {
-        return adminJson(req, async () => {
-          if (bodyTooLarge(req))
-            return json({ error: "Payload too large" }, 413);
-          const body = await parseJsonBody(req);
-          const to = String(body.to || "").trim();
-          const kind = body.kind;
-          if (!to || !isValidEmail(to)) {
-            return json({ error: reqUi(req).errors.invalidEmail }, 400);
-          }
-          if (!["confirmation", "link", "reminder"].includes(kind)) {
-            return json({ error: "Unbekannter Mail-Typ" }, 400);
-          }
-          const cfg = await getZoomConfig();
-          if (kind === "confirmation") {
-            await sendZoomConfirmationEmail({
-              to,
-              name: "Test-Empfänger",
-              eventLabel: cfg.label,
-              eventWhen: cfg.whenPhrase,
-              linkInfo: buildMeetingInfo(cfg, {
-                pending: true,
-                timingText: offsetPhrase(cfg.linkOffsetHours),
-              }),
-            });
-          } else {
-            const payload = await buildZoomMailPayload(
-              kind,
-              { name: "Test-Empfänger", email: to },
-              "test",
-              cfg,
-            );
-            await sendRenderedEmail({
-              ...payload,
-              subject: `[TEST] ${payload.subject}`,
-            });
-          }
-          return json({ ok: true });
-        });
-      },
-    },
-
-    "/api/admin/preview": {
-      async POST(req) {
-        return adminJson(req, async () => {
-          if (bodyTooLarge(req))
-            return json({ error: "Payload too large" }, 413);
-          const body = await parseJsonBody(req);
-          const cfg = await getZoomConfig();
-          return json({
-            html: renderEmailHtml(sanitizeHtml(body.html_body), {
-              name: "Ada Beispiel",
-              firstName: "Ada",
-              signerCount: "1.000",
-              unsubscribeUrl: `${BASE_URL}/abmelden/beispiel`,
-              eventLabel: cfg.label,
-              zoomLink: cfg.link,
-              linkInfo: buildMeetingInfo(cfg),
-              ...treffenSignupUrls("beispiel", cfg.showDelegierter),
-            }),
-          });
-        });
-      },
-    },
-
-    "/api/admin/test-send": {
-      async POST(req) {
-        return adminJson(req, async () => {
-          if (bodyTooLarge(req))
-            return json({ error: "Payload too large" }, 413);
-          const body = await parseJsonBody(req);
-          const to = String(body.to || "").trim();
-          const templateId = parseInt(body.template_id, 10);
-          if (!to || !isValidEmail(to)) {
-            return json({ error: reqUi(req).errors.invalidEmail }, 400);
-          }
-          if (!templateId) {
-            return json({ error: "Keine Vorlage ausgewählt" }, 400);
-          }
-          const template = await getEmailTemplate(templateId);
-          if (!template) {
-            return json({ error: "Vorlage nicht gefunden" }, 404);
-          }
-          const audience = [
-            "newsletter",
-            "zoom",
-            "zoom_delegates",
-            "email_not_zoom",
-          ].includes(body.audience)
-            ? body.audience
-            : "newsletter";
-          const isZoom = audience === "zoom" || audience === "zoom_delegates";
-          const stats = await getNewsletterStats();
-          const signerCount = stats.signerCount?.toLocaleString("de-DE") || "0";
-          const zoomCfg = await getZoomConfig();
-          const realRecipient = isZoom
-            ? await getZoomRecipientByEmail(to)
-            : await getNewsletterRecipientByEmail(to);
-          let vars;
-          let optOutUrl;
-          if (realRecipient) {
-            const firstName = realRecipient.name.split(/\s/)[0];
-            if (isZoom) {
-              const token = await issueZoomUnsubscribeToken(realRecipient.id);
-              const unsubscribeUrl = `${BASE_URL}/abmelden/${token}?from=zoom`;
-              optOutUrl = `${BASE_URL}/api/zoom-abmelden/${token}/opt-out`;
-              vars = {
-                name: realRecipient.name,
-                firstName,
-                eventLabel: zoomCfg.label,
-                zoomLink: zoomCfg.link,
-                linkInfo: buildMeetingInfo(zoomCfg),
-                unsubscribeUrl,
-              };
-            } else {
-              const token = await issueUnsubscribeToken(realRecipient.id);
-              const unsubscribeUrl = `${BASE_URL}/abmelden/${token}`;
-              optOutUrl = `${BASE_URL}/api/unsubscribe/${token}/opt-out`;
-              vars = {
-                name: realRecipient.name,
-                firstName,
-                signerCount,
-                eventLabel: zoomCfg?.label || "",
-                linkInfo: buildMeetingInfo(zoomCfg),
-                unsubscribeUrl,
-                ...treffenSignupUrls(token, zoomCfg?.showDelegierter),
-              };
-            }
-          } else {
-            optOutUrl = isZoom
-              ? `${BASE_URL}/api/zoom-abmelden/test/opt-out`
-              : `${BASE_URL}/api/unsubscribe/test/opt-out`;
-            vars = isZoom
-              ? {
-                  name: "Test-Empfänger",
-                  firstName: "Test-Empfänger",
-                  eventLabel: zoomCfg.label,
-                  zoomLink: zoomCfg.link,
-                  linkInfo: buildMeetingInfo(zoomCfg),
-                  unsubscribeUrl: `${BASE_URL}/abmelden/test?from=zoom`,
-                }
-              : {
-                  name: "Test-Empfänger",
-                  firstName: "Test-Empfänger",
-                  signerCount,
-                  eventLabel: zoomCfg?.label || "",
-                  linkInfo: buildMeetingInfo(zoomCfg),
-                  unsubscribeUrl: `${BASE_URL}/abmelden/test`,
-                  ...treffenSignupUrls("test", zoomCfg?.showDelegierter),
-                };
-          }
-          const html = renderEmailHtml(template.html_body, vars);
-          const subject = interpolateTemplate(
-            String(body.subject || template.subject || ""),
-            vars,
-          );
-          const testUnsubHeaders = buildUnsubscribeHeaders(optOutUrl);
-          await sendRenderedEmail({
-            to,
-            subject: `[TEST] ${subject}`,
-            html,
-            headers: testUnsubHeaders,
-          });
-          return json({ ok: true });
-        });
-      },
-    },
-
-    "/api/admin/resolve-states": {
-      async POST(req) {
-        return adminJson(req, async () => {
-          const enqueued = await triggerBackfill();
-          return json({ ok: true, enqueued });
-        });
-      },
-    },
-
-    "/api/admin/state-resolution-status": {
-      async GET(req) {
-        return adminJson(req, async () => {
-          const stats = await getStateResolutionStats();
-          return json({ ...stats, queueLength: getQueueLength() });
-        });
-      },
-    },
-
-    "/api/admin/kv-outliers": {
-      async GET(req) {
-        return adminJson(req, async () => {
-          const [kvs, dismissed] = await Promise.all([
-            getDistinctKreisverbands(),
-            loadKvNotTypo(),
-          ]);
-          const dismissedSet = new Set(
-            dismissed.map((d) => `${d.canonical}\0${d.outlier}`),
-          );
-          const groups = findOutlierGroups(kvs)
-            .map((g) => ({
-              ...g,
-              outliers: g.outliers.filter(
-                (o) => !dismissedSet.has(`${g.canonical.name}\0${o.name}`),
-              ),
-            }))
-            .filter((g) => g.outliers.length > 0);
-          return json(groups);
-        });
-      },
-    },
-
-    "/api/admin/merge-kv": {
-      async POST(req) {
-        return adminJson(req, async () => {
-          if (bodyTooLarge(req))
-            return json({ error: "Payload too large" }, 413);
-          const body = await parseJsonBody(req);
-          const from = String(body.from || "").trim();
-          const to = String(body.to || "").trim();
-          if (!from || !to || from === to) {
-            return json({ error: "Ungültige Kreisverbände" }, 400);
-          }
-          const updated = await mergeKreisverband(from, to);
-          await triggerBackfill();
-          return json({ ok: true, updated });
-        });
-      },
-    },
-
-    "/api/admin/dismiss-outlier": {
-      async POST(req) {
-        return adminJson(req, async () => {
-          if (bodyTooLarge(req))
-            return json({ error: "Payload too large" }, 413);
-          const body = await parseJsonBody(req);
-          const canonical = String(body.canonical || "").trim();
-          const outlier = String(body.outlier || "").trim();
-          if (!canonical || !outlier) {
-            return json({ error: "Ungültige Parameter" }, 400);
-          }
-          await insertKvNotTypo(canonical, outlier);
-          return json({ ok: true });
-        });
-      },
-    },
-
-    "/api/admin/unresolved-kvs": {
-      async GET(req) {
-        return adminJson(req, async () => json(await getUnresolvedKvs()));
-      },
-    },
-
-    "/api/admin/re-enqueue-all": {
-      async POST(req) {
-        return adminJson(req, async () => {
-          const cleared = await clearEmptyKvCacheEntries();
-          clearProcessedKvs();
-          const enqueued = await triggerBackfill();
-          return json({ ok: true, enqueued, cacheCleared: cleared });
-        });
-      },
-    },
-
-    "/api/admin/assign-kv-state": {
-      async POST(req) {
-        return adminJson(req, async () => {
-          if (bodyTooLarge(req))
-            return json({ error: "Payload too large" }, 413);
-          const body = await parseJsonBody(req);
-          const kreisverband = String(body.kreisverband || "").trim();
-          const state = String(body.state || "").trim();
-          if (!kreisverband || !state) {
-            return json({ error: "kreisverband and state required" }, 400);
-          }
-          await upsertKvStateCache(kreisverband, state, "manual");
-          const updated = await bulkUpdateSignerStateByKv(kreisverband, state);
-          return json({ ok: true, updated });
-        });
-      },
-    },
-
-    "/api/admin/occupation-outliers": {
-      async GET(req) {
-        return adminJson(req, async () => {
-          const [occupations, dismissed] = await Promise.all([
-            getDistinctOccupations(),
-            loadOccNotTypo(),
-          ]);
-          const dismissedSet = new Set(
-            dismissed.map((d) => `${d.canonical}\0${d.outlier}`),
-          );
-          const groups = findOutlierGroups(
-            occupations,
-            "occupation",
-            null,
-            normalizeOccupation,
-          )
-            .map((g) => ({
-              ...g,
-              outliers: g.outliers.filter(
-                (o) => !dismissedSet.has(`${g.canonical.name}\0${o.name}`),
-              ),
-            }))
-            .filter((g) => g.outliers.length > 0);
-          return json(groups);
-        });
-      },
-    },
-
-    "/api/admin/merge-occupation": {
-      async POST(req) {
-        return adminJson(req, async () => {
-          if (bodyTooLarge(req))
-            return json({ error: "Payload too large" }, 413);
-          const body = await parseJsonBody(req);
-          const from = String(body.from || "").trim();
-          const to = String(body.to || "").trim();
-          if (!from || !to || from === to) {
-            return json({ error: "Ungültige Berufe" }, 400);
-          }
-          const updated = await mergeOccupation(from, to);
-          return json({ ok: true, updated });
-        });
-      },
-    },
-
-    "/api/admin/dismiss-occupation-outlier": {
-      async POST(req) {
-        return adminJson(req, async () => {
-          if (bodyTooLarge(req))
-            return json({ error: "Payload too large" }, 413);
-          const body = await parseJsonBody(req);
-          const canonical = String(body.canonical || "").trim();
-          const outlier = String(body.outlier || "").trim();
-          if (!canonical || !outlier) {
-            return json({ error: "Ungültige Parameter" }, 400);
-          }
-          await insertOccNotTypo(canonical, outlier);
-          return json({ ok: true });
-        });
-      },
-    },
-  },
-
-  fetch(req) {
-    return json({ error: "Not found" }, 404);
-  },
-});
-
-console.log(
-  `Server running on ${server.url} (${isDev ? "development" : "production"})`,
-);
-// ---- Honker durable jobs: campaign sends, zoom mailings, hourly backups ----
-
-// Transactional mail runs as a durable job instead of inside the request, so a
-// sign-up doesn't wait on the email provider's round-trip and a provider blip
-// retries with backoff instead of failing the request after the row is already
-// written. Falls back to sending inline if the queue is unavailable (Honker
-// extension missing), which keeps sign-ups working on a broken jobs setup.
-async function sendQueuedEmail(payload) {
-  const args = await prepareQueuedEmail(payload);
-  if (!args) return; // row gone, already confirmed or link expired
-  switch (args.kind) {
-    case "verification":
-      return await sendVerificationEmail(args);
-    case "already-signed":
-      return await sendAlreadySignedEmail(args);
-    case "invite":
-      return await sendInviteEmail(args);
-    case "deletion":
-      return await sendDeletionEmail(args);
-    case "treffen-verification": {
-      const zoomCfg = zoomIn(await getZoomConfig(), args.lang);
-      return await sendTreffenVerificationEmail({
-        ...args,
-        eventLabel: zoomCfg.label,
-        eventWhen: zoomCfg.whenPhrase,
-      });
-    }
-    case "treffen-already-registered": {
-      const zoomCfg = zoomIn(await getZoomConfig(), args.lang);
-      return await sendTreffenAlreadyRegisteredEmail({
-        ...args,
-        eventLabel: zoomCfg.label,
-        eventWhen: zoomCfg.whenPhrase,
-      });
-    }
-    default:
-      throw new Error(`unknown email kind: ${args.kind}`);
-  }
-}
-
-// A transactional mail that hasn't gone out within this window is dropped, and
-// a dead-lettered one is removed this long after it died (config privacy).
-const EMAIL_JOB_TTL_S = privacy.emailJobRetentionS;
-
-let jobsReady = false;
-async function queueEmail(kind, args) {
-  if (jobsReady) {
-    try {
-      await enqueueJob(
-        "emails",
-        { kind, ...args },
-        { maxAttempts: 5, expires: EMAIL_JOB_TTL_S },
-      );
-      return;
-    } catch (err) {
-      console.error("[email] enqueue failed, sending inline:", err);
-    }
-  }
-  await sendQueuedEmail({ kind, ...args });
-}
-
-async function handleMaintenanceJob({ task }) {
-  if (task === "campaign-reconcile") {
-    const ids = await getDueCampaignIds();
-    for (const id of ids)
-      await enqueueJob("campaigns", { campaignId: id }, { maxAttempts: 5 });
-  } else if (task === "zoom" && ZOOM_ENABLED) {
-    await runZoomMailingWorker();
-  } else if (task === "backup") {
-    await runBackup();
-  } else if (task === "purge-unverified") {
-    const removed = await deleteExpiredUnverifiedSigners();
-    if (removed > 0) {
-      console.log(`[purge] deleted ${removed} expired unverified sign-up(s)`);
-    }
-    await deleteExpiredDeletionRequests();
-    await deleteOldDeliveries();
-    await deleteExpiredZoomPending();
-    await purgeOldErasureLog(new Date(Date.now() - privacy.erasureLogMs));
-  } else if (task === "purge-dead-emails") {
-    const removed = await purgeDeadJobs("emails", EMAIL_JOB_TTL_S);
-    if (removed > 0) {
-      console.log(`[purge] deleted ${removed} dead-lettered email job(s)`);
-    }
-  } else if (task === "purge-by-age") {
-    const removed = await deleteExpiredByAge(retentionCutoff(privacy));
-    if (removed > 0) {
-      console.log(
-        `[purge] deleted ${removed} entr(y/ies) older than ${privacy.signerRetentionYears} years`,
-      );
-    }
-  }
-}
-
+let jobInfrastructureReady = false;
 try {
   await initJobs();
   // Recurring schedules (persisted in the encrypted DB; survive restarts).
@@ -3674,20 +1545,2620 @@ try {
   await registerSchedule("purge-by-age", "maintenance", "30 3 * * *", {
     task: "purge-by-age",
   });
+  jobInfrastructureReady = true;
+} catch (error) {
+  durableWork.unavailable("initialization-failed");
+  console.error("[jobs] init failed:", error);
+}
+
+const requestDrain = createRequestDrain();
+const server = Bun.serve(
+  requestDrain.options({
+    port: PORT,
+    development: isDev,
+    maxRequestBodySize: 10 * 1024 * 1024,
+
+    routes: {
+      "/": publicPage,
+      [adminRoute]: admin,
+      "/abmelden/:token": privatePage,
+      ...languageRoutes,
+      // Personal invite link: the normal page; the client shows the invite.
+      ...(INVITES_ENABLED && { "/i/:code": privatePage }),
+      ...(INVITES_ENABLED && languageInviteRoutes),
+
+      "/bundles/*": {
+        GET(req) {
+          const asset = frontend.assets.get(new URL(req.url).pathname);
+          return asset
+            ? new Response(asset.bytes, {
+                headers: {
+                  "Content-Type": asset.type,
+                  "Cache-Control": "public, max-age=31536000, immutable",
+                  "Access-Control-Allow-Origin": "*",
+                  "Cross-Origin-Resource-Policy": "cross-origin",
+                },
+              })
+            : new Response("", { status: 404 });
+        },
+      },
+      "/assets/:name": {
+        async GET(req) {
+          const asset = await assetLifecycle.get(`/assets/${req.params.name}`);
+          return asset
+            ? new Response(asset.bytes, {
+                headers: {
+                  "Content-Type": asset.mime,
+                  "Cache-Control": "public, max-age=300",
+                  "Access-Control-Allow-Origin": "*",
+                  "X-Content-Type-Options": "nosniff",
+                },
+              })
+            : new Response("", { status: 404 });
+        },
+      },
+      "/api/admin/publication": {
+        GET(req) {
+          return adminJson(req, () =>
+            json({
+              ...publicationResponse(),
+              defaults: Object.fromEntries(
+                LANGUAGES.map((l) => [l, structuredClone(configFor(l))]),
+              ),
+              fields: publicationFields,
+            }),
+          );
+        },
+        PUT(req) {
+          return adminJson(req, async () => {
+            const body = await parseJsonBody(req, 2100000);
+            return json(
+              publicationResponse(
+                await publications.publish(
+                  body.document,
+                  body.expectedRevision,
+                ),
+              ),
+            );
+          });
+        },
+      },
+      "/api/admin/publication/import": {
+        POST(req) {
+          return adminJson(req, async () => {
+            const body = await parseJsonBody(req, 4200000);
+            if (!Number.isInteger(body.revision) || body.revision < 0)
+              return json(
+                { error: "Die Entwurfsdatei enthält keine gültige Revision." },
+                400,
+              );
+            const document = await publications.validate(body.document);
+            const base = body.base
+              ? await publications.validate(body.base)
+              : undefined;
+            return json({ document, base, revision: body.revision });
+          });
+        },
+      },
+      "/api/admin/publication/previous": {
+        GET(req) {
+          return adminJson(req, async () =>
+            json({ document: await publications.previous() }),
+          );
+        },
+      },
+      "/api/admin/publication/preview": {
+        POST(req) {
+          return adminJson(req, async () => {
+            const body = await parseJsonBody(req, 2100000);
+            const output = await publications.preview(body.document);
+            const lang = normalizeLang(cfg, body.lang);
+            const html = documentHtml(
+              output.configs[lang],
+              LETTER_NAME,
+              frontend.entries,
+              { preview: true, pageState: body.pageState, baseUrl: BASE_URL },
+            );
+            const policy = `default-src 'none'; script-src ${new URL(BASE_URL).origin}; style-src 'unsafe-inline' ${new URL(BASE_URL).origin}; font-src ${new URL(BASE_URL).origin} data:; img-src ${new URL(BASE_URL).origin} data:; connect-src 'none'; form-action 'none'; base-uri 'none';`;
+            return new Response(
+              html.replace(
+                "<head>",
+                `<head><meta http-equiv="Content-Security-Policy" content="${policy}">`,
+              ),
+              {
+                headers: {
+                  "Content-Type": "text/html; charset=utf-8",
+                  "Cache-Control": "no-store",
+                },
+              },
+            );
+          });
+        },
+      },
+      "/api/admin/publication/assets": {
+        POST(req) {
+          return adminJson(req, async () => {
+            if (Number(req.headers.get("content-length")) > 8 * 1024 * 1024)
+              return json({ error: "Image exceeds 8 MB" }, 413);
+            const bytes = Buffer.from(await req.arrayBuffer());
+            const asset = await normalizeImage(bytes);
+            const url = await assetLifecycle.upload(asset);
+            return json({ url, width: asset.width, height: asset.height });
+          });
+        },
+      },
+      "/api/admin/email": {
+        GET(req) {
+          return adminJson(req, async () =>
+            json({
+              ...(await emailManager.diagnostics()),
+              jobs: durableWork.status,
+            }),
+          );
+        },
+        POST(req) {
+          return adminJson(req, async () => {
+            const body = await req.json();
+            let result;
+            if (body.action === "takeover")
+              result = await emailManager.save(
+                null,
+                body.expectedRevision,
+                true,
+              );
+            else if (body.action === "save")
+              result = await emailManager.save(
+                body.profile,
+                body.expectedRevision,
+              );
+            else if (body.action === "test")
+              result = await emailManager.test(
+                body.expectedRevision,
+                body.recipient,
+              );
+            else if (body.action === "receipt")
+              result = await emailManager.confirmReceipt(
+                body.expectedRevision,
+                body.testId,
+              );
+            else if (body.action === "activate")
+              result = await emailManager.activate(body.expectedRevision);
+            else if (body.action === "reconcile")
+              result = await emailManager.reconcile(
+                body.scope,
+                body.resolution,
+                body.expectedRevision,
+              );
+            else return json({ error: "Unknown action" }, 400);
+            refreshEmailFacts();
+            return json(result);
+          });
+        },
+      },
+      "/api/admin/email/dns": {
+        POST(req) {
+          return adminJson(req, async () => {
+            const { domain } = await req.json();
+            const key = `mailbox-dns:${domain}`;
+            let row = await sqlDb
+              .query("SELECT value FROM app_settings WHERE key=?")
+              .get(key);
+            const token = row?.value || ownershipToken();
+            if (!row)
+              await sqlDb
+                .query(
+                  "INSERT INTO app_settings /* public-neutral */ (key,value) VALUES (?,?) ON CONFLICT(key) DO NOTHING",
+                )
+                .run(key, token);
+            return json(
+              await checkMailboxDns(String(domain).toLowerCase(), token),
+            );
+          });
+        },
+      },
+      "/api/admin/statistics": {
+        GET(req) {
+          return adminJson(req, async () =>
+            json({
+              mode: publications.current.document.analytics.mode,
+              revision: publications.current.revision,
+              ...(statistics
+                ? await statistics.report()
+                : { unavailable: true }),
+            }),
+          );
+        },
+        PUT(req) {
+          return adminJson(req, async () => {
+            const body = await req.json();
+            const document = structuredClone(publications.current.document);
+            if (body.mode === "builtin" && !statistics)
+              return json(
+                { error: "Statistics are currently unavailable" },
+                503,
+              );
+            document.analytics = { mode: body.mode };
+            await publications.publish(document, body.expectedRevision);
+            return json({ ok: true });
+          });
+        },
+      },
+
+      "/og.png": {
+        async GET() {
+          const { readFile } = await import("node:fs/promises");
+          try {
+            const buf = await readFile(
+              new URL("../public/og.png", import.meta.url),
+            );
+            return new Response(buf, {
+              headers: {
+                "Content-Type": "image/png",
+                "Cache-Control": "public, max-age=86400",
+              },
+            });
+          } catch {
+            return new Response("", { status: 404 });
+          }
+        },
+      },
+
+      "/api/version": {
+        GET(req) {
+          const blocked = denyRate(req, "version", 60, 60 * 1000);
+          if (blocked) return blocked;
+          return json(
+            {
+              commit: GIT_COMMIT,
+              letter: LETTER_NAME,
+              env: process.env.NODE_ENV || "development",
+              runtime: `bun ${Bun.version}`,
+              startedAt: SERVER_STARTED_AT,
+            },
+            200,
+            { "Cache-Control": "no-store" },
+          );
+        },
+      },
+
+      "/robots.txt": {
+        GET() {
+          const body = [
+            "User-agent: *",
+            "Allow: /",
+            "",
+            "Disallow: /api/",
+            `Disallow: /${ADMIN_PATH}`,
+            "",
+            `Sitemap: ${BASE_URL}/sitemap.xml`,
+          ].join("\n");
+          return new Response(body, {
+            headers: { "Content-Type": "text/plain; charset=utf-8" },
+          });
+        },
+      },
+
+      "/sitemap.xml": {
+        GET() {
+          const now = new Date().toISOString().split("T")[0];
+          const xml = [
+            '<?xml version="1.0" encoding="UTF-8"?>',
+            '<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">',
+            ...LANGUAGES.flatMap((l) => [
+              "  <url>",
+              `    <loc>${BASE_URL}${langPrefix(cfg, l)}/</loc>`,
+              `    <lastmod>${now}</lastmod>`,
+              "    <changefreq>daily</changefreq>",
+              "    <priority>1.0</priority>",
+              "  </url>",
+            ]),
+            "</urlset>",
+          ].join("\n");
+          return new Response(xml, {
+            headers: { "Content-Type": "application/xml; charset=utf-8" },
+          });
+        },
+      },
+
+      "/api/health": {
+        async GET() {
+          const db = await healthCheck();
+          return json(
+            {
+              ok: db && durableWork.status.ready,
+              db,
+              jobs: durableWork.status,
+            },
+            db && durableWork.status.ready ? 200 : 503,
+          );
+        },
+      },
+
+      // Live initial state for the first render (counter, Treffen date), so the
+      // page never paints placeholders that flash. Preloaded from the homepage
+      // <head> and awaited in main.jsx; the fetches in App.jsx keep it live.
+      "/api/boot": {
+        async GET(req) {
+          // No token (the preload runs before one exists), so share the token-
+          // gated reads' per-IP budget instead of adding a separate one.
+          const blocked = denyRate(req, "public-read", 120, 60 * 1000);
+          if (blocked) return blocked;
+          try {
+            // The admin overrides for the page's language.
+            const lang = reqLang(req);
+            const [stats, zoom] = await Promise.all([
+              statsPayload(),
+              cfg.features.zoomEvent ? zoomPayload(lang) : null,
+            ]);
+            return json(
+              { stats, zoom, email: { ready: emailManager.status.ready } },
+              200,
+              {
+                "Cache-Control": "no-store",
+              },
+            );
+          } catch (err) {
+            console.error("GET /api/boot error:", err);
+            return json({ error: "Internal server error" }, 500);
+          }
+        },
+      },
+
+      // Issues a short-lived public session token for the frontend. Rate-limited
+      // per IP so a bot can't farm tokens; the endpoints themselves are also
+      // per-IP rate-limited, which is the actual throttle on data access.
+      "/api/session": {
+        async GET(req) {
+          const ip = getClientIp(req);
+          const { allowed, retryAfter } = checkRateLimit(
+            ip,
+            "session",
+            60,
+            15 * 60 * 1000,
+          );
+          if (!allowed) {
+            return json({ error: reqUi(req).errors.tooMany }, 429, {
+              "Retry-After": String(retryAfter),
+            });
+          }
+          return json({
+            token: await createPublicToken(),
+            expiresIn: PUBLIC_TOKEN_TTL_SECONDS,
+          });
+        },
+      },
+
+      // What an invite link shows. Only the inviter's first name, and only when
+      // they opted in; the rate limit keeps codes from being enumerated.
+      "/api/invite/:code": {
+        async GET(req) {
+          if (!INVITES_ENABLED) return featureOff();
+          const blocked = await denyPublic(
+            req,
+            "invite-read",
+            30,
+            15 * 60 * 1000,
+          );
+          if (blocked) return blocked;
+          try {
+            const invite = await getInviteByCode(req.params.code);
+            if (!invite) return json({ error: "Not found" }, 404);
+            return json(invite, 200, { "Cache-Control": "no-store" });
+          } catch (err) {
+            console.error("GET /api/invite error:", err);
+            return json({ error: "Internal server error" }, 500);
+          }
+        },
+      },
+
+      // Private stats for an invite link. POST so the token stays out of URLs
+      // and logs; below the threshold only "fewer than N" is returned.
+      "/api/invite-stats": {
+        async POST(req) {
+          if (!INVITES_ENABLED) return featureOff();
+          const blocked = denyRate(req, "invite-stats", 20, 15 * 60 * 1000);
+          if (blocked) return blocked;
+          try {
+            if (bodyTooLarge(req))
+              return json({ error: "Payload too large" }, 413);
+            const body = await parseJsonBody(req);
+            const stats = await getInviteStats(body.code, body.token);
+            if (!stats) return json({ error: "Not found" }, 404);
+            return json(
+              statsDisplay(stats.count, resolveInvite(configFor(reqLang(req)))),
+              200,
+              { "Cache-Control": "no-store" },
+            );
+          } catch (err) {
+            console.error("POST /api/invite-stats error:", err);
+            return json({ error: "Internal server error" }, 500);
+          }
+        },
+      },
+
+      "/api/stats": {
+        async GET(req) {
+          const blocked = await denyPublic(req, "public-read", 120, 60 * 1000);
+          if (blocked) return blocked;
+          try {
+            return json(await statsPayload());
+          } catch (err) {
+            console.error("GET /api/stats error:", err);
+            return json({ error: "Internal server error" }, 500);
+          }
+        },
+      },
+
+      "/api/occupations": {
+        async GET(req) {
+          if (!OCCUPATION_ENABLED) return featureOff();
+          const blocked = await denyPublic(req, "public-read", 120, 60 * 1000);
+          if (blocked) return blocked;
+          try {
+            const occupations = await getOccupations();
+            return json(occupations);
+          } catch (err) {
+            console.error("GET /api/occupations error:", err);
+            return json({ error: "Internal server error" }, 500);
+          }
+        },
+      },
+
+      "/api/kreisverband-stats": {
+        async GET(req) {
+          if (!KV_ENABLED) return featureOff();
+          const blocked = await denyPublic(req, "public-read", 120, 60 * 1000);
+          if (blocked) return blocked;
+          try {
+            const stats = await getKreisverbandStats();
+            return json(stats);
+          } catch (err) {
+            console.error("GET /api/kreisverband-stats error:", err);
+            return json({ error: "Internal server error" }, 500);
+          }
+        },
+      },
+
+      "/api/state-stats": {
+        async GET(req) {
+          const blocked = await denyPublic(req, "public-read", 120, 60 * 1000);
+          if (blocked) return blocked;
+          try {
+            const stats = await getStateStats();
+            return json(stats);
+          } catch (err) {
+            console.error("GET /api/state-stats error:", err);
+            return json({ error: "Internal server error" }, 500);
+          }
+        },
+      },
+
+      "/api/signers": {
+        async GET(req) {
+          const blocked = await denyPublic(req, "public-read", 120, 60 * 1000);
+          if (blocked) return blocked;
+          try {
+            const url = new URL(req.url);
+            const filter = url.searchParams.get("filter") || "alle";
+            const search = url.searchParams.get("search") || "";
+            const limit = parseInt(url.searchParams.get("limit") || "18", 10);
+            const offset = parseInt(url.searchParams.get("offset") || "0", 10);
+            const sort = url.searchParams.get("sort") || "desc";
+            const result = await getSigners({
+              filter,
+              search,
+              limit,
+              offset,
+              sort,
+            });
+            return json(result);
+          } catch (err) {
+            console.error("GET /api/signers error:", err);
+            return json({ error: "Internal server error" }, 500);
+          }
+        },
+      },
+
+      "/api/sign": {
+        async POST(req) {
+          if (!durableWork.status.ready || !emailManager.status.ready)
+            return json(
+              {
+                error:
+                  configFor(reqLang(req)).ui.errors.emailUnavailable ||
+                  "Email delivery is temporarily unavailable. Please try again later.",
+                pending: true,
+              },
+              503,
+            );
+          try {
+            const ip = getClientIp(req);
+            const { allowed, retryAfter } = checkRateLimit(
+              ip,
+              "sign",
+              30,
+              15 * 60 * 1000,
+            );
+            if (!allowed) {
+              return json({ error: reqUi(req).errors.tooMany }, 429, {
+                "Retry-After": String(retryAfter),
+              });
+            }
+
+            if (bodyTooLarge(req))
+              return json({ error: "Payload too large" }, 413);
+            const body = await parseJsonBody(req);
+            const name = sanitize(body.name);
+            const email = sanitizeEmail(body.email);
+            const kv = KV_ENABLED ? normalizeKv(body.kv) : "";
+            const occupation = OCCUPATION_ENABLED
+              ? sanitize(body.occupation || "")
+              : "";
+            const newsletter = Boolean(body.newsletter);
+            const showPublicly = body.agree === true;
+            // Unknown codes are dropped at confirm (nothing matches them); a
+            // malformed one isn't stored at all.
+            const inviteRef =
+              INVITES_ENABLED && isInviteCode(body.ref) ? body.ref : null;
+            const inviteShowName =
+              INVITES_ENABLED && body.inviteShowName === true;
+
+            if (name.length < 2) {
+              return json({ error: reqUi(req).errors.nameTooShort }, 400);
+            }
+            if (!isValidEmail(email)) {
+              return json({ error: reqUi(req).errors.invalidEmail }, 400);
+            }
+
+            const token = crypto.randomUUID();
+            const expiresAt = confirmationExpiry();
+
+            return await durableWork.run(async () => {
+              const { ok, alreadyVerified } = await insertSigner({
+                name,
+                email,
+                kv,
+                occupation,
+                newsletter,
+                showPublicly,
+                token,
+                expiresAt,
+                inviteRef,
+                inviteShowName,
+                // The page's language, for this person's mails and link pages.
+                lang: storedLang(cfg, reqLang(req)),
+              });
+
+              const signerId = await getSignerIdByEmail(email);
+              if (!ok && alreadyVerified) {
+                if (signerId) {
+                  await queueEmail("already-signed", {
+                    signerId,
+                    baseUrl: getBaseUrl(req),
+                  });
+                }
+                return json({ ok: true });
+              }
+
+              await queueEmail("verification", {
+                signerId,
+                baseUrl: getBaseUrl(req),
+              });
+
+              return json({ ok: true });
+            });
+          } catch (err) {
+            console.error("POST /api/sign error:", err);
+            return json({ error: "Internal server error" }, 500);
+          }
+        },
+      },
+
+      "/api/zoom-register": {
+        async POST(req) {
+          if (!durableWork.status.ready || !emailManager.status.ready)
+            return json(
+              {
+                error:
+                  configFor(reqLang(req)).ui.errors.emailUnavailable ||
+                  "Email delivery is temporarily unavailable. Please try again later.",
+                pending: true,
+              },
+              503,
+            );
+          if (!ZOOM_ENABLED) return featureOff();
+          try {
+            const ip = getClientIp(req);
+            const { allowed, retryAfter } = checkRateLimit(
+              ip,
+              "zoom",
+              30,
+              15 * 60 * 1000,
+            );
+            if (!allowed) {
+              return json({ error: reqUi(req).errors.tooMany }, 429, {
+                "Retry-After": String(retryAfter),
+              });
+            }
+
+            if (bodyTooLarge(req))
+              return json({ error: "Payload too large" }, 413);
+            const body = await parseJsonBody(req);
+            const name = sanitize(body.name);
+            const email = sanitizeEmail(body.email);
+            const kv = sanitize(body.kv || "").replace(/^KV\s*/i, "");
+            const zoomCfg = await getZoomConfig();
+            // Never accept a delegate flag while the field is turned off, even if a
+            // crafted request sends one.
+            const delegierter =
+              zoomCfg.showDelegierter && Boolean(body.delegierter);
+
+            if (name.length < 2) {
+              return json({ error: reqUi(req).errors.nameTooShort }, 400);
+            }
+            if (!isValidEmail(email)) {
+              return json({ error: reqUi(req).errors.invalidEmail }, 400);
+            }
+
+            // Double opt-in: nothing is registered (or overwritten) until the
+            // address confirms via the mailed link. Same answer either way, so
+            // the response doesn't reveal whether an address is registered.
+            return await durableWork.run(async () => {
+              const pending = await insertZoomPending({
+                name,
+                email,
+                kv,
+                delegierter,
+                token: crypto.randomUUID(),
+                expiresAt: confirmationExpiry(),
+                lang: storedLang(cfg, reqLang(req)),
+              });
+              if (pending.status === "pending") {
+                await queueEmail("treffen-verification", {
+                  pendingId: pending.id,
+                  baseUrl: getBaseUrl(req),
+                });
+              } else {
+                // Already registered: tell the address so, with its settings link,
+                // instead of leaving them waiting for a confirmation mail.
+                await queueEmail("treffen-already-registered", {
+                  registrationId: pending.id,
+                  baseUrl: getBaseUrl(req),
+                });
+              }
+
+              return json({ ok: true });
+            });
+          } catch (err) {
+            console.error("POST /api/zoom-register error:", err);
+            return json({ error: "Internal server error" }, 500);
+          }
+        },
+      },
+
+      "/api/zoom-count": {
+        async GET(req) {
+          if (!ZOOM_ENABLED) return featureOff();
+          const blocked = await denyPublic(req, "public-read", 120, 60 * 1000);
+          if (blocked) return blocked;
+          try {
+            return json(await zoomPayload(reqLang(req)));
+          } catch (err) {
+            console.error("GET /api/zoom-count error:", err);
+            return json({ error: "Internal server error" }, 500);
+          }
+        },
+      },
+
+      "/api/termin.ics": {
+        async GET(req) {
+          if (!ZOOM_ENABLED) return featureOff();
+          const blocked = denyRate(req, "ics", 60, 15 * 60 * 1000);
+          if (blocked) return blocked;
+          const lang = reqLang(req);
+          const cfg = zoomIn(await getZoomConfig(), lang);
+          if (!cfg.dateSet) {
+            return new Response(serverText("noDateYet", {}, lang), {
+              status: 404,
+            });
+          }
+          const ics = buildZoomEventIcs(cfg, {
+            includeLink: Boolean(cfg.link) && isLinkWindowOpen(cfg),
+          });
+          return new Response(ics, {
+            headers: {
+              "Content-Type": "text/calendar; charset=utf-8",
+              "Content-Disposition": 'attachment; filename="termin.ics"',
+              "Cache-Control": "public, max-age=300",
+            },
+          });
+        },
+      },
+
+      "/api/resend-verification": {
+        async POST(req) {
+          if (!durableWork.status.ready || !emailManager.status.ready)
+            return json(
+              {
+                error:
+                  configFor(reqLang(req)).ui.errors.emailUnavailable ||
+                  "Email delivery is temporarily unavailable. Please try again later.",
+                pending: true,
+              },
+              503,
+            );
+          try {
+            const ip = getClientIp(req);
+            const { allowed, retryAfter } = checkRateLimit(
+              ip,
+              "resend",
+              12,
+              15 * 60 * 1000,
+            );
+            if (!allowed) {
+              return json({ error: reqUi(req).errors.tooMany }, 429, {
+                "Retry-After": String(retryAfter),
+              });
+            }
+
+            if (bodyTooLarge(req))
+              return json({ error: "Payload too large" }, 413);
+            const body = await parseJsonBody(req);
+            const email = sanitizeEmail(body.email);
+            if (!isValidEmail(email)) return json({ ok: true });
+
+            const token = crypto.randomUUID();
+            const expiresAt = confirmationExpiry();
+            return await durableWork.run(async () => {
+              const name = await refreshVerificationToken(
+                email,
+                token,
+                expiresAt,
+              );
+
+              if (name) {
+                await queueEmail("verification", {
+                  signerId: await getSignerIdByEmail(email),
+                  baseUrl: getBaseUrl(req),
+                });
+              }
+
+              return json({ ok: true });
+            });
+          } catch (err) {
+            console.error("POST /api/resend-verification error:", err);
+            return json({ error: "Internal server error" }, 500);
+          }
+        },
+      },
+
+      // Sign-up confirmation link. GET shows what will be published; confirming
+      // happens on the button's POST, so a mail security scanner that opens the
+      // link can't confirm a sign-up somebody else submitted for this address.
+      "/api/confirm/:token": {
+        async GET(req) {
+          const blocked = denyRate(req, "token-link", 120, 15 * 60 * 1000);
+          if (blocked) return blocked;
+          try {
+            const pending = await getPendingSignerByToken(req.params.token);
+            const lang = linkLang(req, pending?.lang);
+            if (!pending) {
+              return Response.redirect(
+                `${getBaseUrl(req)}${langPrefix(cfg, lang)}/?error=token-expired`,
+                302,
+              );
+            }
+            const copy = pagesIn(lang).confirmSignature;
+            const fields = configFor(lang).sign?.fields;
+            const yesNo = (v) => (v ? copy.yes : copy.no);
+            const rows = [
+              `${copy.nameLabel}: ${escapeHtml(pending.name)}`,
+              pending.kreisverband &&
+                `${escapeHtml(fields?.kreisverband?.label || "Kreisverband")}: ${escapeHtml(pending.kreisverband)}`,
+              pending.occupation &&
+                `${escapeHtml(fields?.occupation?.label || "Beruf")}: ${escapeHtml(pending.occupation)}`,
+              `${copy.publicLabel}: ${yesNo(pending.show_publicly)}`,
+              `${copy.newsletterLabel}: ${yesNo(pending.newsletter)}`,
+              INVITES_ENABLED &&
+                `${copy.inviteNameLabel}: ${
+                  pending.invite_show_name
+                    ? escapeHtml(inviteDisplayName(pending.name))
+                    : copy.no
+                }`,
+            ].filter(Boolean);
+            return htmlPage(
+              heading(copy.heading) +
+                para(copy.intro) +
+                para(rows.join("<br>")) +
+                postButton(copy.button) +
+                para(copy.note),
+              200,
+              lang,
+            );
+          } catch (err) {
+            console.error("GET /api/confirm error:", err);
+            return Response.redirect(
+              `${BASE_URL}${langPrefix(cfg, reqLang(req))}/?error=server-error`,
+              302,
+            );
+          }
+        },
+        async POST(req) {
+          if (!durableWork.status.ready)
+            return json(
+              {
+                error:
+                  "Hintergrundverarbeitung ist vorübergehend nicht verfügbar.",
+                pending: true,
+              },
+              503,
+            );
+          const blocked = denyRate(req, "token-link", 120, 15 * 60 * 1000);
+          if (blocked) return blocked;
+          let prefix = langPrefix(cfg, reqLang(req));
+          try {
+            const signer = await durableWork.run(async () => {
+              const confirmed = await confirmSigner(req.params.token);
+              if (confirmed && INVITES_ENABLED && confirmed.inviteCode)
+                await queueEmail("invite", {
+                  signerId: confirmed.id,
+                  baseUrl: getBaseUrl(req),
+                });
+              return confirmed;
+            });
+            if (signer) {
+              prefix = langPrefix(cfg, linkLang(req, signer.lang));
+              if (cfg.features.stateResolution && signer.kreisverband) {
+                enqueueStateResolution(signer.id, signer.kreisverband);
+              }
+              if (INVITES_ENABLED && signer.inviteCode) {
+                // The invite code isn't secret (it's what gets shared), but the
+                // invite page is the one without analytics. The stats token only
+                // goes out in the mail.
+                return Response.redirect(
+                  `${getBaseUrl(req)}${prefix}/i/${signer.inviteCode}?confirmed=1`,
+                  303,
+                );
+              }
+              return Response.redirect(
+                `${getBaseUrl(req)}${prefix}/?confirmed=1`,
+                303,
+              );
+            }
+            return Response.redirect(
+              `${getBaseUrl(req)}${prefix}/?error=token-expired`,
+              303,
+            );
+          } catch (err) {
+            console.error("POST /api/confirm error:", err);
+            return Response.redirect(
+              `${BASE_URL}${prefix}/?error=server-error`,
+              303,
+            );
+          }
+        },
+      },
+
+      "/api/request-deletion": {
+        async POST(req) {
+          if (!durableWork.status.ready || !emailManager.status.ready)
+            return json(
+              {
+                error:
+                  configFor(reqLang(req)).ui.errors.emailUnavailable ||
+                  "Email delivery is temporarily unavailable. Please try again later.",
+                pending: true,
+              },
+              503,
+            );
+          try {
+            const ip = getClientIp(req);
+            const { allowed, retryAfter } = checkRateLimit(
+              ip,
+              "deletion",
+              12,
+              15 * 60 * 1000,
+            );
+            if (!allowed) {
+              return json({ ok: true }, 200, {
+                "Retry-After": String(retryAfter),
+              });
+            }
+
+            if (bodyTooLarge(req))
+              return json({ error: "Payload too large" }, 413);
+            const body = await parseJsonBody(req);
+            const email = sanitizeEmail(body.email);
+
+            if (!isValidEmail(email)) {
+              return json({ ok: true });
+            }
+
+            const token = crypto.randomUUID();
+            const expiresAt = confirmationExpiry();
+
+            return await durableWork.run(async () => {
+              const requestId = await createDeletionRequest(
+                email,
+                token,
+                expiresAt,
+                storedLang(cfg, reqLang(req)),
+              );
+              if (requestId) {
+                await queueEmail("deletion", {
+                  requestId,
+                  baseUrl: getBaseUrl(req),
+                });
+              }
+
+              return json({ ok: true });
+            });
+          } catch (err) {
+            console.error("POST /api/request-deletion error:", err);
+            return json(
+              {
+                error: "Email delivery is temporarily unavailable.",
+                pending: true,
+              },
+              503,
+            );
+          }
+        },
+      },
+
+      // Deletion link. GET only asks; deleting happens on the button's POST, so a
+      // mail scanner opening the link (e.g. after a stranger requested deletion
+      // for this address) can't erase anything.
+      "/api/delete/:token": {
+        async GET(req) {
+          const blocked = denyRate(req, "token-link", 120, 15 * 60 * 1000);
+          if (blocked) return blocked;
+          const lang = await deletionLang(req);
+          const copy = pagesIn(lang).deleteData;
+          return htmlPage(
+            heading(copy.heading) +
+              para(copy.text) +
+              postButton(copy.button) +
+              para(copy.note),
+            200,
+            lang,
+          );
+        },
+        async POST(req) {
+          const blocked = denyRate(req, "token-link", 120, 15 * 60 * 1000);
+          if (blocked) return blocked;
+          let prefix = langPrefix(cfg, reqLang(req));
+          try {
+            // Read before the request row goes with the deletion.
+            prefix = langPrefix(cfg, await deletionLang(req));
+            const deleted = await deleteByDeletionToken(req.params.token);
+            return Response.redirect(
+              `${getBaseUrl(req)}${prefix}/${deleted ? "?deleted=1" : "?error=delete-token-expired"}`,
+              303,
+            );
+          } catch (err) {
+            console.error("POST /api/delete error:", err);
+            return Response.redirect(
+              `${BASE_URL}${prefix}/?error=server-error`,
+              303,
+            );
+          }
+        },
+      },
+
+      // ---- Unified unsubscribe (serves both newsletter and zoom tokens) ----
+
+      "/api/unsubscribe/:token": {
+        async GET(req) {
+          const blocked = denyRate(req, "unsub", 120, 15 * 60 * 1000);
+          if (blocked) return blocked;
+          try {
+            const url = new URL(req.url);
+            const source =
+              url.searchParams.get("from") === "zoom" ? "zoom" : "newsletter";
+            const state = await getUnifiedUnsubscribeState(
+              req.params.token,
+              source,
+            );
+            if (!state) return json({ ok: false }, 404);
+            return json({ ok: true, ...state });
+          } catch (err) {
+            console.error("GET /api/unsubscribe error:", err);
+            return json({ error: "Internal server error" }, 500);
+          }
+        },
+      },
+
+      // One-click List-Unsubscribe for newsletter (RFC 8058, no UI)
+      "/api/unsubscribe/:token/opt-out": {
+        async POST(req) {
+          const blocked = denyRate(req, "unsub", 120, 15 * 60 * 1000);
+          if (blocked) return blocked;
+          try {
+            const ok = await optOutNewsletter(req.params.token);
+            if (!ok) return json({ ok: false }, 404);
+            return json({ ok: true });
+          } catch (err) {
+            console.error("POST /api/unsubscribe/opt-out error:", err);
+            return json({ error: "Internal server error" }, 500);
+          }
+        },
+      },
+
+      // Granular actions via the unified page
+      "/api/unsubscribe/:token/newsletter-opt-out": {
+        async POST(req) {
+          const blocked = denyRate(req, "unsub", 120, 15 * 60 * 1000);
+          if (blocked) return blocked;
+          try {
+            const email = await resolveEmailFromToken(req.params.token, null, {
+              optOut: true,
+            });
+            if (!email) return json({ ok: false }, 404);
+            await optOutNewsletterByEmail(email);
+            return json({ ok: true });
+          } catch (err) {
+            console.error(
+              "POST /api/unsubscribe/newsletter-opt-out error:",
+              err,
+            );
+            return json({ error: "Internal server error" }, 500);
+          }
+        },
+      },
+
+      "/api/unsubscribe/:token/zoom-opt-out": {
+        async POST(req) {
+          const blocked = denyRate(req, "unsub", 120, 15 * 60 * 1000);
+          if (blocked) return blocked;
+          try {
+            const email = await resolveEmailFromToken(req.params.token, null, {
+              optOut: true,
+            });
+            if (!email) return json({ ok: false }, 404);
+            await deleteZoomByEmail(email);
+            return json({ ok: true });
+          } catch (err) {
+            console.error("POST /api/unsubscribe/zoom-opt-out error:", err);
+            return json({ error: "Internal server error" }, 500);
+          }
+        },
+      },
+
+      "/api/unsubscribe/:token/all": {
+        async POST(req) {
+          const blocked = denyRate(req, "unsub", 120, 15 * 60 * 1000);
+          if (blocked) return blocked;
+          try {
+            const email = await resolveEmailFromToken(req.params.token, null, {
+              optOut: true,
+            });
+            if (!email) return json({ ok: false }, 404);
+            await Promise.all([
+              optOutNewsletterByEmail(email),
+              deleteZoomByEmail(email),
+            ]);
+            return json({ ok: true });
+          } catch (err) {
+            console.error("POST /api/unsubscribe/all error:", err);
+            return json({ error: "Internal server error" }, 500);
+          }
+        },
+      },
+
+      // Self-service field editing for the holder of an unsubscribe token.
+      // Possession of the token (sent only to the address itself) authorizes
+      // editing that address's signer and/or zoom registration fields.
+      "/api/unsubscribe/:token/update": {
+        async POST(req) {
+          try {
+            const ip = getClientIp(req);
+            const { allowed, retryAfter } = checkRateLimit(
+              ip,
+              "unsub-update",
+              30,
+              15 * 60 * 1000,
+            );
+            if (!allowed) {
+              return json({ error: reqUi(req).errors.tooMany }, 429, {
+                "Retry-After": String(retryAfter),
+              });
+            }
+
+            if (bodyTooLarge(req))
+              return json({ error: "Payload too large" }, 413);
+
+            const email = await resolveEmailFromToken(req.params.token);
+            if (!email) return json({ ok: false }, 404);
+
+            const body = await parseJsonBody(req);
+            const name = sanitize(body.name || "");
+            const kv = KV_ENABLED
+              ? normalizeKv(body.kv, await getSignerKreisverband(email))
+              : "";
+            const occupation = OCCUPATION_ENABLED
+              ? sanitize(body.occupation || "")
+              : "";
+            const newsletter = Boolean(body.newsletter);
+            const showPublicly = Boolean(body.showPublicly);
+            // Only honor the delegate flag while the field is enabled.
+            const delegierter =
+              (await getShowDelegierter()) && Boolean(body.delegierter);
+
+            if (name.length < 2) {
+              return json({ error: reqUi(req).errors.nameTooShort }, 400);
+            }
+
+            await updateSignerByEmail(email, {
+              name,
+              kreisverband: kv,
+              occupation,
+              newsletter,
+              showPublicly,
+              inviteShowName: INVITES_ENABLED
+                ? Boolean(body.inviteShowName)
+                : undefined,
+            });
+            await updateZoomByEmail(email, {
+              name,
+              // The Treffen form collects a KV regardless of kreisverbandField.
+              kreisverband: sanitize(body.kv || "").replace(/^KV\s*/i, ""),
+              delegierter,
+            });
+
+            if (cfg.features.stateResolution && kv) {
+              const signer = await getSignerStateByEmail(email);
+              if (signer && !signer.state) {
+                enqueueStateResolution(signer.id, signer.kreisverband);
+              }
+            }
+
+            const url = new URL(req.url);
+            const source =
+              url.searchParams.get("from") === "zoom" ? "zoom" : "newsletter";
+            const state = await getUnifiedUnsubscribeState(
+              req.params.token,
+              source,
+            );
+            return json({ ok: true, ...state });
+          } catch (err) {
+            console.error("POST /api/unsubscribe/update error:", err);
+            return json({ error: "Internal server error" }, 500);
+          }
+        },
+      },
+
+      "/api/unsubscribe/:token/delete": {
+        async POST(req) {
+          const blocked = denyRate(req, "unsub", 120, 15 * 60 * 1000);
+          if (blocked) return blocked;
+          try {
+            const source =
+              new URL(req.url).searchParams.get("from") === "zoom"
+                ? "zoom"
+                : "newsletter";
+            const ok = await deleteSignerByUnsubscribeToken(
+              req.params.token,
+              source,
+            );
+            if (!ok) return json({ ok: false }, 404);
+            return json({ ok: true });
+          } catch (err) {
+            console.error("POST /api/unsubscribe/delete error:", err);
+            return json({ error: "Internal server error" }, 500);
+          }
+        },
+      },
+
+      // Confirmation link from the Treffen sign-up mail. GET only shows what will
+      // be registered; the registration happens on the button's POST, so a mail
+      // scanner following the link can't sign anyone up.
+      "/api/treffen-bestaetigen/:token": {
+        async GET(req) {
+          if (!ZOOM_ENABLED) return featureOff();
+          const blocked = denyRate(req, "token-link", 120, 15 * 60 * 1000);
+          if (blocked) return blocked;
+          let lang = linkLang(req);
+          try {
+            const pending = await getZoomPendingByToken(req.params.token);
+            lang = linkLang(req, pending?.lang);
+            if (!pending) return treffenLinkExpired(lang);
+            const zoomCfg = zoomIn(await getZoomConfig(), lang);
+            const copy = pagesIn(lang).treffenConfirm;
+            const fields = configFor(lang).sign?.fields;
+            const details = [
+              `${copy.nameLabel}: ${escapeHtml(pending.name)}`,
+              pending.kreisverband &&
+                `${escapeHtml(fields?.kreisverband?.label || "Kreisverband")}: ${escapeHtml(pending.kreisverband)}`,
+            ].filter(Boolean);
+            return htmlPage(
+              heading(copy.heading) +
+                para(
+                  fill(copy.intro, {
+                    firstName: firstNameHtml(pending.name),
+                    when: escapeHtml(zoomCfg.whenPhrase),
+                  }),
+                ) +
+                para(details.join("<br>")) +
+                (zoomCfg.showDelegierter && pending.delegierter
+                  ? para(copy.delegate)
+                  : "") +
+                postButton(copy.button),
+              200,
+              lang,
+            );
+          } catch (err) {
+            console.error("GET /api/treffen-bestaetigen error:", err);
+            return treffenLinkError(lang);
+          }
+        },
+        async POST(req) {
+          if (!durableWork.status.ready)
+            return json(
+              {
+                error:
+                  "Hintergrundverarbeitung ist vorübergehend nicht verfügbar.",
+                pending: true,
+              },
+              503,
+            );
+          if (!ZOOM_ENABLED) return featureOff();
+          const blocked = denyRate(req, "token-link", 120, 15 * 60 * 1000);
+          if (blocked) return blocked;
+          let lang = linkLang(req);
+          try {
+            const reg = await meetingService.confirm(req.params.token);
+            if (!reg) return treffenLinkExpired(lang);
+            lang = linkLang(req, reg.lang);
+            const pages = pagesIn(lang);
+            const zoomCfg = zoomIn(await getZoomConfig(), lang);
+            return htmlPage(
+              heading(pages.treffenDone.heading) +
+                para(
+                  fill(pages.treffenDone.text, {
+                    firstName: firstNameHtml(reg.name),
+                  }),
+                ) +
+                buildMeetingInfo(zoomCfg, {
+                  pending: true,
+                  timingText: serverText("shortly", {}, zoomCfg.lang),
+                }),
+              200,
+              lang,
+            );
+          } catch (err) {
+            console.error("POST /api/treffen-bestaetigen error:", err);
+            return treffenLinkError(lang);
+          }
+        },
+      },
+
+      // Redirect old zoom unsubscribe links to the unified page
+      "/api/zoom-abmelden/:token": {
+        GET(req) {
+          const blocked = denyRate(req, "token-link", 120, 15 * 60 * 1000);
+          if (blocked) return blocked;
+          const token = encodeURIComponent(req.params.token);
+          return Response.redirect(
+            `${getBaseUrl(req)}/abmelden/${token}?from=zoom`,
+            302,
+          );
+        },
+      },
+
+      // Back-compat: invite emails sent before the rename used /api/zoom-anmelden.
+      // Redirect (preserving any ?delegiert query) to the current path.
+      "/api/zoom-anmelden/:token": {
+        GET(req) {
+          if (!ZOOM_ENABLED) return featureOff();
+          const u = new URL(req.url);
+          const dest =
+            u.origin +
+            u.pathname.replace(
+              "/api/zoom-anmelden/",
+              "/api/treffen-anmelden/",
+            ) +
+            u.search;
+          return Response.redirect(dest, 301);
+        },
+      },
+
+      // One-click Treffen registration from a newsletter invite (see
+      // treffenAnmelden). These links don't expire with the token's age.
+      "/api/treffen-anmelden/:token": {
+        GET: (req) => treffenAnmelden(req, { commit: false }),
+        POST: (req) => treffenAnmelden(req, { commit: true }),
+      },
+
+      // One-click List-Unsubscribe for zoom (RFC 8058, no UI)
+      "/api/zoom-abmelden/:token/opt-out": {
+        async POST(req) {
+          const blocked = denyRate(req, "unsub", 120, 15 * 60 * 1000);
+          if (blocked) return blocked;
+          try {
+            await deleteZoomRegistrationByUnsubscribeToken(req.params.token);
+            return json({ ok: true });
+          } catch (err) {
+            console.error("POST /api/zoom-abmelden/opt-out error:", err);
+            return json({ error: "Internal server error" }, 500);
+          }
+        },
+      },
+
+      "/api/admin/login": {
+        async POST(req) {
+          try {
+            const ip = getClientIp(req);
+            const { allowed, retryAfter } = checkRateLimit(
+              ip,
+              "admin-login",
+              5,
+              15 * 60 * 1000,
+            );
+            if (!allowed) {
+              return json({ error: "Zu viele Anmeldeversuche." }, 429, {
+                "Retry-After": String(retryAfter),
+              });
+            }
+
+            if (bodyTooLarge(req))
+              return json({ error: "Die Anfrage ist zu groß." }, 413);
+            const body = await parseJsonBody(req);
+            const ok = await constantTimePasswordMatches(body.password);
+            if (!ok) return json({ error: "Unauthorized" }, 401);
+
+            return json({ token: await createAdminToken() });
+          } catch (err) {
+            console.error("POST /api/admin/login error:", err);
+            return json({ error: "Internal server error" }, 500);
+          }
+        },
+      },
+
+      "/api/admin/templates": {
+        async GET(req) {
+          return adminJson(req, async () =>
+            json(
+              memoryTemplates().map((t) => ({
+                ...t,
+                revision: publications.current.revision,
+              })),
+            ),
+          );
+        },
+        async POST(req) {
+          return adminJson(req, async () => {
+            if (bodyTooLarge(req))
+              return json({ error: "Die Anfrage ist zu groß." }, 413);
+            const body = await parseJsonBody(req);
+            const name = sanitize(body.name, 120);
+            const subject = sanitize(body.subject, 240);
+            const htmlBody = sanitizeHtml(body.html_body);
+            if (!name || !subject || !htmlBody) {
+              return json({ error: "Ergänze die erforderlichen Felder." }, 400);
+            }
+            const document = structuredClone(publications.current.document);
+            const id = await publications.nextTemplateId();
+            const template = {
+              id,
+              slug: `newsletter-${crypto.randomUUID()}`,
+              name,
+              subject,
+              html_body: htmlBody,
+            };
+            document.templates.push(template);
+            const published = await publications.publish(
+              document,
+              body.expectedRevision,
+            );
+            return json({ ...template, revision: published.revision }, 201);
+          });
+        },
+      },
+
+      "/api/admin/templates/:id": {
+        async GET(req) {
+          return adminJson(req, async () => {
+            const template = memoryTemplate(parseInt(req.params.id, 10));
+            if (!template) return json({ error: "Not found" }, 404);
+            return json({
+              ...template,
+              revision: publications.current.revision,
+            });
+          });
+        },
+        async PUT(req) {
+          return adminJson(req, async () => {
+            if (bodyTooLarge(req))
+              return json({ error: "Die Anfrage ist zu groß." }, 413);
+            const body = await parseJsonBody(req);
+            const subject = sanitize(body.subject, 240);
+            const htmlBody = sanitizeHtml(body.html_body);
+            if (!subject || !htmlBody)
+              return json({ error: "Ergänze die erforderlichen Felder." }, 400);
+            const document = structuredClone(publications.current.document);
+            const template = document.templates.find(
+              (t) => t.id === Number(req.params.id),
+            );
+            if (!template) return json({ error: "Not found" }, 404);
+            template.subject = subject;
+            template.html_body = htmlBody;
+            const published = await publications.publish(
+              document,
+              body.expectedRevision,
+            );
+            return json({ ...template, revision: published.revision });
+          });
+        },
+        async DELETE(req) {
+          return adminJson(req, async () => {
+            const body = await req.json();
+            const document = structuredClone(publications.current.document);
+            document.templates = document.templates.filter(
+              (t) => t.id !== Number(req.params.id),
+            );
+            const published = await publications.publish(
+              document,
+              body.expectedRevision,
+            );
+            return json({ ok: true, revision: published.revision });
+          });
+        },
+      },
+
+      "/api/admin/campaigns": {
+        async GET(req) {
+          return adminJson(req, async () => json(await listCampaigns()));
+        },
+        async POST(req) {
+          return adminJson(req, async () => {
+            if (bodyTooLarge(req))
+              return json({ error: "Die Anfrage ist zu groß." }, 413);
+            const body = await parseJsonBody(req);
+            if (
+              typeof body.request_key !== "string" ||
+              !/^[a-zA-Z0-9-]{16,80}$/.test(body.request_key)
+            )
+              return json(
+                {
+                  error:
+                    "Die Kennung für diesen Versandauftrag fehlt. Öffne den Nachrichtenentwurf erneut.",
+                },
+                400,
+              );
+            const templateId = parseInt(body.template_id, 10);
+            const subject = sanitize(body.subject, 240);
+            let scheduledAt;
+            try {
+              scheduledAt = campaignSchedule(body);
+            } catch (error) {
+              return json({ error: error.message }, 400);
+            }
+            const audience = [
+              "newsletter",
+              "zoom",
+              "zoom_delegates",
+              "selection",
+              "email_not_zoom",
+            ].includes(body.audience)
+              ? body.audience
+              : "newsletter";
+            if (
+              !templateId ||
+              !subject ||
+              Number.isNaN(scheduledAt.getTime())
+            ) {
+              return json(
+                { error: "Prüfe Vorlage, Betreff und Versandtermin." },
+                400,
+              );
+            }
+            let recipientIds = null;
+            if (audience === "selection") {
+              const raw = Array.isArray(body.recipient_ids)
+                ? body.recipient_ids
+                : [];
+              recipientIds = [
+                ...new Set(
+                  raw
+                    .map((id) => parseInt(id, 10))
+                    .filter((id) => Number.isInteger(id) && id > 0),
+                ),
+              ];
+              if (recipientIds.length === 0) {
+                return json({ error: "Keine Empfänger*innen ausgewählt" }, 400);
+              }
+              if (recipientIds.length > 20000) {
+                return json(
+                  { error: "Zu viele Empfänger*innen (max. 20000)" },
+                  400,
+                );
+              }
+            }
+            return await durableWork.run(async () => {
+              const campaign = await createCampaign({
+                templateId,
+                subject,
+                scheduledAt,
+                audience,
+                recipientIds,
+                i18n: campaignI18n(body.i18n),
+                requestKey: body.request_key,
+                sendNow: body.send_now === true,
+              });
+              if (!campaign)
+                return json(
+                  {
+                    error:
+                      "Wähle für jede Sprache eine Newsletter-Vorlage. Systemnachrichten können nicht als Rundmail gesendet werden.",
+                  },
+                  400,
+                );
+              if (!campaign.replayed) {
+                const activeIds = new Set(
+                  publications.current.document.templates.map((t) => t.id),
+                );
+                const requestedIds = [
+                  templateId,
+                  ...Object.values(campaignI18n(body.i18n) || {})
+                    .map((v) => v?.templateId)
+                    .filter(Boolean),
+                ];
+                if (requestedIds.some((id) => !activeIds.has(Number(id))))
+                  throw Object.assign(
+                    new Error(
+                      "Diese Vorlage ist archiviert. Wähle eine aktuelle Newsletter-Vorlage.",
+                    ),
+                    { status: 400 },
+                  );
+              }
+              // Durable send job, delivered at the scheduled time.
+              if (!campaign.replayed)
+                await enqueueJob(
+                  "campaigns",
+                  { campaignId: campaign.id },
+                  {
+                    runAt: Math.floor(scheduledAt.getTime() / 1000),
+                    maxAttempts: 5,
+                  },
+                );
+              return json(campaign, campaign.replayed ? 200 : 201);
+            });
+          });
+        },
+      },
+
+      "/api/admin/campaigns/:id/recipients": {
+        GET(req) {
+          return adminJson(req, async () => {
+            const campaign = await getCampaignById(Number(req.params.id));
+            if (!campaign)
+              return json({ error: "Kampagne nicht gefunden." }, 404);
+            if (campaign.audience !== "selection")
+              return json(
+                { error: "Diese Kampagne hat keine feste Empfängerauswahl." },
+                400,
+              );
+            const offset = Number(
+              new URL(req.url).searchParams.get("offset") || 0,
+            );
+            if (!Number.isInteger(offset) || offset < 0)
+              return json({ error: "Ungültige Seite." }, 400);
+            return json({
+              ...(await selectedNewsletterSigners(
+                campaign.recipient_ids,
+                {},
+                { limit: 25, offset },
+              )),
+              savedCount: campaign.recipient_ids.length,
+              offset,
+            });
+          });
+        },
+      },
+
+      "/api/admin/campaigns/:id": {
+        async DELETE(req) {
+          return adminJson(req, async () => {
+            const deleted = await cancelCampaign(parseInt(req.params.id, 10));
+            if (!deleted)
+              return json(
+                {
+                  error:
+                    "Diese Kampagne kann nicht abgesagt werden. Lade den Verlauf und prüfe ihren Status.",
+                },
+                400,
+              );
+            return json({ ok: true });
+          });
+        },
+      },
+
+      // An aborted campaign gets a fresh set of attempts; recipients already
+      // reached stay in the delivery log and aren't mailed again.
+      "/api/admin/campaigns/:id/retry": {
+        GET(req) {
+          return adminJson(req, async () => {
+            const campaign = await getCampaignById(Number(req.params.id));
+            if (!campaign || campaign.status !== "aborted")
+              return json(
+                {
+                  error:
+                    "Die Kampagne ist nicht mehr angehalten. Lade den Verlauf erneut.",
+                },
+                409,
+              );
+            const template =
+              memoryTemplate(campaign.template_id) ||
+              (await getEmailTemplate(campaign.template_id));
+            if (!template)
+              return json(
+                {
+                  error:
+                    "Die Standardvorlage fehlt. Repariere sie im Bereich Vorlagen.",
+                },
+                400,
+              );
+            const [recipients, delivered] = await Promise.all([
+              getCampaignRecipients(campaign),
+              getDeliveredEmails(`campaign:${campaign.id}`),
+            ]);
+            const remaining = recipients.filter(
+              (person) => !delivered.has(person.email),
+            );
+            const byLanguage = {};
+            for (const person of remaining) {
+              const language = normalizeLang(cfg, person.lang);
+              byLanguage[language] = (byLanguage[language] || 0) + 1;
+            }
+            const variables = emailPreviewVariables(
+              (await getZoomConfig()).label,
+            );
+            const versions = await Promise.all(
+              LANGUAGES.map(async (language) => {
+                const version = await campaignVersion(
+                  campaign,
+                  template,
+                  language,
+                );
+                return {
+                  language,
+                  count: byLanguage[language] || 0,
+                  templateName: version.template.name,
+                  templateId: version.template.id,
+                  subject: version.subject,
+                  subjectExample: interpolateTemplate(
+                    version.subject,
+                    variables,
+                  ),
+                  fallback:
+                    language !== DEFAULT_LANG &&
+                    version.template.id === template.id,
+                };
+              }),
+            );
+            return json({
+              id: campaign.id,
+              audience: campaign.audience || "newsletter",
+              eligible: recipients.length,
+              alreadyAccepted: delivered.size,
+              remaining: remaining.length,
+              versions,
+              checkedAt: new Date().toISOString(),
+            });
+          });
+        },
+        async POST(req) {
+          return adminJson(req, async () => {
+            if (!durableWork.status.ready)
+              throw Object.assign(
+                new Error("Hintergrundverarbeitung ist nicht bereit."),
+                { status: 503 },
+              );
+            const ok = await retryAbortedCampaign(parseInt(req.params.id, 10));
+            if (!ok) {
+              return json(
+                {
+                  error:
+                    "Diese Kampagne ist nicht abgebrochen oder ihr Zustellprotokoll ist zu alt. Ein erneuter Versuch könnte Nachrichten doppelt senden.",
+                },
+                400,
+              );
+            }
+            return json({ ok: true });
+          });
+        },
+      },
+
+      "/api/admin/newsletter-signers": {
+        async GET(req) {
+          return adminJson(req, async () => {
+            const filters = parseSignerFilters(req);
+            const limit = parseInt(
+              new URL(req.url).searchParams.get("limit") || "25",
+              10,
+            );
+            const offset = parseInt(
+              new URL(req.url).searchParams.get("offset") || "0",
+              10,
+            );
+            const result = await listNewsletterSigners({
+              ...filters,
+              limit: Number.isNaN(limit) ? 25 : limit,
+              offset: Number.isNaN(offset) ? 0 : offset,
+            });
+            return json(result);
+          });
+        },
+      },
+
+      "/api/admin/newsletter-selection": {
+        POST(req) {
+          return adminJson(req, async () => {
+            const body = await parseJsonBody(req, 300000);
+            if (
+              !Array.isArray(body.ids) ||
+              body.ids.length > 20000 ||
+              body.ids.some((id) => !Number.isInteger(id) || id < 1)
+            )
+              return json(
+                { error: "Ungültige Empfängerauswahl (max. 20.000)." },
+                400,
+              );
+            return json(
+              await selectedNewsletterSigners(
+                [...new Set(body.ids)],
+                parseSignerFilters(req),
+                {
+                  limit: 25,
+                  offset: Number.isInteger(body.offset)
+                    ? Math.max(0, body.offset)
+                    : 0,
+                },
+              ),
+            );
+          });
+        },
+      },
+      "/api/admin/newsletter-signer-filters": {
+        async GET(req) {
+          return adminJson(req, async () =>
+            json(await getNewsletterSignerFilters()),
+          );
+        },
+      },
+
+      "/api/admin/newsletter-signer-ids": {
+        async GET(req) {
+          return adminJson(req, async () => {
+            const ids = await listNewsletterSignerIds(parseSignerFilters(req));
+            return json({ ids });
+          });
+        },
+      },
+
+      "/api/admin/stats": {
+        async GET(req) {
+          return adminJson(req, async () => {
+            const [newsletter, zoom] = await Promise.all([
+              getNewsletterStats(),
+              getZoomCounts(),
+            ]);
+            const countKeys = {
+              newsletter: "subscriberCount",
+              email_not_zoom: "newsletterNotZoomCount",
+              zoom: "zoomCount",
+              zoom_delegates: "zoomDelegateCount",
+            };
+            const audienceLanguages = Object.fromEntries(
+              await Promise.all(
+                Object.keys(countKeys).map(async (audience) => [
+                  audience,
+                  await getCampaignLanguageCounts(audience),
+                ]),
+              ),
+            );
+            const currentCounts = Object.fromEntries(
+              Object.entries(countKeys).map(([audience, key]) => [
+                key,
+                Object.values(audienceLanguages[audience]).reduce(
+                  (sum, count) => sum + count,
+                  0,
+                ),
+              ]),
+            );
+            return json({
+              ...newsletter,
+              ...zoom,
+              ...currentCounts,
+              audienceLanguages,
+            });
+          });
+        },
+      },
+
+      "/api/admin/zoom-registrations": {
+        async GET(req) {
+          return adminJson(req, async () =>
+            json(await listZoomRegistrations()),
+          );
+        },
+      },
+
+      "/api/admin/zoom-registrations/clear": {
+        async POST(req) {
+          return adminJson(req, async () => {
+            const removed = await clearZoomRegistrations();
+            return json({ ok: true, removed });
+          });
+        },
+      },
+
+      "/api/admin/zoom-mailings": {
+        async GET(req) {
+          return adminJson(req, async () => {
+            const cfg = await getZoomConfig({ strict: true });
+            return json({
+              revision: cfg.revision,
+              eventAt: cfg.eventAtIso,
+              eventLabel: cfg.label,
+              durationMin: cfg.durationMin,
+              linkOffsetHours: cfg.linkOffsetHours,
+              reminderOffsetHours: cfg.reminderOffsetHours,
+              link: cfg.link,
+              hasLink: Boolean(cfg.link),
+              showDelegierter: cfg.showDelegierter,
+              mode: cfg.mode,
+              location: cfg.location,
+              eventLabelFallback: cfg.eventLabelFallback,
+              navLabel: cfg.navLabel,
+              durationMin: cfg.durationMin,
+              mailings: await listZoomMailings(),
+            });
+          });
+        },
+      },
+
+      "/api/admin/zoom-settings": {
+        async POST(req) {
+          return adminJson(req, async () => {
+            if (!durableWork.status.ready)
+              throw Object.assign(
+                new Error("Hintergrundverarbeitung ist nicht bereit."),
+                { status: 503 },
+              );
+            if (bodyTooLarge(req))
+              return json({ error: "Die Anfrage ist zu groß." }, 413);
+            const body = await parseJsonBody(req);
+            const eventDate = new Date(body.eventAt);
+            if (Number.isNaN(eventDate.getTime())) {
+              return json({ error: "Ungültiges Datum" }, 400);
+            }
+            const linkOffsetHours = parseInt(body.linkOffsetHours, 10);
+            const reminderOffsetHours = parseInt(body.reminderOffsetHours, 10);
+            if (
+              !Number.isInteger(linkOffsetHours) ||
+              linkOffsetHours < 0 ||
+              !Number.isInteger(reminderOffsetHours) ||
+              reminderOffsetHours < 0
+            ) {
+              return json(
+                {
+                  error:
+                    "Prüfe die Stundenangaben für Link-E-Mail und Erinnerung.",
+                },
+                400,
+              );
+            }
+            const durationMin =
+              body.durationMin == null ? null : parseInt(body.durationMin, 10);
+            if (
+              durationMin != null &&
+              !(durationMin >= 5 && durationMin <= 1440)
+            ) {
+              return json(
+                { error: "Gib eine Dauer zwischen 5 und 1440 Minuten ein." },
+                400,
+              );
+            }
+
+            const prev = await getZoomConfig({ strict: true });
+            const eventChanged = eventDate.toISOString() !== prev.eventAtIso;
+            const zoomLink = String(body.zoomLink ?? "").trim();
+            const revision = await setZoomSettings(
+              {
+                zoom_event_at: eventDate.toISOString(),
+                zoom_link_offset_hours: linkOffsetHours,
+                zoom_reminder_offset_hours: reminderOffsetHours,
+                zoom_link: zoomLink,
+                // Ported operational settings (admin-editable, no redeploy).
+                zoom_show_delegierter: body.showDelegierter ? "1" : "0",
+                zoom_mode: body.mode === "inperson" ? "inperson" : "online",
+                zoom_location_name: String(body.locationName ?? "").trim(),
+                zoom_location_address: String(
+                  body.locationAddress ?? "",
+                ).trim(),
+                zoom_location_maps_url: String(
+                  body.locationMapsUrl ?? "",
+                ).trim(),
+                // null (older admin page) keeps the stored value.
+                zoom_duration_min: durationMin,
+              },
+              body.expectedRevision,
+              { resetMailings: body.resetMailings === true },
+            );
+            const cfg = await getZoomConfig();
+            return json({
+              ok: true,
+              revision,
+              mailingsReset: eventChanged || body.resetMailings === true,
+              eventAt: cfg.eventAtIso,
+              eventLabel: cfg.label,
+              linkOffsetHours: cfg.linkOffsetHours,
+              reminderOffsetHours: cfg.reminderOffsetHours,
+              showDelegierter: cfg.showDelegierter,
+              mode: cfg.mode,
+              location: cfg.location,
+              eventLabelFallback: cfg.eventLabelFallback,
+              navLabel: cfg.navLabel,
+              durationMin: cfg.durationMin,
+            });
+          });
+        },
+      },
+
+      // "Texte & Modus": every editable field with its default and override.
+      "/api/admin/copy": {
+        async GET(req) {
+          return adminJson(req, async () => {
+            const lang = adminCopyLang(req);
+            if (!lang)
+              return json(
+                { error: "Die gewählte Sprache ist nicht verfügbar." },
+                400,
+              );
+            const overrides = publications.current.document.locales[lang].copy;
+            return json({
+              groups: EDITABLE_GROUPS,
+              languages: LANGUAGES,
+              lang,
+              fields: EDITABLE_BY_LANG[lang].fields.map((f) => ({
+                ...f,
+                overridden: Object.prototype.hasOwnProperty.call(
+                  overrides,
+                  f.path,
+                ),
+                value: overrides[f.path] ?? f.default,
+              })),
+            });
+          });
+        },
+        // { changes: { path: value | null }, lang? }; null restores the default
+        // for that language only.
+        async POST(req) {
+          return adminJson(req, async () => {
+            if (bodyTooLarge(req))
+              return json({ error: "Die Anfrage ist zu groß." }, 413);
+            const body = await parseJsonBody(req);
+            const changes = body?.changes;
+            if (
+              !changes ||
+              typeof changes !== "object" ||
+              Array.isArray(changes)
+            ) {
+              return json(
+                { error: "Die Anfrage enthält keine Änderungen." },
+                400,
+              );
+            }
+            const lang = adminCopyLang(req, body?.lang);
+            if (!lang)
+              return json(
+                { error: "Die gewählte Sprache ist nicht verfügbar." },
+                400,
+              );
+            const { byPath } = EDITABLE_BY_LANG[lang];
+            const clean = {};
+            try {
+              for (const [path, value] of Object.entries(changes)) {
+                const field = byPath.get(path);
+                if (!field) throw new Error(`${path}: nicht editierbar`);
+                clean[path] = value === null ? null : cleanValue(field, value);
+              }
+            } catch (e) {
+              return json({ error: e.message }, 400);
+            }
+            const document = structuredClone(publications.current.document);
+            for (const [path, value] of Object.entries(clean))
+              document.locales[lang].copy[path] =
+                value === null ? byPath.get(path).default : value;
+            const published = await publications.publish(
+              document,
+              body.expectedRevision,
+            );
+            return json({ ok: true, revision: published.revision });
+          });
+        },
+      },
+
+      "/api/admin/milestones": {
+        async GET(req) {
+          return adminJson(req, async () =>
+            json({ milestones: await getMilestones() }),
+          );
+        },
+        async POST(req) {
+          return adminJson(req, async () => {
+            if (bodyTooLarge(req))
+              return json({ error: "Die Anfrage ist zu groß." }, 413);
+            const body = await parseJsonBody(req);
+            if (!Array.isArray(body.milestones)) {
+              return json({ error: "Übergebe die Zielmarken als Liste." }, 400);
+            }
+            try {
+              const milestones = await setMilestones(body.milestones);
+              return json({ ok: true, milestones });
+            } catch (e) {
+              return json(
+                { error: e.message || "Die Zielmarken sind ungültig." },
+                400,
+              );
+            }
+          });
+        },
+      },
+
+      "/api/admin/zoom-test-send": {
+        async POST(req) {
+          return adminJson(req, async () => {
+            if (bodyTooLarge(req))
+              return json({ error: "Die Anfrage ist zu groß." }, 413);
+            const body = await parseJsonBody(req);
+            const to = String(body.to || "").trim();
+            const kind = body.kind;
+            if (!to || !isValidEmail(to)) {
+              return json({ error: reqUi(req).errors.invalidEmail }, 400);
+            }
+            if (!["confirmation", "link", "reminder"].includes(kind)) {
+              return json(
+                { error: "Der Nachrichtentyp ist nicht verfügbar." },
+                400,
+              );
+            }
+            const cfg = await getZoomConfig();
+            if (kind === "confirmation") {
+              await sendZoomConfirmationEmail({
+                to,
+                name: "Test-Empfänger",
+                eventLabel: cfg.label,
+                eventWhen: cfg.whenPhrase,
+                linkInfo: buildMeetingInfo(cfg, {
+                  pending: true,
+                  timingText: offsetPhrase(cfg.linkOffsetHours),
+                }),
+              });
+            } else {
+              const payload = await buildZoomMailPayload(
+                kind,
+                { name: "Test-Empfänger", email: to },
+                "test",
+                cfg,
+              );
+              await sendRenderedEmail({
+                ...payload,
+                subject: `[TEST] ${payload.subject}`,
+              });
+            }
+            return json({ ok: true });
+          });
+        },
+      },
+
+      "/api/admin/preview": {
+        async POST(req) {
+          return adminJson(req, async () => {
+            if (bodyTooLarge(req))
+              return json({ error: "Die Anfrage ist zu groß." }, 413);
+            const body = await parseJsonBody(req);
+            const cfg = await getZoomConfig();
+            const template = body.template_id
+              ? memoryTemplate(Number(body.template_id))
+              : null;
+            const variables = emailPreviewVariables(cfg.label);
+            return json({
+              subject: interpolateTemplate(
+                String(body.subject ?? template?.subject ?? ""),
+                variables,
+              ),
+              html: renderEmailHtml(
+                sanitizeHtml(template?.html_body ?? body.html_body),
+                variables,
+                LANGUAGES.includes(body.lang) ? body.lang : DEFAULT_LANG,
+              ),
+            });
+          });
+        },
+      },
+
+      "/api/admin/test-send": {
+        async POST(req) {
+          return adminJson(req, async () => {
+            if (bodyTooLarge(req))
+              return json({ error: "Die Anfrage ist zu groß." }, 413);
+            const body = await parseJsonBody(req);
+            const to = String(body.to || "").trim();
+            const templateId = parseInt(body.template_id, 10);
+            if (!to || !isValidEmail(to)) {
+              return json({ error: reqUi(req).errors.invalidEmail }, 400);
+            }
+            if (!templateId) {
+              return json({ error: "Wähle eine Vorlage." }, 400);
+            }
+            const template = memoryTemplate(templateId);
+            if (!template) {
+              return json(
+                { error: "Die Vorlage ist nicht mehr verfügbar." },
+                404,
+              );
+            }
+            if (!isCampaignTemplate(template))
+              return json(
+                {
+                  error:
+                    "Systemnachrichten können nicht als Rundmail getestet werden.",
+                },
+                400,
+              );
+            const audience = [
+              "newsletter",
+              "zoom",
+              "zoom_delegates",
+              "email_not_zoom",
+            ].includes(body.audience)
+              ? body.audience
+              : "newsletter";
+            const isZoom = audience === "zoom" || audience === "zoom_delegates";
+            const stats = await getNewsletterStats();
+            const signerCount =
+              stats.signerCount?.toLocaleString("de-DE") || "0";
+            const zoomCfg = await getZoomConfig();
+            const realRecipient = isZoom
+              ? await getZoomRecipientByEmail(to)
+              : await getNewsletterRecipientByEmail(to);
+            let vars;
+            let optOutUrl;
+            if (realRecipient) {
+              const firstName = realRecipient.name.split(/\s/)[0];
+              if (isZoom) {
+                const token = await issueZoomUnsubscribeToken(realRecipient.id);
+                const unsubscribeUrl = `${BASE_URL}/abmelden/${token}?from=zoom`;
+                optOutUrl = `${BASE_URL}/api/zoom-abmelden/${token}/opt-out`;
+                vars = {
+                  name: realRecipient.name,
+                  firstName,
+                  eventLabel: zoomCfg.label,
+                  zoomLink: zoomCfg.link,
+                  linkInfo: buildMeetingInfo(zoomCfg),
+                  unsubscribeUrl,
+                };
+              } else {
+                const token = await issueUnsubscribeToken(realRecipient.id);
+                const unsubscribeUrl = `${BASE_URL}/abmelden/${token}`;
+                optOutUrl = `${BASE_URL}/api/unsubscribe/${token}/opt-out`;
+                vars = {
+                  name: realRecipient.name,
+                  firstName,
+                  signerCount,
+                  eventLabel: zoomCfg?.label || "",
+                  linkInfo: buildMeetingInfo(zoomCfg),
+                  unsubscribeUrl,
+                  ...treffenSignupUrls(token, zoomCfg?.showDelegierter),
+                };
+              }
+            } else {
+              optOutUrl = isZoom
+                ? `${BASE_URL}/api/zoom-abmelden/test/opt-out`
+                : `${BASE_URL}/api/unsubscribe/test/opt-out`;
+              vars = isZoom
+                ? {
+                    name: "Test-Empfänger",
+                    firstName: "Test-Empfänger",
+                    eventLabel: zoomCfg.label,
+                    zoomLink: zoomCfg.link,
+                    linkInfo: buildMeetingInfo(zoomCfg),
+                    unsubscribeUrl: `${BASE_URL}/abmelden/test?from=zoom`,
+                  }
+                : {
+                    name: "Test-Empfänger",
+                    firstName: "Test-Empfänger",
+                    signerCount,
+                    eventLabel: zoomCfg?.label || "",
+                    linkInfo: buildMeetingInfo(zoomCfg),
+                    unsubscribeUrl: `${BASE_URL}/abmelden/test`,
+                    ...treffenSignupUrls("test", zoomCfg?.showDelegierter),
+                  };
+            }
+            const html = renderEmailHtml(
+              template.html_body,
+              vars,
+              LANGUAGES.includes(body.lang) ? body.lang : DEFAULT_LANG,
+            );
+            const subject = interpolateTemplate(
+              String(body.subject || template.subject || ""),
+              vars,
+            );
+            const testUnsubHeaders = buildUnsubscribeHeaders(optOutUrl);
+            await sendRenderedEmail({
+              to,
+              subject: `[TEST] ${subject}`,
+              html,
+              headers: testUnsubHeaders,
+            });
+            return json({ ok: true });
+          });
+        },
+      },
+
+      "/api/admin/resolve-states": {
+        async POST(req) {
+          return adminJson(req, async () => {
+            const enqueued = await triggerBackfill();
+            return json({ ok: true, enqueued });
+          });
+        },
+      },
+
+      "/api/admin/state-resolution-status": {
+        async GET(req) {
+          return adminJson(req, async () => {
+            const stats = await getStateResolutionStats();
+            return json({ ...stats, queueLength: getQueueLength() });
+          });
+        },
+      },
+
+      "/api/admin/kv-outliers": {
+        async GET(req) {
+          return adminJson(req, async () => {
+            const [kvs, dismissed] = await Promise.all([
+              getDistinctKreisverbands(),
+              loadKvNotTypo(),
+            ]);
+            const dismissedSet = new Set(
+              dismissed.map((d) => `${d.canonical}\0${d.outlier}`),
+            );
+            const groups = findOutlierGroups(kvs)
+              .map((g) => ({
+                ...g,
+                outliers: g.outliers.filter(
+                  (o) => !dismissedSet.has(`${g.canonical.name}\0${o.name}`),
+                ),
+              }))
+              .filter((g) => g.outliers.length > 0);
+            return json(groups);
+          });
+        },
+      },
+
+      "/api/admin/merge-kv": {
+        async POST(req) {
+          return adminJson(req, async () => {
+            if (bodyTooLarge(req))
+              return json({ error: "Die Anfrage ist zu groß." }, 413);
+            const body = await parseJsonBody(req);
+            const from = String(body.from || "").trim();
+            const to = String(body.to || "").trim();
+            if (!from || !to || from === to) {
+              return json({ error: "Ungültige Kreisverbände" }, 400);
+            }
+            const updated = await mergeKreisverband(from, to);
+            await triggerBackfill();
+            return json({ ok: true, updated });
+          });
+        },
+      },
+
+      "/api/admin/dismiss-outlier": {
+        async POST(req) {
+          return adminJson(req, async () => {
+            if (bodyTooLarge(req))
+              return json({ error: "Die Anfrage ist zu groß." }, 413);
+            const body = await parseJsonBody(req);
+            const canonical = String(body.canonical || "").trim();
+            const outlier = String(body.outlier || "").trim();
+            if (!canonical || !outlier) {
+              return json({ error: "Ungültige Parameter" }, 400);
+            }
+            await insertKvNotTypo(canonical, outlier);
+            return json({ ok: true });
+          });
+        },
+      },
+
+      "/api/admin/unresolved-kvs": {
+        async GET(req) {
+          return adminJson(req, async () => json(await getUnresolvedKvs()));
+        },
+      },
+
+      "/api/admin/re-enqueue-all": {
+        async POST(req) {
+          return adminJson(req, async () => {
+            const cleared = await clearEmptyKvCacheEntries();
+            clearProcessedKvs();
+            const enqueued = await triggerBackfill();
+            return json({ ok: true, enqueued, cacheCleared: cleared });
+          });
+        },
+      },
+
+      "/api/admin/assign-kv-state": {
+        async POST(req) {
+          return adminJson(req, async () => {
+            if (bodyTooLarge(req))
+              return json({ error: "Die Anfrage ist zu groß." }, 413);
+            const body = await parseJsonBody(req);
+            const kreisverband = String(body.kreisverband || "").trim();
+            const state = String(body.state || "").trim();
+            if (!kreisverband || !state) {
+              return json(
+                { error: "Wähle einen Kreisverband und ein Bundesland." },
+                400,
+              );
+            }
+            await upsertKvStateCache(kreisverband, state, "manual");
+            const updated = await bulkUpdateSignerStateByKv(
+              kreisverband,
+              state,
+            );
+            return json({ ok: true, updated });
+          });
+        },
+      },
+
+      "/api/admin/occupation-outliers": {
+        async GET(req) {
+          return adminJson(req, async () => {
+            const [occupations, dismissed] = await Promise.all([
+              getDistinctOccupations(),
+              loadOccNotTypo(),
+            ]);
+            const dismissedSet = new Set(
+              dismissed.map((d) => `${d.canonical}\0${d.outlier}`),
+            );
+            const groups = findOutlierGroups(
+              occupations,
+              "occupation",
+              null,
+              normalizeOccupation,
+            )
+              .map((g) => ({
+                ...g,
+                outliers: g.outliers.filter(
+                  (o) => !dismissedSet.has(`${g.canonical.name}\0${o.name}`),
+                ),
+              }))
+              .filter((g) => g.outliers.length > 0);
+            return json(groups);
+          });
+        },
+      },
+
+      "/api/admin/merge-occupation": {
+        async POST(req) {
+          return adminJson(req, async () => {
+            if (bodyTooLarge(req))
+              return json({ error: "Die Anfrage ist zu groß." }, 413);
+            const body = await parseJsonBody(req);
+            const from = String(body.from || "").trim();
+            const to = String(body.to || "").trim();
+            if (!from || !to || from === to) {
+              return json({ error: "Ungültige Berufe" }, 400);
+            }
+            const updated = await mergeOccupation(from, to);
+            return json({ ok: true, updated });
+          });
+        },
+      },
+
+      "/api/admin/dismiss-occupation-outlier": {
+        async POST(req) {
+          return adminJson(req, async () => {
+            if (bodyTooLarge(req))
+              return json({ error: "Die Anfrage ist zu groß." }, 413);
+            const body = await parseJsonBody(req);
+            const canonical = String(body.canonical || "").trim();
+            const outlier = String(body.outlier || "").trim();
+            if (!canonical || !outlier) {
+              return json({ error: "Ungültige Parameter" }, 400);
+            }
+            await insertOccNotTypo(canonical, outlier);
+            return json({ ok: true });
+          });
+        },
+      },
+    },
+
+    fetch(req) {
+      return json({ error: "Not found" }, 404);
+    },
+  }),
+);
+console.log(
+  `Server running on ${server.url} (${isDev ? "development" : "production"})`,
+);
+// ---- Honker durable jobs: campaign sends, zoom mailings, hourly backups ----
+
+async function sendQueuedEmail(payload, job) {
+  if (payload.kind === "meeting-signup")
+    return meetingService.sendSignup(payload);
+  if (!deliveryContext.getStore())
+    return deliveryContext.run(
+      {
+        scope: `transactional:${payload.messageId || job?.id}`,
+        priority: "transactional",
+      },
+      () => sendQueuedEmail(payload, job),
+    );
+  if (!payload.messageId && !job?.id)
+    throw new Error("Queued email needs a logical message identity");
+  const scope = `transactional:${payload.messageId || job.id}`;
+  if (await emailManager.completed(scope)) return;
+  if (payload.to) {
+    payload = await sqlDb.transaction(
+      async () => {
+        const normalized = await normalizeQueuedEmailPayload(sqlDb, payload);
+        if (normalized)
+          await sqlDb
+            .query(
+              "UPDATE _honker_live /* public-neutral */ SET payload=? WHERE id=?",
+            )
+            .run(JSON.stringify(normalized), job.id);
+        return normalized;
+      },
+      { immediate: true },
+    );
+    if (!payload) return;
+  }
+  const source = payload.requestId
+    ? "deletion"
+    : payload.pendingId
+      ? "pending"
+      : payload.registrationId
+        ? "meeting"
+        : "signer";
+  const subjectId =
+    payload.requestId ||
+    payload.pendingId ||
+    payload.registrationId ||
+    payload.signerId;
+  const recipient = await getRecipientIdentity(source, subjectId);
+  if (!recipient) return;
+  if (
+    (payload.kind === "invite" && !payload.statsToken) ||
+    (["verification", "deletion", "treffen-verification"].includes(
+      payload.kind,
+    ) &&
+      !payload.token)
+  ) {
+    await sqlDb.transaction(
+      async () => {
+        payload = {
+          ...payload,
+          ...(await queuedCredentials(payload.kind, payload)),
+        };
+        await sqlDb
+          .query(
+            "UPDATE _honker_live /* public-neutral */ SET payload=? WHERE id=?",
+          )
+          .run(JSON.stringify(payload), job.id);
+      },
+      { immediate: true },
+    );
+  }
+  const args = await prepareQueuedEmail(payload);
+  if (!args) return; // row gone, already confirmed or link expired
+  return deliveryContext.run(
+    {
+      ...deliveryContext.getStore(),
+      eligible: (connection) =>
+        authorizeRecipient(recipient, {
+          kind: args.kind,
+          token: args.token,
+          connection,
+        }),
+    },
+    async () => {
+      switch (args.kind) {
+        case "verification":
+          return await sendVerificationEmail(args);
+        case "already-signed":
+          return await sendAlreadySignedEmail(args);
+        case "invite":
+          return await sendInviteEmail(args);
+        case "deletion":
+          return await sendDeletionEmail(args);
+        case "treffen-verification": {
+          const zoomCfg = zoomIn(await getZoomConfig(), args.lang);
+          return await sendTreffenVerificationEmail({
+            ...args,
+            eventLabel: zoomCfg.label,
+            eventWhen: zoomCfg.whenPhrase,
+          });
+        }
+        case "treffen-already-registered": {
+          const zoomCfg = zoomIn(await getZoomConfig(), args.lang);
+          return await sendTreffenAlreadyRegisteredEmail({
+            ...args,
+            eventLabel: zoomCfg.label,
+            eventWhen: zoomCfg.whenPhrase,
+          });
+        }
+        default:
+          throw new Error(`unknown email kind: ${args.kind}`);
+      }
+    },
+  );
+}
+
+// A transactional mail that hasn't gone out within this window is dropped, and
+// a dead-lettered one is removed this long after it died (config privacy).
+const EMAIL_JOB_TTL_S = privacy.emailJobRetentionS;
+
+async function queueEmail(kind, args) {
+  return durableWork.email(kind, args);
+}
+
+async function handleMaintenanceJob({ task }) {
+  if (task === "campaign-reconcile") {
+    const ids = await getDueCampaignIds();
+    for (const id of ids)
+      await enqueueJob("campaigns", { campaignId: id }, { maxAttempts: 5 });
+  } else if (task === "zoom" && ZOOM_ENABLED) {
+    await runZoomMailingWorker();
+  } else if (task === "backup") {
+    await runBackup();
+  } else if (task === "purge-unverified") {
+    await publications.assets.sweep();
+    const removed = await deleteExpiredUnverifiedSigners();
+    if (removed > 0) {
+      console.log(`[purge] deleted ${removed} expired unverified sign-up(s)`);
+    }
+    await deleteExpiredDeletionRequests();
+    await deleteOldDeliveries();
+    await emailManager.purge();
+    if (statistics) await statistics.purge();
+    await deleteExpiredZoomPending();
+    await purgeOldErasureLog(new Date(Date.now() - privacy.erasureLogMs));
+  } else if (task === "purge-dead-emails") {
+    const removed = await purgeDeadJobs("emails", EMAIL_JOB_TTL_S);
+    if (removed > 0) {
+      console.log(`[purge] deleted ${removed} dead-lettered email job(s)`);
+    }
+  } else if (task === "purge-by-age") {
+    const removed = await deleteExpiredByAge(retentionCutoff(privacy));
+    if (removed > 0) {
+      console.log(
+        `[purge] deleted ${removed} entr(y/ies) older than ${privacy.signerRetentionYears} years`,
+      );
+    }
+  }
+}
+
+if (jobInfrastructureReady) {
   startWorker(
     {
       campaigns: handleCampaignJob,
       maintenance: handleMaintenanceJob,
       emails: sendQueuedEmail,
     },
-    // Transactional mail is claimed in bigger batches and sent with overlap, so
-    // a sign-up burst drains at provider speed rather than one mail per tick,
-    // and polled on its own loop so a long campaign send can't delay it.
-    { batch: 25, concurrency: { emails: 10 }, isolated: ["emails"] },
+    {
+      batch: 25,
+      concurrency: { emails: 10 },
+      isolated: ["emails", "campaigns"],
+    },
   );
-  jobsReady = true;
-} catch (err) {
-  console.error("[jobs] init failed:", err);
+  durableWork.available();
 }
 
 // Kreisverband → Bundesland resolution (Nominatim) is optional and gated by the
@@ -3702,12 +4173,24 @@ if (cfg.features.stateResolution) {
     });
 }
 
-function shutdown() {
+let shuttingDown = false;
+async function shutdown() {
+  if (shuttingDown) return;
+  shuttingDown = true;
   console.log("Shutting down...");
-  stopWorker();
-  // Stop cache refreshes before the connection goes away.
+  durableWork.unavailable("shutting-down");
+  const requests = requestDrain.close();
+  const workers = stopWorker();
+  await Promise.allSettled([requests, workers]);
+  await server.stop();
   stopCache();
-  close().then(() => process.exit(0));
+  await Promise.allSettled([
+    publicationConnection.close(),
+    emailConnection.close(),
+    assetConnection.close(),
+  ]);
+  await close();
+  process.exit(0);
 }
 process.on("SIGTERM", shutdown);
 process.on("SIGINT", shutdown);
