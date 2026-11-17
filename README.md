@@ -79,6 +79,16 @@ If durable jobs are unavailable, health returns HTTP 503 and operations that req
 
 Behind a reverse proxy, set `TRUST_PROXY=true` and enable gzip or Brotli at the proxy. See [operations](docs/operations.md) for backups, restoration, retention, and campaign closure.
 
+### Use a Squarespace domain
+
+Host the app on a server that supports Docker and persistent storage. Squarespace's website builder cannot run the Bun server or its database.
+
+Keep your Squarespace site at `www.example.com` and run the letter at `letter.example.com`. In your domain's DNS settings, add an A record for `letter` pointing to your server's public IPv4 address. If your hosting provider gives you a hostname instead, use its CNAME instructions. Keep the existing website and email records.
+
+Set `BASE_URL=https://letter.example.com`, configure HTTPS at your reverse proxy, and connect the proxy to the app container. The production Compose file does not publish a host port. For a proxy running on the host, publish `127.0.0.1:3000:3000` through a Compose override. Add a button on your Squarespace site linking to the letter.
+
+See Squarespace's guide to [editing DNS records](https://support.squarespace.com/hc/en-us/articles/360002101888-Adding-custom-DNS-records-to-your-Squarespace-managed-domain).
+
 ## Hardware
 
 Start with **1 vCPU, 1 GB RAM, and 20 GB SSD storage**. Give the app container a 512 MiB memory limit and leave room for Linux and the reverse proxy.

@@ -42,7 +42,7 @@ A 512 MiB app container is not a 512 MB VPS. The app quota excludes Linux, the r
 
 ### Storage and latency
 
-The benchmark host is x86-64 WSL2 with a Ryzen 5 5600X, 12 logical CPUs, and about 15.6 GiB of RAM. Docker stores data on ext4 on a virtual disk. Other project containers remain running. The recorded host load and generator samples help identify interference. The parent completed the final test suites before starting these timed runs.
+The benchmark host is x86-64 WSL2 with a Ryzen 5 5600X, 12 logical CPUs, and about 15.6 GiB of RAM. Docker stores data on ext4 on a virtual disk. Other project containers remain running. The recorded host load and generator samples help identify interference. The final test suites completed before these timed runs.
 
 A separate diagnostic probe measured about 42 ms for a small write followed by `fdatasync`. SQL timing showed some commits taking over 100 ms. The separate [final-source profile](../loadtest/results/2026-11-09-verified-profile/NOTES.md) identifies SQLCipher statements among its largest named native samples. Low sustained CPU and durable-write timings support database and storage waiting as latency constraints. These diagnostics do not identify the sole cause of every slow request. The benchmark keeps the application's durability settings.
 

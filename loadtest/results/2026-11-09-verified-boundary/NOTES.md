@@ -33,7 +33,7 @@ The largest cgroup charge was 266.4 MiB, including startup, cache and verificati
 
 ## Limits and diagnosis
 
-The host is WSL2 on a Ryzen 5 5600X with 12 logical CPUs and about 15.6 GiB RAM. Docker storage is ext4 on a virtual disk. Unrelated project containers stayed running. Host load and generator samples are recorded. The final full suite, HTTP verifier and publication verifier finished before these timed runs; the parent started no further heavy tests during them.
+The host is WSL2 on a Ryzen 5 5600X with 12 logical CPUs and about 15.6 GiB RAM. Docker storage is ext4 on a virtual disk. Unrelated project containers stayed running. Host load and generator samples are recorded. The final full suite, HTTP verifier and publication verifier finished before these timed runs. No further heavy tests ran alongside the benchmark.
 
 The separate [final-source CPU profile](../2026-11-09-verified-profile/NOTES.md) is excluded from this comparison. SQLCipher statements lead its named native samples. Sustained CPU and generator counters, plus earlier durable-write diagnostics, support storage and serialized database waiting as latency constraints. They do not prove a sole bottleneck. Both CPU quotas are identical here, so these results establish no CPU speedup or throughput ceiling.
 
