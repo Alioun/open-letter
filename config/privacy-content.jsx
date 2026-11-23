@@ -15,7 +15,7 @@ function sectionLetter(config, id) {
 // How exact the invite stats are, and what that lets an inviter infer.
 function inviteStatsPrivacy(invite) {
   const risk =
-    "lässt sich an einer Änderung erkennen, ob eine bestimmte Person unterschrieben hat – etwa wenn der Link zuletzt nur an diese Person ging.";
+    "lässt sich an einer Änderung erkennen, ob eine bestimmte Person unterschrieben hat, etwa wenn der Link zuletzt nur an diese Person ging.";
   if (invite.statsMode === "exact") {
     return `Der Statistik-Link zeigt die genaue Zahl. Daran ${risk}`;
   }
@@ -74,14 +74,14 @@ export function DefaultPrivacyBody({ config: cfg }) {
           ` sowie optional ${[cfg.features.kreisverbandField && region().name, cfg.features.occupationField && "Beruf"].filter(Boolean).join(" und ")}`}{" "}
         gespeichert. Rechtsgrundlage ist deine ausdrückliche Einwilligung (Art.
         6 Abs. 1 lit. a DS-GVO). Die Daten werden{" "}
-        <strong>ausschließlich für diese Petition verwendet</strong> und – mit
-        Ausnahme der in dieser Erklärung genannten Dienstleister (siehe unten) –
-        nicht an unbeteiligte Dritte weitergegeben oder für andere Zwecke
-        genutzt. Sie werden für die Dauer der Initiative gespeichert und bei
-        Beendigung der Kampagne vollständig gelöscht, spätestens jedoch{" "}
+        <strong>ausschließlich für diese Petition verwendet</strong>. Mit
+        Ausnahme der in dieser Erklärung genannten Dienstleister (siehe unten)
+        werden sie nicht an unbeteiligte Dritte weitergegeben oder für andere
+        Zwecke genutzt. Sie werden für die Dauer der Initiative gespeichert und
+        bei Beendigung der Kampagne vollständig gelöscht, spätestens jedoch{" "}
         {privacy.signerRetentionYears} Jahre nach Unterzeichnung (§ 195 BGB)
-        oder auf frühere Anfrage. Nicht bestätigte Eintragungen – bei denen der
-        Bestätigungslink nicht angeklickt wurde – werden automatisch gelöscht,
+        oder auf frühere Anfrage. Nicht bestätigte Eintragungen, bei denen der
+        Bestätigungslink nicht angeklickt wurde, werden automatisch gelöscht,
         sobald der {privacy.confirmationLinkHours} Stunden gültige
         Bestätigungslink abgelaufen ist.
       </p>
@@ -105,14 +105,14 @@ export function DefaultPrivacyBody({ config: cfg }) {
           ausschließlich versendet, wenn du beim Unterschreiben die
           entsprechende Checkbox aktiviert hast
         </strong>
-        . Du kannst diese Einwilligung jederzeit widerrufen – über den
-        Abmeldelink in jeder E-Mail oder durch eine Nachricht an{" "}
-        <a href="mailto:{{controllerEmail}}">{"{{controllerEmail}}"}</a>. Deine
-        Unterschrift bleibt davon unberührt. Über den Link in unseren E-Mails zu
-        deiner Unterschrift und in Kampagnen-E-Mails kannst du außerdem deine
-        Angaben ändern oder deine Unterschrift löschen; dafür gilt er{" "}
-        {privacy.settingsLinkDays} Tage ab der letzten E-Mail, die ihn enthielt.
-        Abmelden kannst du dich damit unbegrenzt.
+        . Du kannst diese Einwilligung jederzeit über den Abmeldelink in jeder
+        E-Mail oder durch eine Nachricht an{" "}
+        <a href="mailto:{{controllerEmail}}">{"{{controllerEmail}}"}</a>{" "}
+        widerrufen. Deine Unterschrift bleibt davon unberührt. Über den Link in
+        unseren E-Mails zu deiner Unterschrift und in Kampagnen-E-Mails kannst
+        du außerdem deine Angaben ändern oder deine Unterschrift löschen. Dafür
+        gilt er {privacy.settingsLinkDays} Tage ab der letzten E-Mail, die ihn
+        enthielt. Abmelden kannst du dich damit unbegrenzt.
       </p>
       <p>
         Damit bei einer unterbrochenen Sendung niemand eine E-Mail doppelt oder
@@ -133,10 +133,10 @@ export function DefaultPrivacyBody({ config: cfg }) {
           speichern wir deinen Namen, deine E-Mail-Adresse, optional deinen
           Kreisverband und gegebenenfalls die Angabe, ob du Delegierte*r bist.
           Die Anmeldung wird erst wirksam, wenn du sie über den Link in einer
-          unserer E-Mails bestätigst; nicht bestätigte Anmeldungen löschen wir
+          unserer E-Mails bestätigst. Nicht bestätigte Anmeldungen löschen wir
           nach {privacy.confirmationLinkHours} Stunden. Wir nutzen die Daten
           ausschließlich, um dir Informationen, Zugangsdaten und eine Erinnerung
-          zum Treffen zu schicken . Rechtsgrundlage ist deine Einwilligung (Art.
+          zum Treffen zu schicken. Rechtsgrundlage ist deine Einwilligung (Art.
           6 Abs. 1 lit. a DS-GVO), die du jederzeit über den Abmeldelink in
           jeder dieser E-Mails widerrufen kannst. Die Anmeldungen werden{" "}
           {privacy.treffenRetentionDays} Tage nach dem Treffen gelöscht. Mit dem
@@ -161,10 +161,10 @@ export function DefaultPrivacyBody({ config: cfg }) {
           deinen Link bestätigt wurden. Wer über deinen Link unterschrieben hat,
           speichern wir nicht: Der Code der Einladung wird bei einer
           Unterschrift nur bis zu ihrer Bestätigung aufbewahrt und dann
-          gelöscht; nur die Anzahl steigt.{" "}
+          gelöscht. Nur die Anzahl steigt.{" "}
           {inviteStatsPrivacy(resolveInvite(cfg))} Dein Vorname erscheint auf
           deinem Einladungslink nur, wenn du das beim Unterschreiben
-          ausdrücklich ausgewählt hast – wer den Link öffnet, erfährt dann, dass
+          ausdrücklich ausgewählt hast. Wer den Link öffnet, erfährt dann, dass
           du den Brief unterschrieben hast. Rechtsgrundlage dafür ist deine
           ausdrückliche Einwilligung (Art. 6 Abs. 1 lit. a, Art. 9 Abs. 2 lit. a
           DS-GVO), die du jederzeit über deine E-Mail-Einstellungen oder per
@@ -172,8 +172,8 @@ export function DefaultPrivacyBody({ config: cfg }) {
           <a href="mailto:{{controllerEmail}}">{"{{controllerEmail}}"}</a>{" "}
           widerrufen kannst. Die Angaben werden mit deiner Unterschrift
           gelöscht. Die Seiten der Einladungslinks werden nicht in der
-          Reichweitenmessung erfasst. Die Teilen-Buttons sind einfache Links;
-          erst wenn du einen anklickst, öffnet sich der jeweilige Messenger.
+          Reichweitenmessung erfasst. Die Teilen-Buttons sind einfache Links.
+          Erst wenn du einen anklickst, öffnet sich der jeweilige Messenger.
         </p>
       )}
       {cfg.features.stateResolution && (
@@ -226,12 +226,11 @@ export function DefaultPrivacyBody({ config: cfg }) {
 
       <h5>Daten löschen</h5>
       <p>
-        Du kannst alle Daten, die wir zu deiner E-Mail-Adresse gespeichert haben
-        – deine Unterschrift
-        {cfg.features.zoomEvent && " und deine Anmeldung zum Treffen"} –
-        jederzeit löschen lassen. Gib dazu deine E-Mail-Adresse ein – wir
-        schicken dir einen Löschlink, der {privacy.confirmationLinkHours}{" "}
-        Stunden gültig ist.
+        Du kannst alle Daten, die wir zu deiner E-Mail-Adresse gespeichert
+        haben, jederzeit löschen lassen: deine Unterschrift
+        {cfg.features.zoomEvent && " und deine Anmeldung zum Treffen"}. Gib dazu
+        deine E-Mail-Adresse ein. Wir schicken dir dann einen Löschlink, der{" "}
+        {privacy.confirmationLinkHours} Stunden gültig ist.
       </p>
     </>
   );

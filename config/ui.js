@@ -16,7 +16,7 @@ export const UI_DEFAULTS = {
       "E-Mails werden über {processor} versendet. Verarbeitungsregion: {region}. Die E-Mail-Adresse wird für die Zustellung an diesen Anbieter übermittelt.",
     unknownRegion: "Bitte beim Verantwortlichen erfragen",
     builtinProcessing:
-      "Wir erfassen öffentliche Seitenaufrufe, ungefähre tägliche Besucher, verweisende Domains, Seite und Sprache mit Analytik auf unserem Server. Monatliche pseudonyme Kennungen und Datensätze werden nach 30 Tagen gelöscht. Wir speichern weder rohe IP-Adressen noch rohe User-Agent-Zeichenfolgen, Standort- oder Bildschirmdaten und verknüpfen die Daten nicht mit Unterschriften. DNT/GPC, private Links, Admin, Vorschauen, APIs, Assets und erkannte Bots werden ausgeschlossen. Die Verarbeitung ist nicht anonym; eine Befreiung von Einwilligungserfordernissen wird nicht zugesichert.",
+      "Wir erfassen öffentliche Seitenaufrufe, ungefähre tägliche Besucher, verweisende Domains, Seite und Sprache mit Analytik auf unserem Server. Monatliche pseudonyme Kennungen und Datensätze werden nach 30 Tagen gelöscht. Wir speichern weder rohe IP-Adressen noch rohe User-Agent-Zeichenfolgen, Standort- oder Bildschirmdaten und verknüpfen die Daten nicht mit Unterschriften. DNT/GPC, private Links, Admin, Vorschauen, APIs, Assets und erkannte Bots werden ausgeschlossen. Die Verarbeitung ist nicht anonym. Eine Befreiung von Einwilligungserfordernissen wird nicht zugesichert.",
     externalProcessing:
       "Ein externer Analysedienst ist eingerichtet. Auskunft zu Anbieter, Verarbeitung und Rechtsgrundlage erteilt der Verantwortliche.",
     analyticsDisabled: "Die Reichweitenmessung ist deaktiviert.",
