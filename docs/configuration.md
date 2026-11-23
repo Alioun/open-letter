@@ -1,6 +1,6 @@
 # Configuration
 
-Each letter has a directory under `config/letters/<name>/`. Its `index.js` defines the initial configuration; `content.jsx` contains the letter and FAQ. Environment variables supply secrets and server settings.
+Each letter has a directory under `config/letters/<name>/`. Its `index.js` defines the initial configuration. `content.jsx` contains the letter and FAQ. Environment variables supply secrets and server settings.
 
 An optional `letter.css` in that directory is bundled with public pages. Scope its rules to `[data-letter="<name>"]`, the attribute on `<html>`. The admin interface does not load it.
 
@@ -30,7 +30,7 @@ After the first publication, the database supplies published content and templat
 
 `theme.colors` becomes CSS variables. Optional colors include `onAkzent`, `ctaBg`, `ctaFg`, `goalFill`, `ctaHoverBg`, `ctaHoverFg`, `heroBg`, and `statBg`. The theme also supplies email and generated-image styling.
 
-`theme.fonts` selects `display` and `body` fonts. `theme.style` accepts `shadowOffset`, `radius`, and `borderWidth`, plus `cardRadius`, `buttonRadius`, `headlineMaxWidth`, `inputRadius`, `checkRadius`, `bannerRadius`, and `bannerPadBottom`. Cards default to 16 px corners; buttons and inputs default to 10 px. Set radius values to `"0"` for square corners. `shadowOffset: "none"` removes offset shadows, including on mail-link pages. `shadow: "soft"` selects blurred shadows.
+`theme.fonts` selects `display` and `body` fonts. `theme.style` accepts `shadowOffset`, `radius`, and `borderWidth`, plus `cardRadius`, `buttonRadius`, `headlineMaxWidth`, `inputRadius`, `checkRadius`, `bannerRadius`, and `bannerPadBottom`. Cards default to 16 px corners. Buttons and inputs default to 10 px. Set radius values to `"0"` for square corners. `shadowOffset: "none"` removes offset shadows, including on mail-link pages. `shadow: "soft"` selects blurred shadows.
 
 `sign.fields` controls labels and placeholders for `kreisverband` and `occupation`. The regional field also accepts `options` for a server-validated fixed list, `selectPlaceholder`, `pluralLabel`, `noneLabel`, and `rowPrefix`.
 
@@ -65,13 +65,13 @@ The first language is the default at `/`. Other languages use `/<lang>`. Each pa
 
 Publication content is localized. Layout and appearance are shared across languages. Legacy `copy:` values and template IDs migrate into the first publication. Later edits publish as complete revisions.
 
-The page sends a non-default language through `X-Lang` or `?lang=`. `/api/boot` and public errors follow it; unknown languages use the default. For rich content, `content.jsx` can export an object such as `en = { LetterArticle, FaqContent }` for each additional language.
+The page sends a non-default language through `X-Lang` or `?lang=`. `/api/boot` and public errors follow it. Unknown languages use the default. For rich content, `content.jsx` can export an object such as `en = { LetterArticle, FaqContent }` for each additional language.
 
 ### Recipient languages
 
 Signatures, meeting registrations, and deletion requests store a normalized `lang`. `NULL` means the default language. Email uses that person's language for text, dates, footer, and links. Confirmation, deletion, and meeting links carry `?lang=<lang>` so the result page can retain its language after a row is removed.
 
-Settings pages use `/<lang>/abmelden/<token>` and invitation pages use `/<lang>/i/<code>`. Invitation email uses the inviter's language; the invitee signs in the language of the page they opened. `/api/termin.ics?lang=<lang>` localizes calendar output. Default-language URLs keep their existing form.
+Settings pages use `/<lang>/abmelden/<token>` and invitation pages use `/<lang>/i/<code>`. Invitation email uses the inviter's language. The invitee signs in the language of the page they opened. `/api/termin.ics?lang=<lang>` localizes calendar output. Default-language URLs keep their existing form.
 
 Define localized templates under `i18n.<lang>.email.templates.<slug>`. Partial templates inherit other fields from the default. Setup stores them as `<slug>.<lang>`. Missing variants use the default template with the recipient language's footer and meeting text.
 
@@ -128,7 +128,7 @@ Use [`.env.example`](../.env.example) as the local template.
 
 The initial deployment profile uses `EMAIL_PROVIDER`, `EMAIL_FROM` or `RESEND_FROM`, and the provider credentials. Empty environment values are ignored. An administrator can import that profile into database management, then save and test a complete replacement. Environment fields do not supplement a database-managed profile.
 
-Generic SMTP, mailbox.org, and Resend are supported. SMTP always requires certificate-validated TLS, including in development. Port 465 uses implicit TLS; port 587 requires STARTTLS. Use a trusted TLS mail catcher or the local test fixtures. Saved credentials never appear in settings or previews. Generic SMTP asks for the operator and processing region because the protocol cannot establish them.
+Generic SMTP, mailbox.org, and Resend are supported. SMTP always requires certificate-validated TLS, including in development. Port 465 uses implicit TLS. Port 587 requires STARTTLS. Use a trusted TLS mail catcher or the local test fixtures. Saved credentials never appear in settings or previews. Generic SMTP asks for the operator and processing region because the protocol cannot establish them.
 
 Provider acceptance, confirmed receipt, activation, and readiness are separate states. Failed credentials can pause delivery while admin access remains available. Restoring a database invalidates validation. Activation updates the protected email-processing facts in the privacy disclosure.
 

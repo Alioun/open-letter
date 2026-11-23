@@ -21,7 +21,7 @@ The fixture uses the example letter with optional regional fields and meeting re
 
 The latency targets are public p95 below 500 ms and signature, search, and admin p95 below one second. Checks also require no dropped iterations, every accepted signature persisted, every document request counted in analytics, all expected emails accepted, an empty queue, no dead mail jobs, and no app OOM or restart. The results retain failed runs.
 
-Each setting has five runs. Latencies show the median and range for runs that reached traffic, in milliseconds. Only one 256 MiB run reached traffic; all five 512 MiB runs did.
+Each setting has five runs. Latencies show the median and range for runs that reached traffic, in milliseconds. Only one 256 MiB run reached traffic. All five 512 MiB runs did.
 
 | App quota | Runs meeting every target | Public p95     | Signature p95        | Admin p95            |
 | --------- | ------------------------- | -------------- | -------------------- | -------------------- |
@@ -60,7 +60,7 @@ Mailpit requires TLS and authentication and accepts only local `@load.test` mess
 
 The current encrypted 100,000-signer fixture is about 54 MiB before additional campaign and analytics history. Forty-eight database-sized backup snapshots would use roughly 2.5 GiB. Encrypted snapshots compress poorly.
 
-Allow at least 5 GB for application data at that size, then account for uploads, analytics, delivery records, and growth. The suggested 20 GB system disk also allows for Linux and container images. Monitor free space and backup duration. `BACKUP_KEEP` changes backup retention; match the public privacy disclosure when changing it.
+Allow at least 5 GB for application data at that size, then account for uploads, analytics, delivery records, and growth. The suggested 20 GB system disk also allows for Linux and container images. Monitor free space and backup duration. `BACKUP_KEEP` changes backup retention. When you change it, update the public privacy disclosure to match.
 
 ## Bandwidth
 

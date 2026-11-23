@@ -24,7 +24,7 @@ Attempt identity survives retries and provider-profile changes. An already accep
 
 Every worker checks its generation before sending and before writing progress or completion. A result from an earlier event cannot complete the next event. Generation zero preserves legacy delivery identities during upgrades to avoid resending already accepted mail.
 
-A delayed registration confirmation uses the current meeting date. If the date changes while it prepares, the job retries. Delegate edits preserve the registration identity; registering again for a later event renews it.
+A delayed registration confirmation uses the current meeting date. If the date changes while it prepares, the job retries. Delegate edits preserve the registration identity. Registering again for a later event renews it.
 
 ## Erasure covers every recipient store
 

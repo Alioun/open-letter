@@ -93,7 +93,7 @@ See Squarespace's guide to [editing DNS records](https://support.squarespace.com
 
 Start with **1 vCPU, 1 GB RAM, and 20 GB SSD storage**. Give the app container a 512 MiB memory limit and leave room for Linux and the reverse proxy.
 
-At one CPU and 512 MiB, the production image passed all five mixed-workload runs with 100,000 stored signers and 100 equivalent polling tabs. Four of five runs at 256 MiB ran out of memory during startup. These results describe the tested workload; they do not establish a traffic ceiling or a whole-server minimum. See the [hardware guide](docs/hardware.md) for the workload, measurements, and limits.
+At one CPU and 512 MiB, the production image passed all five mixed-workload runs with 100,000 stored signers and 100 equivalent polling tabs. Four of five runs at 256 MiB ran out of memory during startup. These results describe the tested workload. They do not establish a traffic ceiling or a whole-server minimum. See the [hardware guide](docs/hardware.md) for the workload, measurements, and limits.
 
 ## Verify changes
 

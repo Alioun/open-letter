@@ -2,7 +2,7 @@
 
 ## Deployment
 
-Run one application instance. Its encrypted SQLite database lives on a persistent volume; it needs no separate database service.
+Run one application instance. Its encrypted SQLite database lives on a persistent volume. It needs no separate database service.
 
 Set these values in the deployment environment or `.env`:
 
@@ -19,7 +19,7 @@ Set these values in the deployment environment or `.env`:
 docker compose up --build
 ```
 
-The `data` volume contains `diaetendeckel.db`; the `backups` volume contains encrypted hourly snapshots. Store their keys separately. Startup runs `db/setup.js`. `/api/health` returns 200 only when the database and durable jobs are ready. It returns 503 during initialization, job failure, or shutdown.
+The `data` volume contains `diaetendeckel.db`. The `backups` volume contains encrypted hourly snapshots. Store their keys separately. Startup runs `db/setup.js`. `/api/health` returns 200 only when the database and durable jobs are ready. It returns 503 during initialization, job failure, or shutdown.
 
 For a local demo:
 

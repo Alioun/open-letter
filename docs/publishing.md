@@ -8,7 +8,7 @@ Open Website to edit the layout, public copy, design, metadata, or CSS. Open Vor
 
 The publication button names the affected areas. "Änderungen prüfen" lists the changes by area, language, template, and field. Template changes also affect messages already scheduled, because delivery uses the template published at send time.
 
-The browser keeps the draft and undo history across admin navigation. The URL fragment retains the current admin area, including settings shortcuts. Website remembers its editor tab; Vorlagen remembers its template and language. Use "Rückgängig" to undo a local change or "Entwurf verwerfen" to return to the current publication. Leaving a changed page requires confirmation. Drafts stay in the browser until publication; the server does not store them.
+The browser keeps the draft and undo history across admin navigation. The URL fragment retains the current admin area, including settings shortcuts. Website remembers its editor tab. Vorlagen remembers its template and language. Use "Rückgängig" to undo a local change or "Entwurf verwerfen" to return to the current publication. Leaving a changed page requires confirmation. Drafts stay in the browser until publication. The server does not store them.
 
 Invalid design values and missing required template links or placeholders block publication. The fields show German correction guidance. The server applies the same validation rules.
 
@@ -16,7 +16,7 @@ Invalid design values and missing required template links or placeholders block 
 
 "Weitere Aktionen" lets you save a JSON draft file, restore one, or load the preceding publication as a draft. Loading a previous version does not publish it.
 
-Imports are limited to 4 MB. The server validates the file and checks that referenced images still exist in this installation. The comparison includes the imported file, the browser draft, and the current publication. Changes to separate fields merge automatically. Conflicting values require a choice. Templates and FAQ questions merge by stable ID and field; FAQ order is reviewed separately. Older drafts without a baseline require review of each difference.
+Imports are limited to 4 MB. The server validates the file and checks that referenced images still exist in this installation. The comparison includes the imported file, the browser draft, and the current publication. Changes to separate fields merge automatically. Conflicting values require a choice. Templates and FAQ questions merge by stable ID and field. FAQ order is reviewed separately. Older drafts without a baseline require review of each difference.
 
 The comparison shows readable values, including formatted text, headline styles, lists, default values, and resolved automatic metadata. Accepting the result changes only the local draft and can be undone. Publishing remains a separate action.
 
@@ -26,7 +26,7 @@ Browser drafts are not database backups. Preserve the database and its encryptio
 
 ## Layout, images, and previews
 
-Puck 0.24.0 edits the layout. The header, main hero, and legal footer have fixed positions. Functional sections occur once and cannot be deleted, duplicated, or renamed. Additional text, image, and call-to-action sections can be added and reordered. The server enforces these rules too. Blocks and FAQ questions have stable IDs; the Puck layout defines section order. Section names appear in German.
+Puck 0.24.0 edits the layout. The header, main hero, and legal footer have fixed positions. Functional sections occur once and cannot be deleted, duplicated, or renamed. Additional text, image, and call-to-action sections can be added and reordered. The server enforces these rules too. Blocks and FAQ questions have stable IDs. The Puck layout defines section order. Section names appear in German.
 
 The editor canvas uses sample data and validated theme values. It does not run custom publication CSS. The full preview runs in an iframe with an opaque origin, blocked network access and forms, simulated API responses, and no analytics. It supports languages, mobile/tablet/desktop widths, and campaign, success, confirmation, and error states. Changing the draft, language, or page state hides an obsolete preview. Failures keep the draft and offer retry with German guidance. Technical details remain expandable.
 
@@ -52,11 +52,11 @@ Insertion controls add personal values and links at the cursor. Missing required
 
 Versand sends to an audience. Unterzeichner sends to a saved selection. Both composers retain their template, subject, language variants, and schedule in browser storage. A missing template remains visible as unavailable. Sending, scheduling, and testing stay disabled until a replacement is chosen. A template change preserves written subjects. "Vorlagenbetreff übernehmen" replaces the subject explicitly.
 
-New schedules default to tomorrow at 10:00 in the browser's timezone. Dates use TT.MM.JJJJ and times use HH:MM on a 24-hour clock. The timezone appears beside the inputs. Past times are rejected. "Versand einplanen" creates a scheduled job; "Jetzt senden" requests immediate delivery.
+New schedules default to tomorrow at 10:00 in the browser's timezone. Dates use TT.MM.JJJJ and times use HH:MM on a 24-hour clock. The timezone appears beside the inputs. Past times are rejected. "Versand einplanen" creates a scheduled job. "Jetzt senden" requests immediate delivery.
 
 Before either action, the admin reloads the audience and subject examples. A failed read blocks submission. Approval shows when the audience was checked, recipient counts by language, default-language fallback, example subjects, and delivery time. Long approval text scrolls separately from its actions and supports keyboard scrolling.
 
-Recipient counts can change before delivery. A scheduled campaign uses the audience and published template available when the worker sends it. Explicit subject overrides remain saved; inherited template subjects can change. Approval explains both effects.
+Recipient counts can change before delivery. A scheduled campaign uses the audience and published template available when the worker sends it. Explicit subject overrides remain saved. Inherited template subjects can change. Approval explains both effects.
 
 Each creation request has a `request_key`. The browser saves it before submission and reuses it after a lost response or reload. An identical replay returns the existing campaign. Reusing the key for different content returns 409. Reset the draft to create an intentional new copy. API clients must set `send_now: true` for immediate delivery.
 
@@ -68,7 +68,7 @@ The signer list keeps search visible and puts region and date controls under "We
 
 Adding all matches extends the selection across filters. "Ausgewählte Empfänger prüfen" lists the complete selection, reports how many people are outside the active filter, and allows individual removal. "Nachricht verfassen" focuses the composer. Browser storage retains IDs, not names or email addresses.
 
-The list ignores superseded search responses and disables selection of results while loading. Mobile cards retain identity and selection; desktop identity columns remain visible during horizontal scrolling. Failed reads show retry controls and mark any retained data as stale.
+The list ignores superseded search responses and disables selection of results while loading. Mobile cards retain identity and selection. Desktop identity columns remain visible during horizontal scrolling. Failed reads show retry controls and mark any retained data as stale.
 
 ### Inspect history
 
@@ -89,7 +89,7 @@ To replace a profile:
 
 Testing and activation remain collapsed until their prerequisites are met, but their explanations can be opened earlier. Provider acceptance, confirmed receipt, activation, and delivery readiness are separate states. Editing a replacement preserves the active transport. Saved secrets never appear in settings or previews.
 
-After a revision conflict, reload the saved profile for comparison. Local inputs and newly entered credentials stay in the form. The comparison excludes secrets. Acknowledging it enables saving; another successful test is required before activation.
+After a revision conflict, reload the saved profile for comparison. Local inputs and newly entered credentials stay in the form. The comparison excludes secrets. Acknowledging it enables saving. Another successful test is required before activation.
 
 A setup test stores its ID, recipient, acceptance time, and profile revision. The receipt panel shows these after reload. Receipt confirmation includes the displayed test ID and rejects a superseded test. Older records without a complete identity require a new test. Action feedback appears beside the initiating control and restores focus after completion.
 
@@ -97,7 +97,7 @@ Activation releases eligible queued messages, due campaigns, and automatic Zoom 
 
 ### SMTP and mailbox.org
 
-SMTP requires certificate-validated encryption, including in development. Port 465 uses implicit TLS; port 587 requires STARTTLS. Resend supports sending-only API keys.
+SMTP requires certificate-validated encryption, including in development. Port 465 uses implicit TLS. Port 587 requires STARTTLS. Resend supports sending-only API keys.
 
 For mailbox.org, use `smtp.mailbox.org`. Enter the main login address separately from the registered sender alias. Create an app password, complete the account's custom-domain check, and register the alias. Trial accounts may restrict external delivery, so test receipt outside mailbox.org.
 
@@ -111,7 +111,7 @@ Recorded attempts remain bound to their provider and profile revision across act
 
 ## Meetings and automatic email
 
-Meeting settings load before saving becomes available. Saving requires the loaded revision. A concurrent edit returns 409 and preserves the inputs for comparison. Choosing saved or local values prepares the form; saving is still a separate action. Changing an unrelated field preserves the original event timestamp.
+Meeting settings load before saving becomes available. Saving requires the loaded revision. A concurrent edit returns 409 and preserves the inputs for comparison. Choosing saved or local values prepares the form. Saving is still a separate action. Changing an unrelated field preserves the original event timestamp.
 
 A change to the meeting date, mailing times, or Zoom link requires a delivery review. It reloads mailing state, recipient/language counts, and published system templates. It identifies open sending windows, missing links, and language fallback. A date change resets delivery tracking, so previous recipients may receive the messages again. Canceling preserves the inputs and restores focus. A failed review blocks saving.
 
@@ -123,13 +123,13 @@ Aborted automatic Zoom mail stays stopped after email repair. Its panel explains
 
 Built-in statistics start disabled and cannot run alongside deployment-configured external analytics. Analytik uses its public asynchronous storage interface on a dedicated SQLCipher connection. It needs no browser tracker, separate service, or dashboard.
 
-Only eligible public GET requests count. Private links, admin pages, previews, APIs, assets, prefetches, recognized bots, and requests with DNT or GPC are excluded. Stored page paths omit queries and fragments; referrers contain domains only. Raw IPs and browser identifiers are used temporarily to derive monthly pseudonyms and are not stored. Location and screen collection are disabled. Records expire after 30 days. Counts are approximate and are not linked to signers. The privacy disclosure makes no promise of anonymity or exemption from consent requirements.
+Only eligible public GET requests count. Private links, admin pages, previews, APIs, assets, prefetches, recognized bots, and requests with DNT or GPC are excluded. Stored page paths omit queries and fragments. Referrers contain domains only. Raw IPs and browser identifiers are used temporarily to derive monthly pseudonyms and are not stored. Location and screen collection are disabled. Records expire after 30 days. Counts are approximate and are not linked to signers. The privacy disclosure makes no promise of anonymity or exemption from consent requirements.
 
-Reports cover 30 UTC dates, including the partial current day. The heading, chart, and table use the same UTC dates. The chart initially selects the day with the most views. Points and the day slider reveal daily counts; the slider supports arrow keys. The table contains all values. Save failures distinguish rejected settings, revision conflicts, and unconfirmed results. Reloading checks the saved mode without discarding a changed selection. Analytics writes do not invalidate public caches or block page delivery.
+Reports cover 30 UTC dates, including the partial current day. The heading, chart, and table use the same UTC dates. The chart initially selects the day with the most views. Points and the day slider reveal daily counts. The slider supports arrow keys. The table contains all values. Save failures distinguish rejected settings, revision conflicts, and unconfirmed results. Reloading checks the saved mode without discarding a changed selection. Analytics writes do not invalidate public caches or block page delivery.
 
 ## Storage and application controls
 
-SQLCipher stores publications, complete templates, source images, email profiles, attempts, and limiter state. Credentials stay outside public publication data. Publications use schema version 2; version 1 FAQ markup migrates to ordered records. Puck upgrades require an explicit application migration.
+SQLCipher stores publications, complete templates, source images, email profiles, attempts, and limiter state. Credentials stay outside public publication data. Publications use schema version 2. Version 1 FAQ markup migrates to ordered records. Puck upgrades require an explicit application migration.
 
 Startup loads a complete publication and template snapshot before starting the server or workers. Visitor rendering and template selection make no copy/template SQL queries. Preparation runs before the publication transaction on a dedicated connection. Publishing serializes revision checks, persists the document and templates, then replaces the in-memory snapshot. A failure leaves the preceding revision visible.
 
@@ -139,7 +139,7 @@ HTML embeds escaped public configuration and theme values before React renders. 
 
 Application-owned controls use Base UI for buttons, checkboxes, inputs, selectors, dialogs, tabs, menus, disclosures, formatting toggles, and the statistics slider. Multiline fields use Input with a textarea renderer. File and color pickers stay native. React Day Picker retains its calendar with Base UI day and navigation buttons. Puck, Tiptap, and CodeMirror keep their own interfaces. Mobile application actions have at least 44 px touch targets.
 
-Navigation away from unsaved settings requires confirmation. Sign-out identifies settings that will be discarded. Expired authentication opens a Base UI login dialog without unmounting the editor or losing its local settings and credentials. Login never retries a failed action automatically. A crash screen offers a Base UI reload button; only drafts already saved in browser storage survive a reload.
+Navigation away from unsaved settings requires confirmation. Sign-out identifies settings that will be discarded. Expired authentication opens a Base UI login dialog without unmounting the editor or losing its local settings and credentials. Login never retries a failed action automatically. A crash screen offers a Base UI reload button. Only drafts already saved in browser storage survive a reload.
 
 ## Verify and restore
 

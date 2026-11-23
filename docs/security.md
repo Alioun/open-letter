@@ -4,7 +4,7 @@
 
 The server sends `X-Content-Type-Options: nosniff`, `X-Frame-Options: DENY`, and `Referrer-Policy: strict-origin-when-cross-origin`. In production, its content security policy restricts resources to the configured sources, including the app and Google Fonts.
 
-Public read routes require a 30-minute JWT from `/api/session` unless `REQUIRE_API_TOKEN=false`. `API_TOKEN_SECRET` signs these tokens. Admin sessions use a separate `ADMIN_JWT_SECRET`; production rejects equal secrets. CORS uses `ALLOWED_ORIGINS`, which defaults to `BASE_URL`.
+Public read routes require a 30-minute JWT from `/api/session` unless `REQUIRE_API_TOKEN=false`. `API_TOKEN_SECRET` signs these tokens. Admin sessions use a separate `ADMIN_JWT_SECRET`. Production rejects equal secrets. CORS uses `ALLOWED_ORIGINS`, which defaults to `BASE_URL`.
 
 Signature requests use an in-memory sliding rate limit of 30 requests per IP per 15 minutes. Public reads also have per-IP limits. With `TRUST_PROXY=true`, the server uses `X-Real-IP`, then the rightmost `X-Forwarded-For` address, then the socket address. The trusted proxy must overwrite `X-Real-IP` and append the real client address to `X-Forwarded-For`. Prevent direct access to the application port. Without `TRUST_PROXY`, the server ignores both headers.
 
@@ -18,7 +18,7 @@ Confirmation and deletion links use UUID tokens. They expire after `privacy.conf
 
 Do not replace the driver with `bun:sqlite` without verifying encryption on every supported platform. On Bun's Linux builds, `Database.setCustomSQLite()` does not load SQLCipher, so `PRAGMA key` alone can leave a database unencrypted.
 
-The database contains signatures, email templates, campaigns and selections, meeting registrations and mailings, settings, publications, images, email profiles, analytics, and resolution caches. See `db/schema.sql` and `db/publishing.sql` for the schema. Timestamps generally use ISO-8601 UTC text; booleans use `0` and `1`. Schema creation uses `IF NOT EXISTS` and can run at every startup.
+The database contains signatures, email templates, campaigns and selections, meeting registrations and mailings, settings, publications, images, email profiles, analytics, and resolution caches. See `db/schema.sql` and `db/publishing.sql` for the schema. Timestamps generally use ISO-8601 UTC text. Booleans use `0` and `1`. Schema creation uses `IF NOT EXISTS` and can run at every startup.
 
 Keep encryption keys separate from backups. See [operations](operations.md) for restoration and the steps needed to preserve erasures and opt-outs. See [publishing and email administration](publishing.md) for publication transactions, preview and CSS isolation, credential handling, delivery reconciliation, and statistics collection.
 

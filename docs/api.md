@@ -106,7 +106,7 @@ Template changes and legacy copy mutations also require the current publication 
 
 ## Create and inspect campaigns
 
-`POST /api/admin/campaigns` takes `{template_id, subject, scheduled_at, audience, request_key}`. Use `send_now: true` for immediate delivery. Selection campaigns also supply `recipient_ids`; language overrides use `i18n`.
+`POST /api/admin/campaigns` takes `{template_id, subject, scheduled_at, audience, request_key}`. Use `send_now: true` for immediate delivery. Selection campaigns also supply `recipient_ids`. Language overrides use `i18n`.
 
 Generate a UUID for `request_key` and keep it when retrying the same request, including after a lost response. A new campaign returns 201. Repeating the same request returns 200 with the original ID and `replayed: true`. Reusing the key for different content returns 409. Canceling a campaign retains its history record and request identity.
 
