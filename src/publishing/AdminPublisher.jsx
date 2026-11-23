@@ -526,7 +526,7 @@ function Publisher({ publication, setPublication, api, workspace }) {
           result.error || "Das Bild konnte nicht hochgeladen werden.",
         );
       if (typeof result.url !== "string")
-        throw new Error("Upload nicht bestätigt.");
+        throw new Error("Der Server hat das Hochladen nicht bestätigt.");
       draft.change((d) => {
         if (!d.assets.includes(result.url)) d.assets.push(result.url);
       });

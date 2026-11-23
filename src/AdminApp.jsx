@@ -969,7 +969,7 @@ export default function AdminApp() {
       }
     } catch {
       setZoomClearStatus(
-        "Löschen nicht bestätigt. Öffne den Zoom-Bereich erneut und prüfe den aktuellen Bestand, bevor du es erneut versuchst.",
+        "Der Server hat das Löschen nicht bestätigt. Öffne den Zoom-Bereich erneut und prüfe den aktuellen Bestand, bevor du es erneut versuchst.",
       );
     } finally {
       setZoomClearStatus((current) =>

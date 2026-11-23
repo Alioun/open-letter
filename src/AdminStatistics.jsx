@@ -101,7 +101,7 @@ export default function AdminStatistics({ api, onDirtyChange }) {
                       res.status === 409
                         ? "Inzwischen wurde eine neue Version veröffentlicht. Lade die Statistik neu und prüfe den gespeicherten Stand. Deine Auswahl bleibt erhalten."
                         : res.status === 401
-                          ? "Speichern wurde nicht bestätigt. Melde dich erneut an und lade die Statistik neu. Deine Auswahl bleibt erhalten."
+                          ? "Der Server hat das Speichern nicht bestätigt. Melde dich erneut an und lade die Statistik neu. Deine Auswahl bleibt erhalten."
                           : res.status === 503
                             ? "Die Statistik ist derzeit nicht verfügbar. Deine Auswahl bleibt erhalten. Lade die Statistik neu und prüfe den gespeicherten Stand, bevor du erneut speicherst."
                             : "Die Statistikeinstellung wurde abgelehnt. Deine Auswahl bleibt erhalten. Lade den aktuellen Stand neu, prüfe deine Auswahl und versuche es erneut.",

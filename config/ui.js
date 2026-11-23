@@ -81,10 +81,10 @@ export const UI_DEFAULTS = {
     filterOccupations: "Berufe",
     searchLabel: "Suche nach Name oder {region}",
     searchPlaceholder: "Suchen nach Name oder {region}…",
-    loadingMap: "Lade Karte…",
+    loadingMap: "Karte wird geladen…",
     emptyRegions: "Noch keine {regions}.",
     emptyOccupations: "Noch keine Berufe angegeben.",
-    loading: "Lade Unterschriften…",
+    loading: "Unterschriften werden geladen…",
     loadError: "Daten konnten nicht geladen werden.",
     shown: "{shown} von {total} angezeigt",
     loadMore: "Weitere laden",
@@ -120,7 +120,7 @@ export const UI_DEFAULTS = {
       "Haltet mich zur Initiative auf dem Laufenden (gelegentliche E-Mails, jederzeit abbestellbar).",
     submitting: "Wird gesendet…",
     legal:
-      'Mit Klick auf „Mitzeichnen" schicken wir dir einen Bestätigungslink an deine E-Mail. Erst danach zählt deine Unterschrift.',
+      "Mit Klick auf „Mitzeichnen“ schicken wir dir einen Bestätigungslink an deine E-Mail-Adresse. Erst danach zählt deine Unterschrift.",
     errName: "Bitte gib deinen vollständigen Namen an.",
     errEmail: "Bitte gib eine gültige E-Mail-Adresse an.",
   },
@@ -142,13 +142,13 @@ export const UI_DEFAULTS = {
   successModal: {
     title: "Unterschrift gezählt",
     heading: "Solidarisch dabei.",
-    body: "Deine Unterschrift ist jetzt Teil des offenen Briefes. Teile ihn mit deinem Kreisverband - wir wollen vor dem nächsten Parteitag bei {goal} stehen.",
+    body: "Deine Unterschrift ist jetzt Teil des offenen Briefes. Teile ihn mit deinem Kreisverband. Wir wollen vor dem nächsten Parteitag bei {goal} stehen.",
     showMe: "Mich in der Liste zeigen",
   },
   deletedModal: {
     title: "Daten gelöscht",
     heading: "Erledigt.",
-    body: "Deine Unterschrift und alle damit verbundenen Daten wurden unwiderruflich gelöscht.",
+    body: "Wir haben deine Unterschrift und alle damit verbundenen Daten unwiderruflich gelöscht.",
   },
   // Error texts users see. The server's public errors are here too.
   errors: {
@@ -158,11 +158,11 @@ export const UI_DEFAULTS = {
     network: "Verbindung fehlgeschlagen. Bitte versuche es erneut.",
     resendFailed: "Senden fehlgeschlagen. Bitte versuche es später erneut.",
     tokenExpired:
-      "Dieser Bestätigungslink wurde schon verwendet oder ist abgelaufen. Vielleicht ist deine Unterschrift also schon bestätigt: Trag einfach noch einmal dieselbe E-Mail-Adresse ein. Ist sie schon bestätigt, bekommst du eine E-Mail, dass alles passt – sonst noch einmal einen Bestätigungslink.",
+      "Dieser Bestätigungslink wurde schon verwendet oder ist abgelaufen. Vielleicht hast du deine Unterschrift schon bestätigt. Trag dieselbe E-Mail-Adresse noch einmal ein. Ist sie schon bestätigt, bekommst du eine E-Mail, dass alles passt. Sonst schicken wir dir einen neuen Bestätigungslink.",
     deleteTokenExpired:
       "Der Löschlink ist abgelaufen. Bitte fordere über die Datenschutzseite einen neuen an.",
     tooMany: "Zu viele Anfragen. Bitte versuche es später erneut.",
-    nameTooShort: "Name muss mindestens 2 Zeichen lang sein.",
+    nameTooShort: "Der Name muss mindestens 2 Zeichen lang sein.",
     invalidEmail: "Bitte gib eine gültige E-Mail-Adresse an.",
   },
   // Treffen form labels without their own config key.
@@ -196,7 +196,7 @@ export const UI_DEFAULTS = {
     occupationLabel: "Beruf",
     showPublicly: "Meinen Namen öffentlich anzeigen",
     inviteShowName: "Meinen Vornamen auf meinem Einladungslink zeigen",
-    newsletter: "Newsletter-Updates erhalten",
+    newsletter: "Newsletter erhalten",
     delegierter: "Ich bin Delegierte*r zum Parteitag.",
     saving: "Wird gespeichert …",
     save: "Angaben speichern",
@@ -211,18 +211,18 @@ export const UI_DEFAULTS = {
     actionFailedConnection:
       "Die Aktion konnte nicht abgeschlossen werden. Bitte prüfe deine Verbindung.",
     doneNewsletter:
-      "Du erhältst keine Newsletter-Updates mehr. Deine Unterschrift bleibt bestehen.",
+      "Du erhältst keinen Newsletter mehr. Deine Unterschrift bleibt bestehen.",
     doneZoom:
-      "Du erhältst keine Zoom-Mails mehr. Deine Anmeldung wurde entfernt.",
+      "Du erhältst keine Zoom-Mails mehr. Wir haben deine Anmeldung entfernt.",
     doneAll: "Du bist von allem abgemeldet.",
     doneDelete:
-      "Deine Unterschrift und die damit verbundenen Daten wurden gelöscht.",
+      "Wir haben deine Unterschrift und die damit verbundenen Daten gelöscht.",
     done: "Erledigt.",
     chooseUnsubscribe: "Wähle, wovon du dich abmelden möchtest:",
     unsubscribingAll: "Wird abgemeldet …",
     unsubscribeAll: "Von allem abmelden",
     unsubscribingNewsletter: "Wird abbestellt …",
-    unsubscribeNewsletter: "Keine Newsletter-Updates mehr",
+    unsubscribeNewsletter: "Keinen Newsletter mehr",
     unsubscribingZoom: "Wird abgemeldet …",
     unsubscribeZoom: "Keine Zoom-Mails mehr",
     alreadyUnsubscribed:
@@ -263,7 +263,7 @@ export const UI_DEFAULTS = {
     unsubscribeFooter:
       '<footer>Du möchtest keine E-Mails mehr erhalten? <a href="{url}">Hier abmelden</a>.</footer>',
     // Calendar file (.ics).
-    icsSummary: "Treffen - {brand}",
+    icsSummary: "Treffen der {brand}",
     icsPlace: "Treffen der {brand}.\nOrt: {where}",
     icsPlaceLater:
       "Treffen der {brand}.\nDen genauen Ort bekommst du per E-Mail.",

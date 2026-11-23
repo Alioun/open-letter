@@ -4,7 +4,7 @@ import { randomUUID } from "node:crypto";
 export class JobsUnavailable extends Error {
   constructor() {
     super(
-      "Hintergrundverarbeitung ist nicht bereit. Bitte später erneut versuchen.",
+      "Die Hintergrundverarbeitung ist nicht bereit. Versuche es später erneut.",
     );
     this.status = 503;
   }

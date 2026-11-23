@@ -21,7 +21,7 @@ export async function readCampaignSubjectExamples(api, versions) {
     );
   } catch {
     throw new Error(
-      "Die Betreffvorschau konnte nicht geladen werden. Es wurde kein Versandauftrag erstellt. Bitte erneut versuchen.",
+      "Die Betreffvorschau konnte nicht geladen werden. Es wurde kein Versandauftrag erstellt. Versuche es erneut.",
     );
   }
 }
@@ -56,7 +56,7 @@ export async function readCampaignRetryReview(api, id) {
     !Number.isFinite(new Date(data.checkedAt).getTime())
   )
     throw new Error(
-      "Die Versandfreigabe konnte nicht vollständig geladen werden. Bitte erneut versuchen.",
+      "Die Versandfreigabe konnte nicht vollständig geladen werden. Versuche es erneut.",
     );
   return data;
 }
@@ -98,7 +98,7 @@ export async function readCampaignAudience(api, audience, ids = []) {
     return { count, byLanguage, data, checkedAt: new Date() };
   } catch {
     throw new Error(
-      "Die Empfänger konnten nicht aktuell geprüft werden. Es wurde kein Versandauftrag erstellt. Bitte erneut versuchen.",
+      "Die Empfänger konnten nicht aktuell geprüft werden. Es wurde kein Versandauftrag erstellt. Versuche es erneut.",
     );
   }
 }

@@ -43,11 +43,11 @@ export const DEFAULT_PAGE_COPY = {
     yes: "ja",
     no: "nein",
     button: "Unterschrift bestätigen",
-    note: "Stimmt etwas nicht? Dann bestätige nicht – nicht bestätigte Eintragungen löschen wir automatisch.",
+    note: "Stimmt etwas nicht? Dann bestätige nicht. Nicht bestätigte Eintragungen löschen wir automatisch.",
   },
   deleteData: {
     heading: "Daten löschen",
-    text: "Mit dem Klick auf den Button löschen wir alle Daten, die wir zu deiner E-Mail-Adresse gespeichert haben – deine Unterschrift und deine Anmeldung zum Treffen, falls vorhanden. Das kann nicht rückgängig gemacht werden.",
+    text: "Mit dem Klick auf den Button löschen wir alle Daten, die wir zu deiner E-Mail-Adresse gespeichert haben: deine Unterschrift und, falls vorhanden, deine Anmeldung zum Treffen. Das lässt sich nicht rückgängig machen.",
     button: "Endgültig löschen",
     note: "Wenn du die Löschung nicht angefordert hast, schließe diese Seite einfach.",
   },

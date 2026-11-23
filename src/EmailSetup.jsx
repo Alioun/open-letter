@@ -233,7 +233,7 @@ export default function EmailSetup({ api, onDirty }) {
     } catch (e) {
       const message =
         e instanceof TypeError || e instanceof SyntaxError
-          ? "Die Antwort des Servers bestätigt die Aktion nicht. Deine Eingaben bleiben erhalten. Lade den aktuellen Stand, bevor du die Aktion wiederholst. Prüfe nach einem Testversand auch das Testpostfach."
+          ? "Der Server hat die Aktion nicht bestätigt. Deine Eingaben bleiben erhalten. Lade den aktuellen Stand, bevor du die Aktion wiederholst. Prüfe nach einem Testversand auch das Testpostfach."
           : e.message ||
             "Die Aktion konnte nicht abgeschlossen werden. Prüfe den gespeicherten Stand, bevor du es erneut versuchst.";
       setActionResult({ key, message: `${label}: ${message}`, error: true });
