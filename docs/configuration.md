@@ -34,7 +34,21 @@ After the first publication, the database supplies published content and templat
 
 `sign.fields` controls labels and placeholders for `kreisverband` and `occupation`. The regional field also accepts `options` for a server-validated fixed list, `selectPlaceholder`, `pluralLabel`, `noneLabel`, and `rowPrefix`.
 
+`hero` also accepts an optional `kicker` above the headline, a `description` below it, and `artwork`, an image under the description given as `src`, `alt`, `width`, and `height`. Put the image in `public/`, see [operations](operations.md#images-in-public).
+
+To ask for a function as well as an organisation, define `sign.fields.signerFunction` with `label`, `optionalLabel`, `placeholder`, `filterLabel`, and `emptyLabel`, and relabel `occupation`, for example as "Organisation". Both fields are then stored, edited in the admin, and exported separately.
+
 Feature flags are `kreisverbandField`, `occupationField`, `germanyMap`, `stateResolution`, `zoomEvent`, `inviteLinks`, and `multiLanguage`. The map and state resolver currently use Germany.
+
+These flags change what the public list shows:
+
+| Flag                       | Default | Effect                                                                                                                                                                                                                        |
+| -------------------------- | ------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `publicSignerDetails`      | off     | The form asks whether function and organisation may appear next to the name, with `sign.publicDetailsLabel` as the checkbox text. They appear only for people who agreed. Without the flag they are published as counts only. |
+| `publicFirstSignerDetails` | off     | Shows function and organisation next to the names of first signers who agreed, even without `publicSignerDetails`.                                                                                                            |
+| `faq`                      | on      | `false` removes the FAQ section. Remove its entry from `nav` as well.                                                                                                                                                         |
+
+Signers the team marks as first signers in the admin carry the label `ui.list.firstSigner` in every view of the list. In the default view, signers with a position come first, then marked first signers without one, then everyone else. The privacy policy states which details are published.
 
 Invitation statistics use `statsMode` with `ranges` as the default, or `threshold` or `exact`. Configure `statsRanges` or `statsThreshold` for the chosen mode. Invitation copy accepts `{firstName}`, `{title}`, and `{url}`.
 
@@ -103,7 +117,10 @@ The admin also manages campaigns, signature goals, email delivery, optional stat
 | `API_TOKEN_SECRET`        | Yes (prod)                      | -                                      | Public API signing secret. Must differ from `ADMIN_JWT_SECRET` in production.                                                                                                                       |
 | `REQUIRE_API_TOKEN`       | No                              | `true`                                 | Require a session token from `/api/session` for public reads. Set `false` to disable.                                                                                                               |
 | `ALLOWED_ORIGINS`         | No                              | `BASE_URL`                             | Comma-separated CORS origins. Responses to unlisted origins use `BASE_URL`.                                                                                                                         |
-| `TRUST_PROXY`             | No                              | `false`                                | Read the client IP from `X-Forwarded-For`. Enable behind a trusted reverse proxy. Production warns when unset.                                                                                      |
+| `TRUST_PROXY`             | No                              | `false`                                | Read the client IP from the last `X-Forwarded-For` entry. Enable behind a trusted reverse proxy. Production warns when unset. See [security](security.md#requests-and-authentication).              |
+| `HEALTH_TOKEN`            | No                              | unset                                  | Bearer token that adds numbers to `/api/health/operations`. At least 16 characters, and not the admin password. See [operations](operations.md#monitoring).                                         |
+| `SIGNING_PAUSED`          | No                              | unset                                  | `1` pauses signing. See [operations](operations.md#pausing-sign-ups).                                                                                                                               |
+| `DOMAIN`                  | With the Caddy proxy            | -                                      | Domain Caddy serves and gets a certificate for. See [operations](operations.md#https-with-caddy).                                                                                                   |
 | `DATABASE_JOURNAL_MODE`   | No                              | `WAL`                                  | SQLite journal mode. Production and development Compose use WAL. The SQLCipher adapter queues operations and complete transactions across connections to the same database file within the process. |
 | `GIT_COMMIT`              | No                              | -                                      | Commit shown at `/api/version`. Falls back to `COMMIT_SHA`, `SOURCE_COMMIT`, `GIT_SHA`, `SOURCE_VERSION`, and Railway, Render, or Vercel commit variables.                                          |
 | `EMAIL_PROVIDER`          | No                              | `email.provider` (config)              | Initial provider, `resend` or `smtp`. A database-managed profile replaces the complete deployment profile.                                                                                          |

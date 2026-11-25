@@ -6,7 +6,13 @@ The server sends `X-Content-Type-Options: nosniff`, `X-Frame-Options: DENY`, and
 
 Public read routes require a 30-minute JWT from `/api/session` unless `REQUIRE_API_TOKEN=false`. `API_TOKEN_SECRET` signs these tokens. Admin sessions use a separate `ADMIN_JWT_SECRET`. Production rejects equal secrets. CORS uses `ALLOWED_ORIGINS`, which defaults to `BASE_URL`.
 
-Signature requests use an in-memory sliding rate limit of 30 requests per IP per 15 minutes. Public reads also have per-IP limits. With `TRUST_PROXY=true`, the server uses `X-Real-IP`, then the rightmost `X-Forwarded-For` address, then the socket address. The trusted proxy must overwrite `X-Real-IP` and append the real client address to `X-Forwarded-For`. Prevent direct access to the application port. Without `TRUST_PROXY`, the server ignores both headers.
+Signature requests use an in-memory sliding rate limit of 30 requests per IP per 15 minutes. Public reads also have per-IP limits. With `TRUST_PROXY=true`, the server takes the client address from the last `X-Forwarded-For` entry, which is the one the reverse proxy adds for the peer it saw. If that entry is missing or not an IP address, the server uses the socket address. It never reads `X-Real-IP` or an earlier `X-Forwarded-For` entry, because a client can set both. The proxy must set or append `X-Forwarded-For` itself; Caddy does this by default, and the shipped `Caddyfile` also overwrites `X-Real-IP`. Prevent direct access to the application port, since a direct client could write the whole header. Without `TRUST_PROXY`, the server ignores forwarding headers.
+
+Admin sign-in allows 5 attempts per address per 15 minutes. Failed attempts from all addresses together are capped at 30 per 15 minutes, so a guess spread over many addresses stops there. While that cap is reached, nobody can sign in, including the team, and existing sessions keep working. Both limits answer 429 with `Retry-After`. Each failed attempt is logged with its address and never with the password that was tried.
+
+An admin token lasts two hours and carries the session generation it was issued under. `POST /api/admin/logout-everywhere` raises the generation, which ends every session at once. Starting the server with a different `ADMIN_PASSWORD` does the same, and so does restoring a backup. The ordinary sign-out only discards the token in that browser. Tokens issued before this mechanism existed are rejected, so the first deploy signs everyone out once.
+
+`robots.txt` does not name the admin path, and the admin page is served with `X-Robots-Tag: noindex`.
 
 Text input is trimmed, stripped of HTML, and length-limited. Database queries use parameters. Public signer responses contain no email addresses. A signature request returns the same success response for new and existing addresses.
 
