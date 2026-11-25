@@ -28,6 +28,29 @@ const KVS = [
 // Seed with the letter's fixed regions (e.g. Berlin Bezirke) when it has them.
 const REGIONS = regionLabels(cfg).options ?? KVS;
 
+const ORGANISATIONS = [
+  "Riverside School","City Library","Tenants' Association","Community Health Centre",
+  "Food Bank","Cycling Club","Youth Theatre","Neighbourhood Garden","Student Union",
+];
+
+const ROLES = [
+  "Teacher","Nurse","Volunteer","Chair","Treasurer","Coordinator","Student","Librarian","Organiser",
+];
+
+// Shown above everyone else in the default list view, in this order. Their
+// role and organisation appear only when the letter publishes them
+// (features.publicSignerDetails or publicFirstSignerDetails).
+const FIRST_SIGNERS = [
+  { name: "Amara Okafor", role: "Director", organisation: "Community Health Centre" },
+  { name: "Jonas Lindqvist", role: "Chair", organisation: "Tenants' Association" },
+  { name: "Priya Raman", role: "Head teacher", organisation: "Riverside School" },
+  { name: "Tomás Ferreira", role: "Coordinator", organisation: "Food Bank" },
+];
+
+// Role and organisation only for the fields the letter asks for.
+const asksOrganisation = Boolean(cfg.features.occupationField);
+const asksRole = Boolean(cfg.sign.fields.signerFunction);
+
 function pick(arr) { return arr[Math.floor(Math.random() * arr.length)]; }
 
 function makeSigner(minutesAgo) {
@@ -35,10 +58,14 @@ function makeSigner(minutesAgo) {
   const kv = Math.random() < 0.85 ? pick(REGIONS) : "";
   const email = name.toLowerCase().replace(/\s+/g, ".").replace(/[äöüß]/g, c => ({ ä: "ae", ö: "oe", ü: "ue", ß: "ss" }[c] || c)) + "+" + Date.now() + Math.random().toString(36).slice(2, 6) + "@demo.local";
   const createdAt = new Date(Date.now() - minutesAgo * 60 * 1000);
-  return { name, email, kv, createdAt };
+  const organisation = asksOrganisation && Math.random() < 0.5 ? pick(ORGANISATIONS) : "";
+  const role = asksRole && Math.random() < 0.5 ? pick(ROLES) : "";
+  const showDetails = (organisation || role) && Math.random() < 0.7 ? 1 : 0;
+  return { name, email, kv, organisation, role, showDetails, createdAt };
 }
 
 const INITIAL_COUNT = 200;
+const DAY_MS = 24 * 60 * 60 * 1000;
 const TRICKLE_INTERVAL_MS = 6000;
 
 console.log(`Seeding ${INITIAL_COUNT} verified signers...`);
@@ -50,19 +77,35 @@ for (let i = 0; i < INITIAL_COUNT; i++) {
 }
 
 const insert = db.query(
-  `INSERT INTO signers (name, email, kreisverband, newsletter, verified, created_at)
-   VALUES (?, ?, ?, ?, 1, ?) ON CONFLICT (email) DO NOTHING`,
+  `INSERT INTO signers (name, email, kreisverband, occupation, signer_function, show_signer_details, newsletter, verified, created_at)
+   VALUES (?, ?, ?, ?, ?, ?, ?, 1, ?) ON CONFLICT (email) DO NOTHING`,
 );
+const insertSigner = (s, createdAt) =>
+  insert.run(s.name, s.email, s.kv, s.organisation, s.role, s.showDetails, Math.random() > 0.3 ? 1 : 0, createdAt);
 
 for (const s of batch) {
-  await insert.run(s.name, s.email, s.kv, Math.random() > 0.3 ? 1 : 0, s.createdAt.toISOString());
+  await insertSigner(s, s.createdAt.toISOString());
 }
 
 console.log(`Seeded ${INITIAL_COUNT} signers.`);
+
+const pin = db.query(
+  `INSERT INTO first_signer_pins (signer_id, position)
+   SELECT id, ? FROM signers WHERE email = ? ON CONFLICT DO NOTHING`,
+);
+for (const [i, f] of FIRST_SIGNERS.entries()) {
+  const email = `first-signer-${i + 1}@demo.local`;
+  const createdAt = new Date(Date.now() - (30 - i) * DAY_MS).toISOString();
+  await insertSigner({ ...f, email, kv: "", showDetails: 1 }, createdAt);
+  await db.query("UPDATE signers SET first_signer = 1 WHERE email = ?").run(email);
+  await pin.run(i + 1, email);
+}
+
+console.log(`Marked ${FIRST_SIGNERS.length} first signers.`);
 console.log(`Adding a signer every ${TRICKLE_INTERVAL_MS / 1000}s. Press Ctrl+C to stop.\n`);
 
 setInterval(async () => {
   const s = makeSigner(0);
-  await insert.run(s.name, s.email, s.kv, Math.random() > 0.3 ? 1 : 0, nowIso());
+  await insertSigner(s, nowIso());
   console.log(`+ ${s.name}${s.kv ? ` (KV ${s.kv})` : ""}`);
 }, TRICKLE_INTERVAL_MS);

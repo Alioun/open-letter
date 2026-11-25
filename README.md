@@ -44,11 +44,11 @@ bun run db:setup
 bun run dev
 ```
 
-Run `bun run db:seed` in another terminal to add demo signers.
+Run `bun run db:seed` in another terminal to add demo signers and first signers.
 
 ## Set up your letter
 
-1. Copy the starter with `cp -r config/letters/example config/letters/my-letter`.
+1. Copy the starter with `cp -r config/letters/example config/letters/my-letter`. It shows a hero image, role and organisation fields, and first signers. See [the example letter](docs/configuration.md#the-example-letter) for how to turn them off.
 2. Edit its `index.js` for branding, legal details, email defaults, and feature flags. Edit `content.jsx` for the letter and FAQ.
 3. Register it in `LETTERS` in `config/letter.config.js` and `CONTENT` in `config/content.jsx`.
 4. Set `LETTER_CONFIG=my-letter` before starting the app.

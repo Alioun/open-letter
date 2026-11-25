@@ -1334,7 +1334,13 @@ export default function App({
             successMode ? cfg.ui.hero.ariaSuccess : cfg.ui.hero.ariaCampaign
           }
         >
-          <div className="hero-inner">
+          <div
+            className={
+              cfg.hero.artwork && !successMode
+                ? "hero-inner hero-inner--artwork"
+                : "hero-inner"
+            }
+          >
             {successMode ? (
               <div className="hero-success">
                 {cfg.success?.kicker && (

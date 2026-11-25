@@ -1,7 +1,8 @@
-// Example open letter: a minimal, generic campaign that demonstrates the
-// template with the German/Die-Linke-specific features turned OFF (no
-// Kreisverband/Beruf fields, no Germany map, no Zoom). Use it as a starting
-// point for a new letter: `LETTER_CONFIG=example bun run dev`.
+// Example open letter: a generic campaign in English. It shows the hero
+// kicker, description and placeholder artwork, the role and organisation
+// fields with their public visibility choice, and first signers (seeded by
+// `bun run db:seed`). The region field, Germany map and meeting are off. Use
+// it as a starting point for a new letter: `LETTER_CONFIG=example bun run dev`.
 
 const colors = {
   rot: "#1d4ed8",
@@ -54,11 +55,22 @@ export default {
   },
 
   hero: {
+    kicker: "An open letter to decision-makers",
     headlineLines: [
       { text: "Sign the", style: "banner" },
       { text: "letter.", style: "banner" },
       { text: "Now.", style: "light" },
     ],
+    description:
+      "We ask decision-makers to listen, act and report openly on their progress. Add your name to make the call louder.",
+    // A placeholder from scripts/generate-artwork.js. Replace it with your
+    // own image in public/ and its pixel size.
+    artwork: {
+      src: "/example-artwork.webp",
+      alt: "Placeholder image: blue and navy geometric shapes on a grid.",
+      width: 800,
+      height: 1000,
+    },
     counterLabel: "Signatures",
     goalLabelPrefix: "Goal:",
     goalMetaLabel: "verified signatories",
@@ -91,7 +103,10 @@ export default {
       "Your email address is used only to verify your signature and is never shown publicly. A signature is counted only after email confirmation. You can withdraw your consent at any time.",
     formTitle: "Sign in 30 seconds",
     formSubtitle: "Fill in the fields, confirm by email. Done.",
-    // German-specific optional fields are disabled (see features below).
+    // The third visibility choice (features.publicSignerDetails).
+    publicDetailsLabel: "Show my name with my role and organisation",
+    // The region field is off (features.kreisverbandField). The occupation
+    // field asks for an organisation and signerFunction for a role.
     fields: {
       kreisverband: {
         label: "Region",
@@ -100,10 +115,17 @@ export default {
         autocomplete: true,
       },
       occupation: {
-        label: "Occupation",
+        label: "Organisation",
         optionalLabel: " optional",
         placeholder: "",
         autocomplete: true,
+      },
+      signerFunction: {
+        label: "Role",
+        optionalLabel: " optional",
+        placeholder: "",
+        filterLabel: "Roles",
+        emptyLabel: "No roles given yet.",
       },
     },
   },
@@ -282,7 +304,11 @@ export default {
     // mail and a private stats link (texts: `invite` block, config/invite.js).
     inviteLinks: true,
     kreisverbandField: false,
-    occupationField: false,
+    // The organisation field (sign.fields.occupation) and its list filter.
+    occupationField: true,
+    // Signers choose: private, name only, or name with role and
+    // organisation. Without it, role and organisation are counts only.
+    publicSignerDetails: true,
     germanyMap: false,
     stateResolution: false,
     zoomEvent: false,
@@ -294,6 +320,27 @@ export default {
     // block (one bordered list) instead of full height. Valid ids: "brief",
     // "unterzeichnen", "liste", "faq". Empty = nothing collapsed.
     collapsedSections: [],
+  },
+
+  // Interface copy for the role, organisation and first-signer features.
+  // Without features.multiLanguage the defaults are the German table in
+  // config/ui.js, so an English letter sets these itself.
+  ui: {
+    list: {
+      filterOccupations: "Organisations",
+      emptyOccupations: "No organisations given yet.",
+      firstSigner: "First signatory",
+    },
+    signForm: {
+      visibilityLegend: "What should appear in the public list?",
+      visibilityPrivate: "Keep my signature private",
+      visibilityName: "Show only my name",
+    },
+    settings: {
+      occupationLabel: "Organisation",
+      errOccupationLong:
+        "Please shorten the organisation to 160 characters or fewer.",
+    },
   },
 
   // Success / accomplished announcement (only read when features.successMode).

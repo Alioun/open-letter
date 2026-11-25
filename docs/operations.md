@@ -62,18 +62,19 @@ Signing does not need a pause when mail is down. Sign-ups are stored and their c
 
 ## Commands
 
-| Command                               | Purpose                                                          |
-| ------------------------------------- | ---------------------------------------------------------------- |
-| `bun run dev`                         | Start development with file watching and hot module replacement. |
-| `bun run start`                       | Start the production server.                                     |
-| `bun run db:setup`                    | Create or update the database schema. Safe to repeat.            |
-| `bun run db:seed`                     | Add 200 demo signers, then one every six seconds.                |
-| `bun run db:migrate`                  | Copy an existing Postgres database into encrypted SQLite.        |
-| `bun run db:restore <file\|--latest>` | Restore an encrypted backup into `DATABASE_PATH`.                |
-| `bun run test`                        | Run the test suite.                                              |
-| `bun run honker:build`                | Build the local Honker SQLite extension.                         |
-| `bun run og`                          | Regenerate `public/og.png` from the running site.                |
-| `bun scripts/preview-letter.js`       | Preview the letter design with demo data, without a database.    |
+| Command                               | Purpose                                                                         |
+| ------------------------------------- | ------------------------------------------------------------------------------- |
+| `bun run dev`                         | Start development with file watching and hot module replacement.                |
+| `bun run start`                       | Start the production server.                                                    |
+| `bun run db:setup`                    | Create or update the database schema. Safe to repeat.                           |
+| `bun run db:seed`                     | Add 200 demo signers and four first signers, then one signer every six seconds. |
+| `bun run db:migrate`                  | Copy an existing Postgres database into encrypted SQLite.                       |
+| `bun run db:restore <file\|--latest>` | Restore an encrypted backup into `DATABASE_PATH`.                               |
+| `bun run test`                        | Run the test suite.                                                             |
+| `bun run honker:build`                | Build the local Honker SQLite extension.                                        |
+| `bun run og`                          | Regenerate `public/og.png` from the running site.                               |
+| `bun scripts/generate-artwork.js`     | Redraw the example letter's placeholder `public/example-artwork.webp`.          |
+| `bun scripts/preview-letter.js`       | Preview the letter design with demo data, without a database.                   |
 
 See [publishing verification](publishing.md#verify-and-restore) for focused and full-application checks.
 

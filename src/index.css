@@ -491,6 +491,89 @@ h1.headline .banner {
   }
 }
 
+/* Optional hero parts: hero.kicker, hero.description and hero.artwork. */
+.hero-kicker {
+  font-family: var(--font-display);
+  font-weight: 900;
+  font-size: 14px;
+  line-height: 1.4;
+  letter-spacing: var(--ls-wide);
+  color: var(--rot-text);
+  margin: 0 0 20px;
+  position: relative;
+  z-index: 3;
+}
+
+.hero-description {
+  font-family: var(--font-display);
+  font-weight: 300;
+  font-size: clamp(20px, 2.2vw, 28px);
+  line-height: 1.25;
+  max-width: 38ch;
+  margin: 0;
+  color: var(--akzent);
+  position: relative;
+  z-index: 3;
+}
+
+.hero-artwork {
+  margin: 0;
+  position: relative;
+  z-index: 3;
+}
+
+.hero-artwork img {
+  display: block;
+  width: 100%;
+  height: auto;
+  border: 1.5px solid var(--akzent);
+  border-radius: var(--radius-card, 0);
+  box-shadow: var(--elev-md, var(--shadow-md) var(--shadow-md) 0 var(--rot));
+}
+
+/* With artwork: the image beside kicker, headline and description, the
+   counter row below both at full width. The image spans three rows; when it
+   is taller than the text, only the last row grows, so a letter without a
+   kicker or description keeps its text together at the top. */
+.hero-inner--artwork {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 0.6fr);
+  grid-template-rows: auto auto 1fr;
+  column-gap: 64px;
+}
+
+.hero-inner--artwork > .hero-artwork {
+  grid-column: 2;
+  grid-row: 1 / 4;
+  align-self: center;
+}
+
+.hero-inner--artwork > .hero-row {
+  grid-column: 1 / -1;
+}
+
+@media (max-width: 900px) {
+  .hero-inner--artwork {
+    grid-template-columns: minmax(0, 1fr);
+    grid-template-rows: none;
+  }
+
+  /* Below the counter and buttons, so the call to sign stays near the top. */
+  .hero-inner--artwork > .hero-artwork {
+    grid-column: 1;
+    grid-row: auto;
+    order: 1;
+    max-width: 440px;
+    margin-top: 48px;
+  }
+}
+
+@media (max-width: 600px) {
+  .hero-artwork img {
+    box-shadow: var(--elev-sm, 4px 4px 0 var(--rot));
+  }
+}
+
 .counter-card {
   background: var(--akzent);
   color: var(--on-akzent, var(--weiss));
@@ -1363,10 +1446,11 @@ h1.headline .banner {
   font-weight: 600;
 }
 
+/* Sized and spaced like the checkboxes below it (.check input). */
 .sign-visibility input {
   width: 20px;
   height: 20px;
-  margin: 0;
+  margin: 1px 3px 0 4px;
   flex-shrink: 0;
   accent-color: var(--rot);
   cursor: pointer;
@@ -2014,7 +2098,7 @@ h1.headline .banner {
 }
 
 .signer .kv .first-signer-label {
-  color: var(--fehler);
+  color: var(--rot-text);
   font-weight: 700;
 }
 
@@ -2544,7 +2628,8 @@ footer {
 
 /* ---------- Touch targets ---------- */
 @media (max-width: 780px) {
-  .check input {
+  .check input,
+  .sign-visibility input {
     width: 24px;
     height: 24px;
     flex-shrink: 0;

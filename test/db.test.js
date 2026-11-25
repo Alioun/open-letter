@@ -456,12 +456,29 @@ describe("stats", () => {
 
 describe("occupations", () => {
   test("groups gender variants and adds Gendersternchen", async () => {
+    const { signerFunction } = cfg.sign.fields;
+    delete cfg.sign.fields.signerFunction;
+    try {
+      await addVerifiedSigner({ occupation: "Lehrer" });
+      await addVerifiedSigner({ occupation: "Lehrerin" });
+      const occ = await q.getOccupations();
+      const lehr = occ.find((o) => o.count === 2);
+      expect(lehr).toBeTruthy();
+      expect(lehr.occupation).toContain("*");
+    } finally {
+      cfg.sign.fields.signerFunction = signerFunction;
+    }
+  });
+
+  test("next to a role field, organisations are listed as written", async () => {
+    expect(cfg.sign.fields.signerFunction).toBeTruthy();
     await addVerifiedSigner({ occupation: "Lehrer" });
     await addVerifiedSigner({ occupation: "Lehrerin" });
     const occ = await q.getOccupations();
-    const lehr = occ.find((o) => o.count === 2);
-    expect(lehr).toBeTruthy();
-    expect(lehr.occupation).toContain("*");
+    expect(occ.map((o) => [o.occupation, o.count])).toEqual([
+      ["Lehrer", 1],
+      ["Lehrerin", 1],
+    ]);
   });
 });
 

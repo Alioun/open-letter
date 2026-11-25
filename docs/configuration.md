@@ -14,7 +14,7 @@ After the first publication, the database supplies published content and templat
 | `theme`                 | Colors, fonts, spacing, borders, and shadows. See below.                                                                              |
 | `meta`                  | Page title, descriptions, canonical URL, social metadata, favicon, JSON-LD `schemaAbout`, and optional external `analytics` settings. |
 | `privacy`               | Retention periods and link lifetimes. The server enforces them and the privacy policy quotes them.                                    |
-| `hero`                  | Headline lines, buttons, counter labels, and initial `milestones`.                                                                    |
+| `hero`                  | Optional kicker, headline lines, optional description and artwork, buttons, counter labels, and initial `milestones`.                 |
 | `nav`, `navCta`, `list` | Navigation items, main navigation button, and signer-list heading.                                                                    |
 | `sign`                  | Heading, participation criteria, privacy note, form copy, and optional field definitions.                                             |
 | `footer`, `legal`       | Footer, contact, responsible entity, address, and legal notice.                                                                       |
@@ -34,23 +34,82 @@ After the first publication, the database supplies published content and templat
 
 `sign.fields` controls labels and placeholders for `kreisverband` and `occupation`. The regional field also accepts `options` for a server-validated fixed list, `selectPlaceholder`, `pluralLabel`, `noneLabel`, and `rowPrefix`.
 
-`hero` also accepts an optional `kicker` above the headline, a `description` below it, and `artwork`, an image under the description given as `src`, `alt`, `width`, and `height`. Put the image in `public/`, see [operations](operations.md#images-in-public).
-
-To ask for a function as well as an organisation, define `sign.fields.signerFunction` with `label`, `optionalLabel`, `placeholder`, `filterLabel`, and `emptyLabel`, and relabel `occupation`, for example as "Organisation". Both fields are then stored, edited in the admin, and exported separately.
+### Feature flags
 
 Feature flags are `kreisverbandField`, `occupationField`, `germanyMap`, `stateResolution`, `zoomEvent`, `inviteLinks`, and `multiLanguage`. The map and state resolver currently use Germany.
 
 These flags change what the public list shows:
 
-| Flag                       | Default | Effect                                                                                                                                                                                                                        |
-| -------------------------- | ------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `publicSignerDetails`      | off     | The form asks whether function and organisation may appear next to the name, with `sign.publicDetailsLabel` as the checkbox text. They appear only for people who agreed. Without the flag they are published as counts only. |
-| `publicFirstSignerDetails` | off     | Shows function and organisation next to the names of first signers who agreed, even without `publicSignerDetails`.                                                                                                            |
-| `faq`                      | on      | `false` removes the FAQ section. Remove its entry from `nav` as well.                                                                                                                                                         |
+| Flag                       | Default | Effect                                                                                                                                                                                                                                                                                                                                             |
+| -------------------------- | ------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `publicSignerDetails`      | off     | The form replaces the public-name checkbox with three choices under `ui.signForm.visibilityLegend`: keep the signature private, show the name only, or show the name with role and organisation (`sign.publicDetailsLabel`). Role and organisation appear only for people who chose the third. Without the flag they are published as counts only. |
+| `publicFirstSignerDetails` | off     | Shows role and organisation next to the names of first signers who agreed, even without `publicSignerDetails`.                                                                                                                                                                                                                                     |
+| `faq`                      | on      | `false` removes the FAQ section. Remove its entry from `nav` as well.                                                                                                                                                                                                                                                                              |
 
-Signers the team marks as first signers in the admin carry the label `ui.list.firstSigner` in every view of the list. In the default view, signers with a position come first, then marked first signers without one, then everyone else. The privacy policy states which details are published.
+### Hero kicker, description, and artwork
+
+`hero` accepts three optional parts. Leave a key out and the hero looks as it does without it.
+
+| Key           | Shows                                                                                                                           |
+| ------------- | ------------------------------------------------------------------------------------------------------------------------------- |
+| `kicker`      | A short line above the headline, in the accent colour.                                                                          |
+| `description` | A sentence or two below the headline, in the light display font.                                                                |
+| `artwork`     | An image with `src`, `alt`, `width`, and `height`. Wider than 900 px it stands beside the text, below 900 px after the buttons. |
+
+Put the image in `public/` as PNG, JPEG, WebP, AVIF, or GIF. SVG is not served, see [operations](operations.md#images-in-public). Set `width` and `height` to the image's pixel size: the page reserves the space from them, so nothing moves when the image loads.
+
+The example letter shows `public/example-artwork.webp`, a placeholder drawn in its theme colours. `bun scripts/generate-artwork.js` draws it again, for example after you change `theme.colors`. Replace it with your own image before you publish.
+
+### Role and organisation
+
+A letter can ask signers for their organisation and their role, and let them choose whether both appear next to their name.
+
+1. Set `features.occupationField: true` and relabel `sign.fields.occupation`, for example as "Organisation".
+2. Define `sign.fields.signerFunction` with `label`, `optionalLabel`, `placeholder`, `filterLabel`, and `emptyLabel`. The list then gets a filter, labelled `filterLabel`, that counts signers by role.
+3. To publish them, set `features.publicSignerDetails: true` and `sign.publicDetailsLabel`, the text of the third visibility choice. See [feature flags](#feature-flags).
+
+Both fields are stored, edited in the admin, and exported separately. With either details flag on, a row in the public list shows role and organisation when the signer agreed to it. A row without them shows the region only when `features.kreisverbandField` is on. Without either details flag, every row shows the region line, or `noneLabel` for a signer who gave no region.
+
+Without `features.multiLanguage`, interface copy starts from the German defaults in `config/ui.js`. A letter in another language sets the copy these features show in its own `ui` block, as the example letter does:
+
+```js
+ui: {
+  list: {
+    filterOccupations: "Organisations",
+    emptyOccupations: "No organisations given yet.",
+    firstSigner: "First signatory",
+  },
+  signForm: {
+    visibilityLegend: "What should appear in the public list?",
+    visibilityPrivate: "Keep my signature private",
+    visibilityName: "Show only my name",
+  },
+  settings: {
+    occupationLabel: "Organisation",
+    errOccupationLong: "Please shorten the organisation to 160 characters or fewer.",
+  },
+},
+```
+
+### First signers
+
+Signers the team marks as first signers in the admin carry the label `ui.list.firstSigner` in every view of the list. Mark them, and give them a position, under **Unterschriften** with **Bearbeiten**, or in the **Erstunterzeichner\*innen** card below the list. The card also adds people by hand or from a CSV file. In the default view, signers with a position come first, then marked first signers without one, then everyone else. The privacy policy states which details are published.
+
+`bun run db:seed` adds four marked first signers with positions, roles, and organisations, so a local copy of the example letter shows the label and the admin card has entries.
+
+### Invitation statistics
 
 Invitation statistics use `statsMode` with `ranges` as the default, or `threshold` or `exact`. Configure `statsRanges` or `statsThreshold` for the chosen mode. Invitation copy accepts `{firstName}`, `{title}`, and `{url}`.
+
+## The example letter
+
+`config/letters/example/` is in English and turns on the features above, so a new letter starts from a page that shows them:
+
+- `hero.kicker`, `hero.description`, and the placeholder `hero.artwork`.
+- The organisation and role fields (`features.occupationField`, `sign.fields.signerFunction`), with the visibility choice (`features.publicSignerDetails`) and the **Roles** filter.
+- First signers, from `bun run db:seed`.
+
+To turn a feature off in your copy, delete its keys or set its flag to `false`. The region field, the Germany map, and the meeting stay off in the example.
 
 ## Languages
 
