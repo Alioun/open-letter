@@ -1,0 +1,9 @@
+{$DOMAIN} {
+    reverse_proxy app:3000 {
+        # Caddy puts the peer it saw into X-Forwarded-For, which is what the
+        # app keys its rate limits on. X-Real-IP would otherwise pass through
+        # as the client sent it; overwrite it so no spoofed value gets behind
+        # this proxy.
+        header_up X-Real-IP {remote_host}
+    }
+}

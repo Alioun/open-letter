@@ -17,6 +17,7 @@ import {
   SIGNING_PAUSED,
 } from "./frontend.js";
 import { normalizeImage, generateOg, assetPath } from "./assets.js";
+import { publicFile } from "./public-files.js";
 import { createAssetLifecycle } from "./asset-lifecycle.js";
 import { sanitizeRich } from "./rich-content.js";
 import {
@@ -2000,25 +2001,6 @@ const server = Bun.serve(
             await recordAdminAction("settings.statistics");
             return json({ ok: true });
           });
-        },
-      },
-
-      "/og.png": {
-        async GET() {
-          const { readFile } = await import("node:fs/promises");
-          try {
-            const buf = await readFile(
-              new URL("../public/og.png", import.meta.url),
-            );
-            return new Response(buf, {
-              headers: {
-                "Content-Type": "image/png",
-                "Cache-Control": "public, max-age=86400",
-              },
-            });
-          } catch {
-            return new Response("", { status: 404 });
-          }
         },
       },
 
@@ -4948,7 +4930,11 @@ const server = Bun.serve(
       },
     },
 
-    fetch(req) {
+    async fetch(req) {
+      if (req.method === "GET" || req.method === "HEAD") {
+        const file = await publicFile(new URL(req.url).pathname);
+        if (file) return file;
+      }
       return json({ error: "Not found" }, 404);
     },
   }),

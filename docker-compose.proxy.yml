@@ -1,0 +1,25 @@
+# Optional HTTPS proxy in front of the app. Caddy gets a certificate for
+# DOMAIN from Let's Encrypt, so the domain's DNS must point at this server
+# and ports 80 and 443 must be reachable. Start both with:
+#
+#   docker compose -f docker-compose.yml -f docker-compose.proxy.yml up -d
+services:
+  caddy:
+    image: caddy:2
+    restart: unless-stopped
+    environment:
+      - DOMAIN=${DOMAIN:?set DOMAIN in .env to the site's domain}
+    ports:
+      - "80:80"
+      - "443:443"
+      - "443:443/udp"
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy_data:/data
+      - caddy_config:/config
+    depends_on:
+      - app
+
+volumes:
+  caddy_data:
+  caddy_config:

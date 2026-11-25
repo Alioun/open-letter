@@ -33,3 +33,6 @@ loadtest/results/*/raw/
 
 # Locally built Honker extension
 vendor/libhonker_ext.so
+
+# Backup copies left by hand edits on the server
+*.bak

@@ -23,6 +23,7 @@ services:
       - TRUST_PROXY=${TRUST_PROXY:-true}
     volumes:
       - data:/app/data
+      - ./public:/app/public
       - backups:/app/backups
     restart: unless-stopped
     healthcheck:
