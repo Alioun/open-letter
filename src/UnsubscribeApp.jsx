@@ -3,6 +3,7 @@ import { useEffect, useMemo, useState } from "react";
 import cfg, { LANG, DEFAULT_LANG } from "../config/letter.config.js";
 import { fillText } from "../config/ui.js";
 import { regionLabels } from "../config/region.js";
+import { SIGNER_DETAIL_LIMIT } from "../config/signer-details.js";
 
 // Read while rendering, so admin text overrides applied after load count.
 const region = () => regionLabels(cfg);
@@ -28,8 +29,10 @@ const EMPTY_FORM = {
   name: "",
   kv: "",
   occupation: "",
+  signerFunction: "",
   newsletter: false,
   showPublicly: true,
+  showSignerDetails: false,
   inviteShowName: false,
   delegierter: false,
 };
@@ -39,14 +42,18 @@ function formFromData(d) {
     name: d.name || d.zoomName || "",
     kv: d.kreisverband || d.zoomKv || "",
     occupation: d.occupation || "",
+    signerFunction: d.signerFunction || "",
     newsletter: Boolean(d.newsletter),
     showPublicly: d.showPublicly ?? true,
+    showSignerDetails: Boolean(d.showSignerDetails),
     inviteShowName: Boolean(d.inviteShowName),
     delegierter: Boolean(d.delegierter),
   };
 }
 
 export default function UnsubscribeApp() {
+  const functionField = cfg.sign.fields.signerFunction;
+  const occupationLimit = functionField ? SIGNER_DETAIL_LIMIT : 80;
   const token = useMemo(getToken, []);
   const source = useMemo(getSource, []);
   const [state, setState] = useState({ loading: true, data: null, error: "" });
@@ -110,9 +117,11 @@ export default function UnsubscribeApp() {
         region: region().name,
       });
     }
-    if (values.occupation.length > 80) {
+    if (values.occupation.length > occupationLimit) {
       errors.occupation = cfg.ui.settings.errOccupationLong;
     }
+    if (functionField && values.signerFunction.length > SIGNER_DETAIL_LIMIT)
+      errors.signerFunction = `${functionField.label}: maximal ${SIGNER_DETAIL_LIMIT} Zeichen.`;
     return errors;
   }
 
@@ -346,7 +355,7 @@ export default function UnsubscribeApp() {
                         id="edit-occupation"
                         type="text"
                         value={form.occupation}
-                        maxLength={80}
+                        maxLength={occupationLimit}
                         onChange={(e) =>
                           setForm((f) => ({ ...f, occupation: e.target.value }))
                         }
@@ -362,6 +371,40 @@ export default function UnsubscribeApp() {
                       )}
                     </div>
 
+                    {functionField && d.hasSigner && (
+                      <div className="field">
+                        <label htmlFor="edit-function">
+                          {functionField.label}{" "}
+                          <span className="opt">
+                            {functionField.optionalLabel}
+                          </span>
+                        </label>
+                        <input
+                          id="edit-function"
+                          type="text"
+                          value={form.signerFunction}
+                          maxLength={SIGNER_DETAIL_LIMIT}
+                          onChange={(event) =>
+                            setForm((current) => ({
+                              ...current,
+                              signerFunction: event.target.value,
+                            }))
+                          }
+                          aria-invalid={Boolean(fieldErrors.signerFunction)}
+                          aria-describedby={
+                            fieldErrors.signerFunction
+                              ? "err-function"
+                              : undefined
+                          }
+                        />
+                        {fieldErrors.signerFunction && (
+                          <p className="err" id="err-function" role="alert">
+                            {fieldErrors.signerFunction}
+                          </p>
+                        )}
+                      </div>
+                    )}
+
                     <div className="checks">
                       {d.hasSigner && (
                         <>
@@ -373,11 +416,29 @@ export default function UnsubscribeApp() {
                                 setForm((f) => ({
                                   ...f,
                                   showPublicly: e.target.checked,
+                                  showSignerDetails:
+                                    e.target.checked && f.showSignerDetails,
                                 }))
                               }
                             />
                             <span>{cfg.ui.settings.showPublicly}</span>
                           </label>
+                          {cfg.features.publicSignerDetails &&
+                            form.showPublicly && (
+                              <label className="check">
+                                <input
+                                  type="checkbox"
+                                  checked={form.showSignerDetails}
+                                  onChange={(e) =>
+                                    setForm((f) => ({
+                                      ...f,
+                                      showSignerDetails: e.target.checked,
+                                    }))
+                                  }
+                                />
+                                <span>{cfg.sign.publicDetailsLabel}</span>
+                              </label>
+                            )}
                           {cfg.features.inviteLinks && d.hasInviteCode && (
                             <label className="check">
                               <input

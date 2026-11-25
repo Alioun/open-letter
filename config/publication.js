@@ -78,7 +78,7 @@ export function defaultLayout(config) {
     "Letter",
     "Sign",
     "Signers",
-    "Faq",
+    ...(config.features?.faq === false ? [] : ["Faq"]),
     ...(config.features?.zoomEvent ? ["Meeting"] : []),
     "Footer",
   ];
@@ -154,6 +154,11 @@ export function validateLayout(layout, config) {
   for (const b of expected)
     if (layout.content.filter((s) => s.type === b.type).length !== 1)
       throw new ValidationError(`${b.type} is required exactly once`);
+  if (
+    config.features?.faq === false &&
+    layout.content.some((b) => b.type === "Faq")
+  )
+    throw new ValidationError("FAQ feature is disabled");
   if (
     !config.features?.zoomEvent &&
     layout.content.some((b) => b.type === "Meeting")

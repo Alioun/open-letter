@@ -87,10 +87,12 @@ test("credentials cannot be redirected to a different server/account; TLS is man
 });
 test("test/receipt/activation is bound to revision and never returns secrets", async () => {
   let delivered = 0;
+  const subjects = [];
   const manager = await createEmailManager(connection, cfg, {
     createTransport: () => ({
       verify: async () => {},
-      sendMail: async () => {
+      sendMail: async (mail) => {
+        subjects.push(mail.subject);
         delivered++;
       },
     }),
@@ -110,8 +112,11 @@ test("test/receipt/activation is bound to revision and never returns secrets", a
     "Bestätige vor der Aktivierung den Empfang",
   );
   await manager.confirmReceipt(2, manager.status.validation?.id);
+  const before = Date.now();
   await manager.activate(2);
   expect(manager.status.ready).toBe(true);
+  expect(Date.parse(manager.status.activatedAt)).toBeGreaterThanOrEqual(before);
+  expect(subjects[0]).toBe("Testnachricht für den E-Mail-Versand");
   await expect(manager.save(profile, 1)).rejects.toMatchObject({ status: 409 });
   await manager.send(
     { to: "person@example.org", subject: "Test", html: "<p>fixture</p>" },
@@ -189,6 +194,27 @@ test("diagnostics contain no raw error or recipient; DNS verifies publication on
     "bestätigt weder die Signierung noch den Empfang",
   );
   expect(instructions.records.some((r) => r.type === "MX")).toBe(false);
+});
+
+test("saving a replacement clears the setup failure from the previous profile", async () => {
+  const manager = await createEmailManager(connection, cfg, {
+    createTransport: () => ({
+      verify: async () => {
+        throw Object.assign(new Error("Invalid credentials"), {
+          responseCode: 535,
+        });
+      },
+    }),
+  });
+  await manager.save(null, 0, true);
+  await manager.save(profile, 1);
+  const failed = await manager.test(2, "admin@example.org");
+  expect(failed.setupFailure).toMatchObject({ category: "authentication" });
+  const replacement = await manager.save(
+    { ...profile, secret: "new-password" },
+    2,
+  );
+  expect(replacement.setupFailure).toBeNull();
 });
 
 test("replacement tests leave the active transport available; stale test results are rejected", async () => {
@@ -288,7 +314,7 @@ test("quota waits preserve provider revision across cutover and restart", async 
   expect(attempt.status).toBe("delivered");
 });
 
-test("uncertain SMTP outcomes pause for reconciliation and concurrent retries do not duplicate", async () => {
+test("uncertain campaign SMTP outcomes pause for reconciliation and concurrent retries do not duplicate", async () => {
   let sent = 0;
   let fail = false;
   let release;
@@ -316,11 +342,17 @@ test("uncertain SMTP outcomes pause for reconciliation and concurrent retries do
   await manager.activate(2);
   fail = true;
   await expect(
-    manager.send({ to: "person@example.org" }, { scope: "uncertain" }),
+    manager.send(
+      { to: "person@example.org" },
+      { scope: "uncertain", priority: "campaign" },
+    ),
   ).rejects.toThrow("temporary-delivery");
   await connection.query("UPDATE email_quota SET next_at=0").run();
   await expect(
-    manager.send({ to: "person@example.org" }, { scope: "uncertain" }),
+    manager.send(
+      { to: "person@example.org" },
+      { scope: "uncertain", priority: "campaign" },
+    ),
   ).rejects.toMatchObject({ defer: true });
   expect(sent).toBe(2);
   const attempt = await connection.query("SELECT * FROM email_attempts").get();
@@ -329,11 +361,14 @@ test("uncertain SMTP outcomes pause for reconciliation and concurrent retries do
   release = null;
   const pending = manager.send(
     { to: "person@example.org" },
-    { scope: "uncertain" },
+    { scope: "uncertain", priority: "campaign" },
   );
   while (release === null) await Bun.sleep(1);
   await expect(
-    manager.send({ to: "person@example.org" }, { scope: "uncertain" }),
+    manager.send(
+      { to: "person@example.org" },
+      { scope: "uncertain", priority: "campaign" },
+    ),
   ).rejects.toMatchObject({ defer: true });
   release();
   await pending;
@@ -391,6 +426,59 @@ test("known authentication failure pauses sending; deployment profiles can reval
       manager.send({ to: "person@example.org" }, { scope: "paused" }),
     ).rejects.toMatchObject({ defer: true });
     expect(JSON.stringify(manager.status)).not.toContain("raw user");
+  } finally {
+    for (const key of Object.keys(keys)) {
+      if (previous[key] === undefined) delete process.env[key];
+      else process.env[key] = previous[key];
+    }
+  }
+});
+
+test("a connection failure is dated, and the next mail that goes out clears it", async () => {
+  const previous = { ...process.env };
+  const keys = {
+    EMAIL_PROVIDER: "smtp",
+    SMTP_HOST: profile.host,
+    SMTP_PORT: "587",
+    SMTP_USER: profile.user,
+    SMTP_PASS: profile.secret,
+    EMAIL_FROM: profile.from,
+  };
+  Object.assign(process.env, keys);
+  try {
+    let down = false;
+    const manager = await createEmailManager(connection, cfg, {
+      createTransport: () => ({
+        verify: async () => {},
+        sendMail: async () => {
+          if (down) {
+            const e = new Error("connect ECONNREFUSED");
+            e.code = "ESOCKET";
+            throw e;
+          }
+        },
+      }),
+    });
+    const revision = manager.status.revision;
+    await manager.test(revision, "admin@example.org");
+    await manager.confirmReceipt(revision, manager.status.validation?.id);
+    await manager.activate(revision);
+    down = true;
+    await expect(
+      manager.send({ to: "person@example.org" }, { scope: "outage" }),
+    ).rejects.toThrow("temporary-delivery");
+    expect(manager.status.ready).toBe(true);
+    expect(manager.status.failure).toMatchObject({
+      category: "temporary-delivery",
+      code: "ESOCKET",
+    });
+    expect(Date.parse(manager.status.failure.at)).toBeGreaterThan(
+      Date.now() - 60_000,
+    );
+    down = false;
+    await manager.send({ to: "person@example.org" }, { scope: "recovered" });
+    expect(manager.status.failure).toBeNull();
+    expect(manager.status.lastSuccess).toBeTruthy();
   } finally {
     for (const key of Object.keys(keys)) {
       if (previous[key] === undefined) delete process.env[key];

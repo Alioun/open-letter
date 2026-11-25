@@ -12,6 +12,8 @@ import cfg, { LANGUAGES, DEFAULT_LANG } from "../config/letter.config.js";
 import AdminPublisher from "./publishing/AdminPublisher.jsx";
 import EmailSetup from "./EmailSetup.jsx";
 import EmailFailure from "./EmailFailure.jsx";
+import AdminOverview from "./AdminOverview.jsx";
+import DeliveryBanner, { deliveryProblems } from "./DeliveryBanner.jsx";
 import AdminStatistics from "./AdminStatistics.jsx";
 import CampaignTestLanguage from "./CampaignTestLanguage.jsx";
 import CampaignMessageFields from "./CampaignMessageFields.jsx";
@@ -19,13 +21,23 @@ import SelectedRecipients from "./SelectedRecipients.jsx";
 import CampaignAudit from "./CampaignAudit.jsx";
 import CampaignRetryReview from "./CampaignRetryReview.jsx";
 import ZoomMailingRecovery from "./ZoomMailingRecovery.jsx";
-import ZoomRegistrations from "./ZoomRegistrations.jsx";
+import CampaignSubmitted from "./CampaignSubmitted.jsx";
+import {
+  ZoomRegistrationList,
+  isZoomRegistrationPage,
+  zoomRegistrationsPath,
+} from "./ZoomRegistrations.jsx";
+import SignerManagement from "./SignerManagement.jsx";
+import FirstSigners from "./FirstSigners.jsx";
+import AdminLog from "./AdminLog.jsx";
+import SessionSettings from "./SessionSettings.jsx";
 import MeetingDeliveryReview from "./MeetingDeliveryReview.jsx";
 import MeetingSettings from "./MeetingSettings.jsx";
 import { useMeetingForm } from "./meeting-form.js";
 import MilestoneSettings from "./MilestoneSettings.jsx";
 import { useMilestoneForm } from "./milestone-form.js";
 import { useAdminRead, AdminReadStatus, readAdminJson } from "./admin-read.jsx";
+import { campaignPhase, nextCampaignPoll } from "./campaign-poll.js";
 import {
   futureCampaignDate,
   useCampaignDraft,
@@ -39,11 +51,24 @@ import {
   readCampaignSubjectExamples,
 } from "./campaign-approval.js";
 import { regionLabels } from "../config/region.js";
-import { adminAreaFromHash, SETTINGS_SECTIONS } from "./admin-navigation.js";
+import { GERMAN_STATES } from "../config/states.js";
+import { SELECTION_LIMIT } from "../config/selection.js";
+import {
+  adminAreaFromHash,
+  adminAreas,
+  adminDocumentTitle,
+  SETTINGS_SECTIONS,
+} from "./admin-navigation.js";
 import { useAdminSession } from "./admin-session.js";
 import { signerDateRange } from "./signer-filters.js";
 import AdminLogin from "./AdminLogin.jsx";
-import { Calendar, ConfirmDialog } from "./ui.jsx";
+import {
+  Breakable,
+  Calendar,
+  ConfirmDialog,
+  EmptyState,
+  Notice,
+} from "./ui.jsx";
 import { format, parse, isValid } from "date-fns";
 import { de } from "react-day-picker/locale";
 
@@ -85,24 +110,6 @@ function zoomMailingStatus(mailings, kind) {
     return "nach mehreren Fehlern angehalten · Versand prüfen";
   return m.status;
 }
-const GERMAN_STATES = [
-  "Baden-Württemberg",
-  "Bayern",
-  "Berlin",
-  "Brandenburg",
-  "Bremen",
-  "Hamburg",
-  "Hessen",
-  "Mecklenburg-Vorpommern",
-  "Niedersachsen",
-  "Nordrhein-Westfalen",
-  "Rheinland-Pfalz",
-  "Saarland",
-  "Sachsen",
-  "Sachsen-Anhalt",
-  "Schleswig-Holstein",
-  "Thüringen",
-];
 
 // Further languages of the letter (features.multiLanguage); empty otherwise,
 // and then the campaign forms look and send exactly as before.
@@ -147,11 +154,31 @@ function CampaignLanguages({ templates, value, onChange }) {
   });
 }
 
+// "3.12.2026" as well as "03.12.2026".
+function parseCampaignDate(raw) {
+  if (!/^\d{1,2}\.\d{1,2}\.\d{4}$/.test(raw.trim())) return null;
+  const parsed = parse(raw.trim(), "d.M.yyyy", new Date());
+  return isValid(parsed) ? parsed : null;
+}
+
+const formatCount = (count) =>
+  count == null ? "–" : count.toLocaleString("de-DE");
+
+const stoppedByAdmin = (campaign) =>
+  campaign.failure?.category === "stopped-by-admin";
+
+// A send that has begun and is not over: running, waiting for its next try,
+// or put back to "scheduled" while the mail service is unavailable.
+const canStopCampaign = (campaign) =>
+  ["sending", "failed"].includes(campaign.status) ||
+  (campaign.status === "scheduled" && campaign.started);
+
 function StatusBadge({ status }) {
   return (
     <span className={`admin-status status-${status}`}>
       {{
         scheduled: "Geplant",
+        due: "Wird gleich gesendet",
         sending: "Wird gesendet",
         sent: "Gesendet",
         failed: "Wird erneut versucht",
@@ -164,16 +191,21 @@ function StatusBadge({ status }) {
 
 export default function AdminApp() {
   const fieldId = useId();
+  const AREAS = adminAreas();
+  const AREA_IDS = AREAS.map((area) => area.id);
+  const ZOOM_ON = Boolean(cfg.features.zoomEvent);
+  const KV_ON = Boolean(cfg.features.kreisverbandField);
   const STATES_ON = Boolean(cfg.features.stateResolution);
   const OCCUPATION_ON = Boolean(cfg.features.occupationField);
+  const occupationLabel = cfg.sign.fields.occupation.label;
+  const functionLabel = cfg.sign.fields.signerFunction?.label;
   const [confirmation, setConfirmation] = useState(null);
   const askConfirmation = (
     message,
-    returnFocus = document.activeElement,
-    confirmLabel,
+    { returnFocus = document.activeElement, ...options } = {},
   ) =>
     new Promise((resolve) =>
-      setConfirmation({ message, resolve, returnFocus, confirmLabel }),
+      setConfirmation({ message, resolve, returnFocus, ...options }),
     );
   const resolveConfirmation = (value) => {
     confirmation?.resolve(value);
@@ -188,14 +220,25 @@ export default function AdminApp() {
     signOut,
   } = useAdminSession();
   const [notice, setNotice] = useState("");
+  const [loggedOutEverywhere, setLoggedOutEverywhere] = useState(false);
   const [bootstrapErrors, setBootstrapErrors] = useState([]);
   const [bootstrapLoading, setBootstrapLoading] = useState(false);
   const [campaignFeedback, setCampaignFeedback] = useState(null);
-  const [tab, setTab] = useState(() => {
-    return adminAreaFromHash(
+  // Bumped when the signer list or the first-signer card changed something
+  // the other one shows.
+  const [signerListVersion, setSignerListVersion] = useState(0);
+  const [firstSignerVersion, setFirstSignerVersion] = useState(0);
+  const [tab, setTab] = useState(() =>
+    adminAreaFromHash(
       typeof window === "undefined" ? "" : window.location.hash,
-    );
-  });
+      AREA_IDS,
+    ),
+  );
+  const currentTab = useRef(tab);
+  const area = AREAS.find((item) => item.id === tab);
+  useEffect(() => {
+    if (token) document.title = adminDocumentTitle(area.title);
+  }, [area.title, token]);
   const focusDestination = useRef(false);
   const destinationHeading = useRef(null);
   useEffect(() => {
@@ -216,16 +259,11 @@ export default function AdminApp() {
     return () => cancelAnimationFrame(frame);
   }, [tab, token]);
   const [emailStatus, setEmailStatus] = useState(null);
+  const deliveryIssues = deliveryProblems(emailStatus);
   const [emailDirty, setEmailDirty] = useState(false);
   const [statisticsDirty, setStatisticsDirty] = useState(false);
   const [templates, setTemplates] = useState([]);
-  const [stats, setStats] = useState({
-    signerCount: 0,
-    subscriberCount: 0,
-    newsletterNotZoomCount: 0,
-    zoomCount: 0,
-    zoomDelegateCount: 0,
-  });
+  const [stats, setStats] = useState(null);
   const newCampaignDraft = () => {
     const date = futureCampaignDate();
     return {
@@ -258,7 +296,8 @@ export default function AdminApp() {
     campaignDraft.field("template");
   const [scheduleSubject, setScheduleSubject] = campaignDraft.field("subject");
   const [scheduleTexts, setScheduleTexts] = campaignDraft.field("texts");
-  const [audience, setAudience] = campaignDraft.field("audience");
+  const [draftAudience, setAudience] = campaignDraft.field("audience");
+  const audience = ZOOM_ON ? draftAudience : "newsletter";
   const [selectedDate, setSelectedDate] = campaignDraft.field("date");
   const [selectedTime, setSelectedTime] = campaignDraft.field("time");
   const [dateInput, setDateInput] = campaignDraft.field("dateInput");
@@ -275,12 +314,11 @@ export default function AdminApp() {
   const [resolving, setResolving] = useState(false);
   const [resolveMessage, setResolveMessage] = useState("");
   const [outlierGroups, setOutlierGroups] = useState([]);
-  const [merging, setMerging] = useState(null);
   const [unresolvedKvs, setUnresolvedKvs] = useState([]);
   const [kvStateSelections, setKvStateSelections] = useState({});
-  const [assigningKv, setAssigningKv] = useState(null);
+  const [mergeBusy, setMergeBusy] = useState(null);
+  const [mergeResult, setMergeResult] = useState(null);
   const [occOutlierGroups, setOccOutlierGroups] = useState([]);
-  const [occMerging, setOccMerging] = useState(null);
   const [selectingAll, setSelectingAll] = useState(false);
   const [selectionFeedback, setSelectionFeedback] = useState("");
   const [campaignAction, setCampaignAction] = useState(null);
@@ -302,35 +340,78 @@ export default function AdminApp() {
           defaultLanguage={DEFAULT_LANG}
           ready={emailStatus?.ready}
         />,
-        returnFocus,
-        "Termin & Versand freigeben",
+        {
+          returnFocus,
+          title: "Termin und Versand prüfen",
+          confirmLabel: "Termin & Versand freigeben",
+        },
       ),
   });
   const milestoneForm = useMilestoneForm(api);
   const zoomDirty = meetingForm.dirty;
   const settingsDirty = emailDirty || statisticsDirty || milestoneForm.dirty;
-  async function navigate(next) {
-    if (next === tab) return;
+  // `fromHistory`: the browser has already moved to `next` (back/forward or a
+  // typed hash); staying put then means putting the current area back.
+  async function navigate(next, { fromHistory = false, hash } = {}) {
+    if (next === currentTab.current || next === pendingTab.current) return;
+    pendingTab.current = next;
+    try {
+      await switchArea(next, fromHistory, hash);
+    } finally {
+      pendingTab.current = null;
+    }
+  }
+  const pendingTab = useRef(null);
+  async function switchArea(next, fromHistory, hash) {
     const dirty =
       (tab === "zoom" && zoomDirty) || (tab === "settings" && settingsDirty);
     if (
       dirty &&
       !(await askConfirmation(
-        "Ungespeicherte Einstellungen verwerfen und den Bereich wechseln?",
-        document
-          .querySelector('button[aria-label="Admin Bereich"]')
-          ?.getClientRects().length
-          ? document.querySelector('button[aria-label="Admin Bereich"]')
-          : document.activeElement,
+        "Deine ungespeicherten Einstellungen gehen verloren, wenn du den Bereich wechselst.",
+        {
+          title: "Änderungen verwerfen?",
+          confirmLabel: "Verwerfen und wechseln",
+          danger: true,
+          returnFocus: document
+            .querySelector('button[aria-label="Admin Bereich"]')
+            ?.getClientRects().length
+            ? document.querySelector('button[aria-label="Admin Bereich"]')
+            : document.activeElement,
+        },
       ))
-    )
+    ) {
+      if (fromHistory) window.history.pushState(null, "", `#${tab}`);
       return;
+    }
     if (tab === "zoom") meetingForm.reset();
     if (tab === "settings") milestoneForm.reset();
     focusDestination.current = true;
+    currentTab.current = next;
     setTab(next);
-    window.history.replaceState(window.history.state, "", `#${next}`);
+    if (!fromHistory) window.history.pushState(null, "", `#${hash || next}`);
   }
+  function openEmailSettings() {
+    const heading = document.getElementById("settings-email-heading");
+    if (currentTab.current === "settings" && heading) {
+      heading.scrollIntoView({ block: "start" });
+      heading.focus({ preventScroll: true });
+    } else navigate("settings", { hash: "settings-email-heading" });
+  }
+  const navigateRef = useRef(navigate);
+  navigateRef.current = navigate;
+  useEffect(() => {
+    const follow = () =>
+      navigateRef.current(adminAreaFromHash(window.location.hash, AREA_IDS), {
+        fromHistory: true,
+      });
+    window.addEventListener("popstate", follow);
+    window.addEventListener("hashchange", follow);
+    return () => {
+      window.removeEventListener("popstate", follow);
+      window.removeEventListener("hashchange", follow);
+    };
+  }, []);
   useEffect(() => {
     const guard = (e) => {
       if (
@@ -347,7 +428,7 @@ export default function AdminApp() {
     return () => window.removeEventListener("beforeunload", guard);
   }, [zoomDirty, settingsDirty, campaignDraft.error, selectionDraft.error]);
 
-  // Unterzeichner (newsletter signer list) tab
+  // "Empfänger auswählen": newsletter recipients picked by hand
   const SIGNER_PAGE_SIZE = 25;
   const [signerRows, setSignerRows] = useState([]);
   const [signerTotal, setSignerTotal] = useState(0);
@@ -412,35 +493,62 @@ export default function AdminApp() {
 
   function handleSelDateInput(e) {
     setSelectionScheduleError("");
-    const raw = e.target.value;
-    setSelDateInput(raw);
-    const parsed = parse(raw, "dd.MM.yyyy", new Date());
-    setSelDate(raw.length === 10 && isValid(parsed) ? parsed : null);
+    setSelDateInput(e.target.value);
+    setSelDate(parseCampaignDate(e.target.value));
   }
 
   function handleDateInput(e) {
     setScheduleError("");
-    const raw = e.target.value;
-    setDateInput(raw);
-    const parsed = parse(raw, "dd.MM.yyyy", new Date());
-    setSelectedDate(raw.length === 10 && isValid(parsed) ? parsed : null);
+    setDateInput(e.target.value);
+    setSelectedDate(parseCampaignDate(e.target.value));
   }
 
   const campaignRead = useAdminRead(
     api,
     "/api/admin/campaigns",
-    Boolean(token) && tab === "campaigns",
+    Boolean(token) && (tab === "campaigns" || tab === "overview"),
     Array.isArray,
   );
   const campaigns = campaignRead.data || [];
+  // The history re-reads itself while a send is due or running, and wakes up
+  // when the next one falls due. Every read starts the wait again from what
+  // it got back, so a timer that fires a moment early only adds a read.
+  // Quietly, so buttons in the history are not disabled every few seconds;
+  // one request at a time, and none applied after the area is left.
+  useEffect(() => {
+    if (!["campaigns", "overview"].includes(tab)) return;
+    let stopped = false;
+    let timer;
+    const schedule = (list) => {
+      const delay = nextCampaignPoll(list);
+      if (delay !== null) timer = setTimeout(refresh, delay);
+    };
+    const refresh = async () => {
+      let next = null;
+      try {
+        next = await readAdminJson(api, "/api/admin/campaigns");
+      } catch {}
+      if (stopped) return;
+      // A new list renders and restarts this effect; a failed read retries.
+      if (Array.isArray(next)) campaignRead.setData(next);
+      else schedule(campaignRead.data || []);
+    };
+    schedule(campaignRead.data || []);
+    return () => {
+      stopped = true;
+      clearTimeout(timer);
+    };
+  }, [api, tab, campaignRead.data, campaignRead.setData]);
+  const [zoomPage, setZoomPage] = useState(0);
+  const [zoomSearch, setZoomSearch] = useState("");
+  const [zoomClears, setZoomClears] = useState(0);
   const zoomRegistrationRead = useAdminRead(
     api,
-    "/api/admin/zoom-registrations",
+    zoomRegistrationsPath(zoomPage, zoomSearch),
     Boolean(token) && tab === "zoom",
-    Array.isArray,
+    isZoomRegistrationPage,
   );
-  const zoomRegs = zoomRegistrationRead.data || [];
-  const setZoomRegs = zoomRegistrationRead.setData;
+  const zoomTotal = zoomRegistrationRead.data?.total ?? 0;
   const zoomMailings = meetingForm.read.data;
   const zoomShowDelegierter = Boolean(zoomMailings?.showDelegierter);
 
@@ -456,15 +564,23 @@ export default function AdminApp() {
         (data) => setTemplates(data.filter(isCampaignTemplate)),
       ],
       ["Empfängerzahlen", "/api/admin/stats", setStats],
+      ...(KV_ON
+        ? [
+            [
+              "Zuordnungsstatus",
+              "/api/admin/state-resolution-status",
+              setStateResolution,
+            ],
+            ["Regionskorrekturen", "/api/admin/kv-outliers", setOutlierGroups],
+            [
+              "Offene Zuordnungen",
+              "/api/admin/unresolved-kvs",
+              setUnresolvedKvs,
+            ],
+          ]
+        : []),
       [
-        "Zuordnungsstatus",
-        "/api/admin/state-resolution-status",
-        setStateResolution,
-      ],
-      ["Regionskorrekturen", "/api/admin/kv-outliers", setOutlierGroups],
-      ["Offene Zuordnungen", "/api/admin/unresolved-kvs", setUnresolvedKvs],
-      [
-        "Tätigkeitskorrekturen",
+        "Schreibweisen der Angaben",
         "/api/admin/occupation-outliers",
         setOccOutlierGroups,
       ],
@@ -543,7 +659,7 @@ export default function AdminApp() {
         });
         if (!res.ok)
           throw new Error(
-            "Unterzeichner konnten nicht geladen werden. Deine Auswahl bleibt erhalten.",
+            "Die Newsletter-Empfänger konnten nicht geladen werden. Deine Auswahl bleibt erhalten.",
           );
         const data = await res.json();
         if (
@@ -552,7 +668,7 @@ export default function AdminApp() {
           data.total < 0
         )
           throw new Error(
-            "Die Unterzeichner konnten nicht geladen werden. Lade die Liste erneut.",
+            "Die Newsletter-Empfänger konnten nicht geladen werden. Lade die Liste erneut.",
           );
         if (current) {
           setSignerRows(data.signers || []);
@@ -590,7 +706,7 @@ export default function AdminApp() {
       .then(setSignerFilterOpts)
       .catch(() =>
         setNotice(
-          "Die Filter konnten nicht geladen werden. Öffne den Bereich Unterzeichner erneut.",
+          "Die Filter konnten nicht geladen werden. Öffne den Bereich Empfänger auswählen erneut.",
         ),
       );
   }, [api, tab, token]);
@@ -686,16 +802,18 @@ export default function AdminApp() {
           );
           return askConfirmation(
             deliverySummary(immediate ? null : scheduledAt, selection, checked),
-            returnFocus,
-            immediate ? "Jetzt senden" : "Versand einplanen",
+            {
+              returnFocus,
+              title: immediate ? "Jetzt senden?" : "Versand einplanen?",
+              confirmLabel: immediate ? "Jetzt senden" : "Versand einplanen",
+            },
           );
         },
       );
       if (!campaign) return;
+      if (selection) setSelSendStatus(null);
+      else setCampaignFeedback(null);
       await reloadCampaigns();
-      const message = `Kampagne #${campaign.id}: ${campaign.status === "cancelled" ? "bereits abgesagt" : campaign.status === "sent" ? "bereits gesendet" : immediate ? "Versand beauftragt" : "Versand eingeplant"}. ${campaign.replayed ? "Dieser Auftrag existiert bereits. Es wurde keine zweite Kampagne erstellt. " : ""}Setze den Entwurf zurück oder ändere die Nachricht, um einen neuen Auftrag zu erstellen.`;
-      if (selection) setSelSendStatus({ success: true, message });
-      else setCampaignFeedback({ success: true, message });
     } catch (error) {
       if (selection)
         setSelSendStatus({ success: false, message: error.message });
@@ -750,8 +868,10 @@ export default function AdminApp() {
     }
   }
 
-  async function campaignActionRequest(id, retry = false) {
+  async function campaignActionRequest(id, action = "cancel") {
     if (campaignAction !== null) return;
+    const retry = action === "retry";
+    const stop = action === "stop";
     const returnFocus = document.activeElement;
     let showFeedback = false;
     let requested = false;
@@ -771,8 +891,11 @@ export default function AdminApp() {
               review={review}
               paused={!emailStatus?.ready}
             />,
-            returnFocus,
-            "Erneuten Versand freigeben",
+            {
+              returnFocus,
+              title: "Erneut senden?",
+              confirmLabel: "Erneuten Versand freigeben",
+            },
           ))
         )
           return;
@@ -782,10 +905,42 @@ export default function AdminApp() {
           throw new Error(
             "Die Kampagne fehlt im geladenen Verlauf. Lade den Verlauf erneut.",
           );
-        if (
+        if (stop) {
+          const sent = campaign.sent_offset ?? 0;
+          if (
+            !(await askConfirmation(
+              <span className="campaign-summary">
+                <span>
+                  Kampagne #{campaign.id} · {campaign.subject}
+                </span>
+                <span>
+                  {campaign.audience_size
+                    ? `${formatCount(sent)} von ${formatCount(campaign.audience_size)}`
+                    : formatCount(sent)}{" "}
+                  {sent === 1 && !campaign.audience_size
+                    ? "Nachricht ist"
+                    : "Nachrichten sind"}{" "}
+                  bereits gesendet und lassen sich nicht zurückholen. Eine
+                  Nachricht, die in diesem Moment rausgeht, kommt noch an.
+                </span>
+                <span>
+                  Alle anderen bekommen vorerst nichts. Mit „Erneut versuchen“
+                  setzt du den Versand später fort. Niemand bekommt die
+                  Nachricht doppelt.
+                </span>
+              </span>,
+              {
+                returnFocus,
+                title: "Versand stoppen?",
+                confirmLabel: "Versand stoppen",
+                danger: true,
+              },
+            ))
+          )
+            return;
+        } else if (
           !(await askConfirmation(
             <span className="campaign-summary">
-              <strong>Geplanten Versand absagen?</strong>
               <span>
                 Kampagne #{campaign.id} · {campaign.subject}
               </span>
@@ -802,28 +957,38 @@ export default function AdminApp() {
                 neue Kampagne einplanen.
               </span>
             </span>,
-            returnFocus,
-            "Versand absagen",
+            {
+              returnFocus,
+              title: "Geplanten Versand absagen?",
+              confirmLabel: "Versand absagen",
+              danger: true,
+            },
           ))
         )
           return;
       }
       requested = true;
       const res = await api(
-        `/api/admin/campaigns/${id}${retry ? "/retry" : ""}`,
-        { method: retry ? "POST" : "DELETE" },
+        `/api/admin/campaigns/${id}${retry ? "/retry" : stop ? "/stop" : ""}`,
+        { method: retry || stop ? "POST" : "DELETE" },
       );
+      const data = await res.json().catch(() => ({}));
       if (!res.ok) {
-        const data = await res.json().catch(() => ({}));
         throw new Error(
           data.error ||
             (retry
               ? "Der Versand konnte nicht erneut gestartet werden."
-              : "Der Versand konnte nicht abgesagt werden."),
+              : stop
+                ? "Der Versand konnte nicht gestoppt werden."
+                : "Der Versand konnte nicht abgesagt werden."),
         );
       }
       setCampaignActionFeedback(
-        retry ? "Erneuter Versandversuch eingeplant." : "Kampagne abgesagt.",
+        retry
+          ? "Erneuter Versandversuch eingeplant."
+          : stop
+            ? `Versand gestoppt. ${formatCount(data.reached)} ${data.reached === 1 ? "Nachricht war" : "Nachrichten waren"} bereits gesendet.`
+            : "Kampagne abgesagt.",
       );
       showFeedback = true;
       await reloadCampaigns();
@@ -847,7 +1012,8 @@ export default function AdminApp() {
     }
   }
   const cancel = (id) => campaignActionRequest(id);
-  const retryCampaign = (id) => campaignActionRequest(id, true);
+  const retryCampaign = (id) => campaignActionRequest(id, "retry");
+  const stopCampaign = (id) => campaignActionRequest(id, "stop");
 
   function toggleSigner(id) {
     setSelectedSignerIds((prev) => {
@@ -879,9 +1045,19 @@ export default function AdminApp() {
         `/api/admin/newsletter-signer-ids?${signerQuery()}`,
       );
       if (!Array.isArray(data.ids)) throw new Error("Ungültige Auswahl");
-      setSelectedSignerIds((previous) => new Set([...previous, ...data.ids]));
+      // The server sends the newest matches up to the limit; what is already
+      // selected takes up room as well.
+      const fresh = data.ids.filter((id) => !selectedSignerIds.has(id));
+      const added = fresh.slice(
+        0,
+        Math.max(0, SELECTION_LIMIT - selectedSignerIds.size),
+      );
+      setSelectedSignerIds((previous) => new Set([...previous, ...added]));
+      const count = (n) => n.toLocaleString("de-DE");
       setSelectionFeedback(
-        `${data.ids.length.toLocaleString("de-DE")} passende Empfänger zur Auswahl hinzugefügt.`,
+        data.truncated || added.length < fresh.length
+          ? `Nicht alle ${count(data.total ?? data.ids.length)} passenden Empfänger haben Platz: Eine Auswahl fasst höchstens ${count(SELECTION_LIMIT)}. Hinzugefügt wurden die neuesten ${count(added.length)}. Grenze die Treffer mit den Filtern ein oder sende an alle Newsletter-Empfänger.`
+          : `${count(data.ids.length)} passende Empfänger zur Auswahl hinzugefügt.`,
       );
     } catch {
       setSelectionFeedback(
@@ -947,8 +1123,13 @@ export default function AdminApp() {
   async function clearZoomRegs() {
     if (
       !(await askConfirmation(
-        `Alle ${zoomRegs.length} Zoom-Anmeldungen endgültig löschen? ` +
+        `Alle ${zoomTotal} Zoom-Anmeldungen werden endgültig gelöscht. ` +
           "Die gelöschten Anmeldungen lassen sich nicht wiederherstellen.",
+        {
+          title: "Alle Zoom-Anmeldungen löschen?",
+          confirmLabel: "Endgültig löschen",
+          danger: true,
+        },
       ))
     )
       return;
@@ -959,7 +1140,15 @@ export default function AdminApp() {
       });
       if (res.ok) {
         const data = await res.json().catch(() => ({}));
-        setZoomRegs([]);
+        setZoomPage(0);
+        setZoomSearch("");
+        setZoomClears((count) => count + 1);
+        zoomRegistrationRead.setData({
+          registrations: [],
+          total: 0,
+          delegates: 0,
+          matches: 0,
+        });
         setZoomClearStatus(`ok:${data.removed ?? 0}`);
       } else {
         const data = await res.json().catch(() => ({}));
@@ -988,13 +1177,22 @@ export default function AdminApp() {
     if (
       !(await askConfirmation(
         unsaved.length
-          ? `Abmelden und ungespeicherte Einstellungen verwerfen? Deine Änderungen an ${unsaved.join(", ")} gehen dabei verloren.`
-          : "Abmelden?",
-        document.activeElement,
-        unsaved.length ? "Abmelden & verwerfen" : "Abmelden",
+          ? `Deine Änderungen an ${unsaved.join(", ")} gehen beim Abmelden verloren.`
+          : "Du wirst in diesem Browser abgemeldet.",
+        unsaved.length
+          ? {
+              title: "Abmelden und Änderungen verwerfen?",
+              confirmLabel: "Abmelden & verwerfen",
+              danger: true,
+            }
+          : { title: "Abmelden?", confirmLabel: "Abmelden" },
       ))
     )
       return;
+    endSessionHere();
+  }
+
+  function endSessionHere() {
     bootstrapRequest.current++;
     meetingForm.endSession();
     milestoneForm.endSession();
@@ -1003,8 +1201,9 @@ export default function AdminApp() {
     signOut();
   }
 
-  const audienceCount =
-    audience === "zoom"
+  const audienceCount = !stats
+    ? null
+    : audience === "zoom"
       ? stats.zoomCount
       : audience === "zoom_delegates"
         ? stats.zoomDelegateCount
@@ -1073,14 +1272,8 @@ export default function AdminApp() {
           setzt die Vorlage die Angaben der Person und die aktuellen Zahlen ein.
         </small>
         <small>
-          Die Empfängergruppe wird beim Versand erneut ermittelt. Die
-          Sprachzahlen können sich bis dahin ändern, etwa durch Abmeldungen.
-        </small>
-        <small>
-          Der Versand verwendet die dann veröffentlichte Vorlage. Änderungen an
-          der Vorlage gelten auch für bereits geplante Nachrichten. Selbst
-          geschriebene Betreffzeilen bleiben erhalten. Betreffzeilen aus
-          Vorlagen können sich ändern.
+          Beim Versand zählen der dann aktuelle Empfängerkreis und die dann
+          veröffentlichte Vorlage.
         </small>
         {selection && (
           <span>
@@ -1104,10 +1297,19 @@ export default function AdminApp() {
   async function resetCampaignDraft(selection = false) {
     if (
       !(await askConfirmation(
-        `Den Nachrichtenentwurf mit allen Sprachvarianten und dem Termin zurücksetzen?${selection ? " Die ausgewählten Empfänger bleiben erhalten." : ""}`,
+        `Der Nachrichtenentwurf mit allen Sprachvarianten und dem Termin wird gelöscht.${selection ? " Die ausgewählten Empfänger bleiben erhalten." : ""}`,
+        {
+          title: "Entwurf zurücksetzen?",
+          confirmLabel: "Zurücksetzen",
+          danger: true,
+        },
       ))
     )
       return;
+    newCampaignMessage(selection);
+  }
+
+  function newCampaignMessage(selection = false) {
     (selection ? selectionDraft : campaignDraft).reset(
       selection ? { recipientIds: [...selectedSignerIds] } : {},
     );
@@ -1118,145 +1320,418 @@ export default function AdminApp() {
     else setScheduleError("");
   }
 
-  if (!token) {
-    return <AdminLogin onLogin={signIn} />;
+  const signatures = (n) =>
+    `${n.toLocaleString("de-DE")} ${n === 1 ? "Unterschrift" : "Unterschriften"}`;
+  const unconfirmed = (error, fallback) =>
+    error instanceof TypeError
+      ? "Der Server hat die Aktion nicht bestätigt. Lade den aktuellen Stand, bevor du es erneut versuchst."
+      : error.message || fallback;
+
+  async function refreshStateResolution() {
+    if (!KV_ON || !STATES_ON) return;
+    try {
+      setStateResolution(
+        await readAdminJson(api, "/api/admin/state-resolution-status"),
+      );
+    } catch {}
   }
 
-  return (
-    <main className="admin-shell">
-      <header className="topbar admin-topbar">
-        <div className="wordmark">
-          <span className="dot" />
-          Verwaltung
+  // Merges and Land assignments change many signatures at once: they ask
+  // first, name the count, and offer to take the change back (undoId).
+  async function runMerge({ card, busyKey, path, body, question, applied }) {
+    if (mergeBusy) return;
+    if (
+      !(await askConfirmation(question.message, {
+        title: question.title,
+        confirmLabel: question.confirmLabel,
+      }))
+    )
+      return;
+    setMergeBusy(busyKey);
+    setMergeResult(null);
+    try {
+      const res = await api(path, {
+        method: "POST",
+        body: JSON.stringify(body),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok)
+        throw new Error(
+          data.error ||
+            "Die Änderung wurde abgelehnt. Lade den aktuellen Stand und versuche es erneut.",
+        );
+      applied();
+      setMergeResult({
+        card,
+        message: question.done(data.updated ?? 0),
+        undoId: data.undoId,
+      });
+      refreshStateResolution();
+    } catch (error) {
+      setMergeResult({
+        card,
+        error: true,
+        message: unconfirmed(error, "Die Änderung ist fehlgeschlagen."),
+      });
+    } finally {
+      setMergeBusy(null);
+    }
+  }
+
+  async function undoMerge() {
+    const { card, undoId } = mergeResult;
+    setMergeBusy("undo");
+    try {
+      const res = await api(`/api/admin/merges/${undoId}/undo`, {
+        method: "POST",
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok)
+        throw new Error(
+          data.error || "Die Änderung ließ sich nicht zurücknehmen.",
+        );
+      setMergeResult({
+        card,
+        message: `Zurückgenommen. ${signatures(data.restored ?? 0)} haben wieder ihre frühere Angabe.`,
+      });
+      await loadAll();
+    } catch (error) {
+      setMergeResult({
+        card,
+        undoId,
+        error: true,
+        message: unconfirmed(error, "Die Rücknahme ist fehlgeschlagen."),
+      });
+    } finally {
+      setMergeBusy(null);
+    }
+  }
+
+  function mergeFeedback(card) {
+    if (mergeResult?.card !== card) return null;
+    return (
+      <Notice
+        tone={mergeResult.error ? "error" : "success"}
+        onDismiss={() => setMergeResult(null)}
+        action={
+          mergeResult.undoId && (
+            <Button
+              type="button"
+              className="admin-button admin-button--small"
+              disabled={Boolean(mergeBusy)}
+              onClick={undoMerge}
+            >
+              {mergeBusy === "undo" ? "Wird zurückgenommen…" : "Rückgängig"}
+            </Button>
+          )
+        }
+      >
+        {mergeResult.message}
+      </Notice>
+    );
+  }
+
+  function assignState(kv) {
+    const state = kvStateSelections[kv.kreisverband];
+    return runMerge({
+      card: "state",
+      busyKey: kv.kreisverband,
+      path: "/api/admin/assign-kv-state",
+      body: { kreisverband: kv.kreisverband, state },
+      question: {
+        title: "Bundesland zuordnen?",
+        message: `${signatures(kv.count)} aus „${kv.kreisverband}“ bekommen das Bundesland ${state}. Du kannst das danach rückgängig machen.`,
+        confirmLabel: "Zuordnen",
+        done: (n) =>
+          `${signatures(n)} aus „${kv.kreisverband}“ haben jetzt das Bundesland ${state}.`,
+      },
+      applied: () => {
+        setUnresolvedKvs((prev) =>
+          prev.filter((u) => u.kreisverband !== kv.kreisverband),
+        );
+        setKvStateSelections((prev) => {
+          const next = { ...prev };
+          delete next[kv.kreisverband];
+          return next;
+        });
+      },
+    });
+  }
+
+  function outlierCard({
+    key,
+    title,
+    groups,
+    setGroups,
+    mergePath,
+    dismissPath,
+  }) {
+    if (groups.length === 0 && mergeResult?.card !== key) return null;
+    const settle = (group, outlier, canonical = group.canonical) =>
+      setGroups((prev) =>
+        prev
+          .map((g) =>
+            g.canonical.name === group.canonical.name
+              ? {
+                  ...g,
+                  canonical,
+                  outliers: g.outliers.filter((o) => o.name !== outlier.name),
+                }
+              : g,
+          )
+          .filter((g) => g.outliers.length > 0),
+      );
+    const merge = (group, outlier, from, to) =>
+      runMerge({
+        card: key,
+        busyKey: outlier.name,
+        path: mergePath,
+        body: { from: from.name, to: to.name },
+        question: {
+          title: "Schreibweisen zusammenführen?",
+          message: `${signatures(from.count)} mit „${from.name}“ bekommen „${to.name}“. Du kannst das danach rückgängig machen.`,
+          confirmLabel: "Zusammenführen",
+          done: (n) =>
+            `${signatures(n)} von „${from.name}“ auf „${to.name}“ geändert.`,
+        },
+        applied: () =>
+          settle(group, outlier, {
+            name: to.name,
+            count: group.canonical.count + outlier.count,
+          }),
+      });
+    async function keep(group, outlier) {
+      setMergeBusy(outlier.name);
+      try {
+        const res = await api(dismissPath, {
+          method: "POST",
+          body: JSON.stringify({
+            canonical: group.canonical.name,
+            outlier: outlier.name,
+          }),
+        });
+        const data = await res.json().catch(() => ({}));
+        if (!res.ok)
+          throw new Error(
+            data.error || "Die Schreibweise wurde nicht gespeichert.",
+          );
+        settle(group, outlier);
+      } catch (error) {
+        setMergeResult({
+          card: key,
+          error: true,
+          message: unconfirmed(
+            error,
+            "Die Schreibweise wurde nicht gespeichert.",
+          ),
+        });
+      } finally {
+        setMergeBusy(null);
+      }
+    }
+    return (
+      <div className="admin-card admin-card--wide">
+        <h2 className="admin-card-title">
+          {title} ({groups.reduce((n, g) => n + g.outliers.length, 0)})
+        </h2>
+        {mergeFeedback(key)}
+        <div className="outlier-groups">
+          {groups.map((group) => (
+            <div className="outlier-group" key={group.canonical.name}>
+              <div className="outlier-canonical">
+                <strong>{group.canonical.name}</strong>
+                <span className="admin-muted"> ({group.canonical.count})</span>
+              </div>
+              {group.outliers.map((outlier) => (
+                <div className="outlier-row" key={outlier.name}>
+                  <span className="outlier-name">
+                    {outlier.name}
+                    <span className="admin-muted"> ({outlier.count})</span>
+                  </span>
+                  <span className="outlier-actions">
+                    <Button
+                      type="button"
+                      className="admin-button admin-button--small"
+                      disabled={Boolean(mergeBusy)}
+                      onClick={() =>
+                        merge(group, outlier, outlier, group.canonical)
+                      }
+                    >
+                      <span>
+                        {mergeBusy === outlier.name
+                          ? "…"
+                          : `→ ${group.canonical.name}`}
+                      </span>
+                    </Button>
+                    <Button
+                      type="button"
+                      className="admin-button admin-button--small"
+                      disabled={Boolean(mergeBusy)}
+                      onClick={() =>
+                        merge(group, outlier, group.canonical, outlier)
+                      }
+                    >
+                      <span>
+                        {mergeBusy === outlier.name ? "…" : `→ ${outlier.name}`}
+                      </span>
+                    </Button>
+                    <Button
+                      type="button"
+                      className="admin-button admin-button--quiet admin-button--small"
+                      disabled={Boolean(mergeBusy)}
+                      onClick={() => keep(group, outlier)}
+                    >
+                      Schreibweise beibehalten
+                    </Button>
+                  </span>
+                </div>
+              ))}
+            </div>
+          ))}
         </div>
+      </div>
+    );
+  }
+
+  if (!token) {
+    return (
+      <AdminLogin
+        notice={
+          loggedOutEverywhere &&
+          "Alle Anmeldungen wurden beendet. Melde dich neu an."
+        }
+        onLogin={(newToken) => {
+          setLoggedOutEverywhere(false);
+          signIn(newToken);
+        }}
+      />
+    );
+  }
+
+  const noTemplateNotice = (
+    <Notice
+      tone="info"
+      title="Noch keine Newsletter-Vorlage"
+      action={
+        <Button
+          type="button"
+          className="admin-button admin-button--small"
+          onClick={() => navigate("templates")}
+        >
+          Vorlage anlegen
+        </Button>
+      }
+    >
+      Eine Nachricht braucht eine Newsletter-Vorlage. Lege unter Vorlagen eine
+      an und veröffentliche sie. Danach kannst du sie hier wählen.
+    </Notice>
+  );
+
+  return (
+    <main className="admin-shell" id="admin-content">
+      <a
+        className="admin-skip-link"
+        href="#admin-content"
+        onClick={(event) => {
+          event.preventDefault();
+          destinationHeading.current?.focus();
+        }}
+      >
+        Zum Inhalt springen
+      </a>
+      <header className="admin-topbar">
+        <div className="admin-wordmark">Verwaltung</div>
         <div className="admin-mobile-section">
           <Choice
             label="Admin Bereich"
             value={tab}
             onChange={navigate}
-            options={[
-              ["copy", "Website"],
-              ["templates", "Vorlagen"],
-              ["campaigns", "Versand"],
-              ["signers", "Unterzeichner"],
-              ["zoom", "Zoom"],
-              ["settings", "Einstellungen"],
-            ]}
+            options={AREAS.map(({ id, label }) => [
+              id,
+              id === "settings" && deliveryIssues.length
+                ? `${label} (${deliveryIssues.length})`
+                : label,
+            ])}
           />
         </div>
         <nav aria-label="Admin Bereiche">
-          <Button
-            className={tab === "copy" ? "active" : ""}
-            aria-current={tab === "copy" ? "page" : undefined}
-            onClick={() => navigate("copy")}
-          >
-            Website
-          </Button>
-          <Button
-            className={tab === "templates" ? "active" : ""}
-            aria-current={tab === "templates" ? "page" : undefined}
-            onClick={() => navigate("templates")}
-          >
-            Vorlagen
-          </Button>
-          <Button
-            className={tab === "campaigns" ? "active" : ""}
-            aria-current={tab === "campaigns" ? "page" : undefined}
-            onClick={() => navigate("campaigns")}
-          >
-            Versand
-          </Button>
-          <Button
-            className={tab === "signers" ? "active" : ""}
-            aria-current={tab === "signers" ? "page" : undefined}
-            onClick={() => navigate("signers")}
-          >
-            Unterzeichner
-          </Button>
-          <Button
-            className={tab === "zoom" ? "active" : ""}
-            aria-current={tab === "zoom" ? "page" : undefined}
-            onClick={() => navigate("zoom")}
-          >
-            Zoom
-          </Button>
-          <Button
-            className={tab === "settings" ? "active" : ""}
-            aria-current={tab === "settings" ? "page" : undefined}
-            onClick={() => navigate("settings")}
-          >
-            Einstellungen
-          </Button>
+          {AREAS.map(({ id, label }) => (
+            <Button
+              key={id}
+              className={tab === id ? "active" : ""}
+              aria-current={tab === id ? "page" : undefined}
+              onClick={() => navigate(id)}
+            >
+              {label}
+              {id === "settings" && deliveryIssues.length > 0 && (
+                <span className="admin-nav-count">
+                  {deliveryIssues.length}
+                  <span className="sr-only">
+                    {deliveryIssues.length === 1
+                      ? " Zustellproblem"
+                      : " Zustellprobleme"}
+                  </span>
+                </span>
+              )}
+            </Button>
+          ))}
         </nav>
+        <Button
+          type="button"
+          className="admin-button admin-button--quiet admin-button--small admin-logout"
+          onClick={logout}
+        >
+          Abmelden
+        </Button>
       </header>
       <h1 className="sr-only" tabIndex={-1} ref={destinationHeading}>
-        {
-          {
-            copy: "Website bearbeiten",
-            templates: "E-Mail-Vorlagen",
-            campaigns: "Versand",
-            signers: "Unterzeichner",
-            zoom: "Zoom-Termin",
-            settings: "Einstellungen",
-          }[tab]
-        }
+        {area.title}
       </h1>
       {bootstrapErrors.length > 0 && (
-        <div className="admin-notice" role="alert">
+        <Notice
+          tone="error"
+          className="admin-notice--page"
+          action={
+            <Button
+              className="admin-button admin-button--small"
+              disabled={bootstrapLoading}
+              onClick={loadAll}
+            >
+              {bootstrapLoading ? "Wird geladen…" : "Erneut laden"}
+            </Button>
+          }
+        >
           Verwaltungsdaten konnten nicht geladen werden:{" "}
           {bootstrapErrors.join(", ")}. Bereits geladene Angaben können veraltet
           sein.
-          <Button disabled={bootstrapLoading} onClick={loadAll}>
-            {bootstrapLoading ? "Wird geladen…" : "Erneut laden"}
-          </Button>
-        </div>
+        </Notice>
       )}
       {notice && (
-        <p className="admin-notice" role="status">
+        <Notice className="admin-notice--page" onDismiss={() => setNotice("")}>
           {notice}
-          <Button
-            type="button"
-            aria-label="Hinweis schließen"
-            onClick={() => setNotice("")}
-          >
-            ×
-          </Button>
-        </p>
+        </Notice>
       )}
-      {["campaigns", "signers", "zoom"].includes(tab) &&
-        emailStatus &&
-        !emailStatus.ready && (
-          <Collapsible.Root className="admin-delivery-warning">
-            <div className="admin-delivery-summary">
-              <strong role="status">
-                {emailStatus.unavailable
-                  ? "Versandstatus nicht verfügbar"
-                  : "E-Mail-Versand pausiert"}
-              </strong>
-              <Button
-                type="button"
-                onClick={() => navigate("settings")}
-                aria-label={
-                  emailStatus.unavailable
-                    ? "E-Mail-Versandstatus prüfen"
-                    : "E-Mail-Versand einrichten"
-                }
-              >
-                {emailStatus.unavailable ? "Prüfen" : "Einrichten"}
-              </Button>
-            </div>
-            <Collapsible.Trigger className="admin-delivery-details">
-              Details zum Versand ▾
-            </Collapsible.Trigger>
-            <Collapsible.Panel>
-              <p>
-                {emailStatus.unavailable
-                  ? "Der Versandstatus konnte nicht geladen werden. Prüfe ihn in den E-Mail-Einstellungen. Deine Eingaben und geplanten Nachrichten bleiben erhalten."
-                  : "Der Versand wartet auf ein geprüftes Versandprofil. Richte es in den E-Mail-Einstellungen ein. Erst danach kannst du Tests oder Nachrichten senden. Abgelaufene Links werden nicht gesendet."}
-              </p>
-            </Collapsible.Panel>
-          </Collapsible.Root>
-        )}
+      <DeliveryBanner
+        issues={deliveryIssues}
+        status={emailStatus}
+        onOpen={openEmailSettings}
+      />
+
+      {tab === "overview" && (
+        <section className="section">
+          <div className="section-inner">
+            <AdminOverview
+              api={api}
+              stats={stats}
+              emailStatus={emailStatus}
+              deliveryIssues={deliveryIssues}
+              campaignRead={campaignRead}
+              navigate={navigate}
+              openEmailSettings={openEmailSettings}
+            />
+          </div>
+        </section>
+      )}
 
       <div hidden={tab !== "copy" && tab !== "templates"}>
         <AdminPublisher api={api} workspace={tab} />
@@ -1275,18 +1750,17 @@ export default function AdminApp() {
                 <p className="admin-muted">
                   Dein Nachrichtenentwurf bleibt beim Neuladen erhalten.
                 </p>
-                <p className="admin-muted">
-                  Der Versand verwendet die dann veröffentlichte Vorlage.
-                  Änderungen an Vorlagen gelten auch für bereits geplante
-                  Nachrichten.
-                </p>
+                {templates.length === 0 && noTemplateNotice}
                 {campaignDraft.error && (
-                  <p role="alert">{campaignDraft.error}</p>
+                  <Notice tone="error">{campaignDraft.error}</Notice>
                 )}
                 <Button
-                  className="admin-button"
+                  className="admin-button admin-button--small"
                   type="button"
-                  disabled={campaignSubmission.pending}
+                  disabled={
+                    campaignSubmission.pending ||
+                    Boolean(campaignSubmission.submitted)
+                  }
                   onClick={() => resetCampaignDraft()}
                 >
                   Entwurf zurücksetzen
@@ -1300,7 +1774,10 @@ export default function AdminApp() {
                   subject={scheduleSubject}
                   onTemplateChange={setScheduleTemplate}
                   onSubjectChange={setScheduleSubject}
-                  disabled={campaignSubmission.pending}
+                  disabled={
+                    campaignSubmission.pending ||
+                    Boolean(campaignSubmission.submitted)
+                  }
                 />
                 <CampaignLanguages
                   templates={templates}
@@ -1318,11 +1795,15 @@ export default function AdminApp() {
                     onChange={(e) => setAudience(e.target.value)}
                   >
                     <option value="newsletter">Newsletter-Empfänger</option>
-                    <option value="email_not_zoom">
-                      Newsletter-Empfänger ohne Zoom-Anmeldung
-                    </option>
-                    <option value="zoom">Alle Zoom-Anmeldungen</option>
-                    {zoomShowDelegierter && (
+                    {ZOOM_ON && (
+                      <option value="email_not_zoom">
+                        Newsletter-Empfänger ohne Zoom-Anmeldung
+                      </option>
+                    )}
+                    {ZOOM_ON && (
+                      <option value="zoom">Alle Zoom-Anmeldungen</option>
+                    )}
+                    {ZOOM_ON && zoomShowDelegierter && (
                       <option value="zoom_delegates">
                         Delegierte mit Zoom-Anmeldung
                       </option>
@@ -1348,7 +1829,7 @@ export default function AdminApp() {
                         onBlur={() => {
                           if (dateInput && !selectedDate)
                             setScheduleError(
-                              "Gib ein gültiges Datum als TT.MM.JJJJ ein.",
+                              "Gib ein gültiges Datum ein, z. B. 3.12.2026.",
                             );
                         }}
                         placeholder="TT.MM.JJJJ"
@@ -1360,7 +1841,7 @@ export default function AdminApp() {
                       <Input
                         id={`${fieldId}-8`}
                         type="text"
-                        pattern="([01][0-9]|2[0-3]):[0-5][0-9]"
+                        pattern="([01]?[0-9]|2[0-3]):[0-5][0-9]"
                         placeholder="HH:MM"
                         title="Uhrzeit im 24-Stunden-Format, z. B. 18:30"
                         maxLength={5}
@@ -1400,51 +1881,9 @@ export default function AdminApp() {
                     Zeitzone: {Intl.DateTimeFormat().resolvedOptions().timeZone}
                   </p>
                 </div>
-                {campaignSubmission.pending && (
-                  <p role="status">
-                    Der Versandauftrag wird geprüft und gespeichert…
-                  </p>
-                )}
-                {campaignFeedback && (
-                  <p
-                    role={campaignFeedback.success ? "status" : "alert"}
-                    className={`admin-test-feedback ${campaignFeedback.success ? "admin-test-ok" : "admin-test-error"}`}
-                  >
-                    {campaignFeedback.message}
-                  </p>
-                )}
-                <div className="admin-actions">
-                  <Button
-                    className="cta"
-                    type="submit"
-                    disabled={
-                      campaignSubmission.pending ||
-                      !selectedDate ||
-                      !selectedTime ||
-                      !scheduleTemplateAvailable
-                    }
-                  >
-                    Versand einplanen
-                  </Button>
-                  <Button
-                    className="cta"
-                    type="button"
-                    onClick={sendNow}
-                    disabled={
-                      campaignSubmission.pending ||
-                      !emailStatus?.ready ||
-                      !scheduleTemplateAvailable
-                    }
-                  >
-                    Jetzt senden
-                  </Button>
-                </div>
-                <p className="admin-muted">
-                  Empfänger*innen ({AUDIENCE_LABELS[audience]}):{" "}
-                  {audienceCount.toLocaleString("de-DE")}
-                </p>
               </div>
               <div className="admin-test-send">
+                <h3>3. Testen und senden</h3>
                 <CampaignTestLanguage
                   api={api}
                   templates={templates}
@@ -1465,7 +1904,7 @@ export default function AdminApp() {
                   />
                 </div>
                 <Button
-                  className="cta cta--outline"
+                  className="admin-button"
                   type="button"
                   onClick={sendTest}
                   disabled={
@@ -1481,18 +1920,68 @@ export default function AdminApp() {
                     : "Test senden"}
                 </Button>
                 {testStatus === "ok" && (
-                  <p className="admin-test-feedback admin-test-ok">
+                  <Notice tone="success">
                     Der Anbieter hat die Nachricht angenommen. Prüfe, ob sie im
                     Postfach angekommen ist.
-                  </p>
+                  </Notice>
                 )}
                 {testStatus &&
                   testStatus !== "ok" &&
                   testStatus !== "sending" && (
-                    <p className="admin-test-feedback admin-test-error">
-                      {testStatus}
-                    </p>
+                    <Notice tone="error">{testStatus}</Notice>
                   )}
+                {campaignSubmission.pending && (
+                  <p role="status">
+                    Der Versandauftrag wird geprüft und gespeichert…
+                  </p>
+                )}
+                {campaignFeedback && (
+                  <Notice tone={campaignFeedback.success ? "success" : "error"}>
+                    {campaignFeedback.message}
+                  </Notice>
+                )}
+                {campaignSubmission.submitted ? (
+                  <CampaignSubmitted
+                    campaign={campaignSubmission.submitted}
+                    status={campaignPhase(
+                      campaigns.find(
+                        (c) => c.id === campaignSubmission.submitted.id,
+                      ),
+                    )}
+                    onNew={() => newCampaignMessage()}
+                  />
+                ) : (
+                  <div className="admin-actions">
+                    <Button
+                      className="admin-button admin-button--primary"
+                      type="submit"
+                      disabled={
+                        campaignSubmission.pending ||
+                        !selectedDate ||
+                        !selectedTime ||
+                        !scheduleTemplateAvailable
+                      }
+                    >
+                      Versand einplanen
+                    </Button>
+                    <Button
+                      className="admin-button"
+                      type="button"
+                      onClick={sendNow}
+                      disabled={
+                        campaignSubmission.pending ||
+                        !emailStatus?.ready ||
+                        !scheduleTemplateAvailable
+                      }
+                    >
+                      Jetzt senden
+                    </Button>
+                  </div>
+                )}
+                <p className="admin-muted">
+                  Empfänger*innen ({AUDIENCE_LABELS[audience]}):{" "}
+                  {formatCount(audienceCount)}
+                </p>
               </div>
             </form>
 
@@ -1505,14 +1994,16 @@ export default function AdminApp() {
               {campaignRead.data !== null &&
                 !campaignRead.error &&
                 campaigns.length === 0 && (
-                  <p className="admin-muted">Noch keine Kampagnen geplant.</p>
+                  <EmptyState compact title="Noch keine Kampagnen geplant.">
+                    Geplante und gesendete Nachrichten erscheinen hier.
+                  </EmptyState>
                 )}
               {campaigns.map((campaign) => (
                 <div className="campaign-row" key={campaign.id}>
                   <div className="campaign-description">
                     <div className="campaign-heading">
                       <strong>{campaign.subject}</strong>
-                      <StatusBadge status={campaign.status} />
+                      <StatusBadge status={campaignPhase(campaign)} />
                     </div>
                     <span>
                       {campaign.template_name || "Vorlage gelöscht"} ·{" "}
@@ -1526,52 +2017,56 @@ export default function AdminApp() {
                     </small>
                     <small>
                       Kampagne #{campaign.id} ·{" "}
-                      {campaign.recipient_count ?? campaign.sent_offset ?? 0}{" "}
-                      vom Anbieter angenommen
+                      {campaign.status === "sending" && campaign.audience_size
+                        ? `${formatCount(campaign.sent_offset)} von ${formatCount(campaign.audience_size)} gesendet`
+                        : `${formatCount(campaign.recipient_count ?? campaign.sent_offset ?? 0)} vom Anbieter angenommen`}
                     </small>
                     {campaignFeedbackId === campaign.id &&
                       campaignActionFeedback && (
-                        <p
+                        <Notice
                           id={`campaign-feedback-${campaign.id}`}
                           tabIndex={-1}
-                          role="status"
                           className="campaign-action-feedback"
                         >
                           {campaignActionFeedback}
-                        </p>
+                        </Notice>
                       )}
                     {campaign.status === "failed" && (
-                      <small style={{ color: "#b45309" }}>
+                      <small className="admin-text-warning">
                         {campaign.sent_offset} erreicht, wird fortgesetzt
                       </small>
                     )}
                     {campaign.status === "aborted" && (
-                      <small style={{ color: "#b45309" }}>
-                        {campaign.sent_offset} erreicht, nach{" "}
-                        {campaign.attempts} Versuchen abgebrochen
+                      <small className="admin-text-warning">
+                        {stoppedByAdmin(campaign)
+                          ? `${campaign.sent_offset} erreicht, von euch gestoppt. „Erneut versuchen“ setzt den Versand fort.`
+                          : `${campaign.sent_offset} erreicht, nach ${campaign.attempts} Versuchen abgebrochen`}
                       </small>
                     )}
-                    {["failed", "aborted"].includes(campaign.status) && (
-                      <>
-                        <EmailFailure
-                          title="Letzter Versandversuch"
-                          failure={campaign.failure || { category: "unknown" }}
-                        />
-                        <Button
-                          className="admin-button"
-                          type="button"
-                          onClick={() => navigate("settings")}
-                        >
-                          E-Mail-Einstellungen prüfen
-                        </Button>
-                      </>
-                    )}
+                    {["failed", "aborted"].includes(campaign.status) &&
+                      !stoppedByAdmin(campaign) && (
+                        <>
+                          <EmailFailure
+                            title="Letzter Versandversuch"
+                            failure={
+                              campaign.failure || { category: "unknown" }
+                            }
+                          />
+                          <Button
+                            className="admin-button"
+                            type="button"
+                            onClick={() => navigate("settings")}
+                          >
+                            E-Mail-Einstellungen prüfen
+                          </Button>
+                        </>
+                      )}
                   </div>
                   <div className="campaign-actions">
                     {campaign.status === "aborted" && (
                       <>
                         <Button
-                          className="admin-button"
+                          className="admin-button admin-button--small"
                           type="button"
                           disabled={
                             campaignAction !== null ||
@@ -1586,9 +2081,25 @@ export default function AdminApp() {
                         </Button>
                       </>
                     )}
-                    {campaign.status === "scheduled" && (
+                    {canStopCampaign(campaign) && (
                       <Button
-                        className="admin-button"
+                        className="admin-button admin-button--danger-secondary admin-button--small"
+                        type="button"
+                        disabled={
+                          campaignAction !== null ||
+                          campaignRead.loading ||
+                          campaignRead.error
+                        }
+                        onClick={() => stopCampaign(campaign.id)}
+                      >
+                        {campaignAction === campaign.id
+                          ? "Wird gestoppt…"
+                          : "Versand stoppen"}
+                      </Button>
+                    )}
+                    {campaign.status === "scheduled" && !campaign.started && (
+                      <Button
+                        className="admin-button admin-button--danger-secondary admin-button--small"
                         type="button"
                         disabled={
                           campaignAction !== null ||
@@ -1611,17 +2122,42 @@ export default function AdminApp() {
         </section>
       )}
 
+      {tab === "signatures" && (
+        <section className="section">
+          <div className="section-inner">
+            <SignerManagement
+              api={api}
+              enabled={sessionStatus === "active"}
+              askConfirmation={askConfirmation}
+              details={[
+                cfg.sign.fields.signerFunction && "signerFunction",
+                OCCUPATION_ON && "occupation",
+                cfg.features.kreisverbandField && "kreisverband",
+              ].filter(Boolean)}
+              version={firstSignerVersion}
+              onChanged={() => setSignerListVersion((before) => before + 1)}
+            />
+            <FirstSigners
+              api={api}
+              enabled={sessionStatus === "active"}
+              askConfirmation={askConfirmation}
+              version={signerListVersion}
+              onChanged={() => setFirstSignerVersion((before) => before + 1)}
+            />
+          </div>
+        </section>
+      )}
+
       {tab === "signers" && (
         <section className="section">
           <div className="section-inner">
-            <div
-              className="admin-card signer-filters"
-              style={{ marginBottom: 16 }}
-            >
-              <h2 className="admin-card-title">Unterzeichner suchen</h2>
+            <div className="admin-card signer-filters">
+              <h2 className="admin-card-title">Newsletter-Empfänger suchen</h2>
               <div className="field">
                 <label htmlFor={`${fieldId}-10`}>
-                  Suche (Name, E-Mail, {region.name})
+                  {KV_ON
+                    ? `Suche (Name, E-Mail, ${region.name})`
+                    : "Suche (Name oder E-Mail)"}
                 </label>
                 <Input
                   id={`${fieldId}-10`}
@@ -1632,7 +2168,7 @@ export default function AdminApp() {
               </div>
               <Collapsible.Root>
                 <div className="signer-filter-actions">
-                  <Collapsible.Trigger>
+                  <Collapsible.Trigger className="admin-disclosure-trigger">
                     Weitere Filter
                     {[
                       signerStateFilter,
@@ -1640,14 +2176,14 @@ export default function AdminApp() {
                       signerDatePreset !== "alle",
                     ].filter(Boolean).length > 0
                       ? ` · ${[signerStateFilter, signerKvFilter, signerDatePreset !== "alle"].filter(Boolean).length} aktiv`
-                      : ""}{" "}
-                    ▾
+                      : ""}
                   </Collapsible.Trigger>
                   {(signerStateFilter ||
                     signerKvFilter ||
                     signerDatePreset !== "alle") && (
                     <Button
                       type="button"
+                      className="admin-button admin-button--quiet admin-button--small"
                       onClick={() => {
                         setSignerStateFilter("");
                         setSignerKvFilter("");
@@ -1698,21 +2234,23 @@ export default function AdminApp() {
                         </SelectControl>
                       </div>
                     )}
-                    <div className="field">
-                      <label htmlFor={`${fieldId}-12`}>{region.name}</label>
-                      <SelectControl
-                        id={`${fieldId}-12`}
-                        value={signerKvFilter}
-                        onChange={(e) => setSignerKvFilter(e.target.value)}
-                      >
-                        <option value="">Alle</option>
-                        {signerFilterOpts.kvs.map((k) => (
-                          <option key={k.kreisverband} value={k.kreisverband}>
-                            {k.kreisverband} ({k.count})
-                          </option>
-                        ))}
-                      </SelectControl>
-                    </div>
+                    {KV_ON && (
+                      <div className="field">
+                        <label htmlFor={`${fieldId}-12`}>{region.name}</label>
+                        <SelectControl
+                          id={`${fieldId}-12`}
+                          value={signerKvFilter}
+                          onChange={(e) => setSignerKvFilter(e.target.value)}
+                        >
+                          <option value="">Alle</option>
+                          {signerFilterOpts.kvs.map((k) => (
+                            <option key={k.kreisverband} value={k.kreisverband}>
+                              {k.kreisverband} ({k.count})
+                            </option>
+                          ))}
+                        </SelectControl>
+                      </div>
+                    )}
                     <div className="field">
                       <label htmlFor={`${fieldId}-13`}>Zeitraum</label>
                       <SelectControl
@@ -1766,7 +2304,7 @@ export default function AdminApp() {
                       <p
                         id={`${fieldId}-date-range-error`}
                         role="alert"
-                        className="signer-date-error"
+                        className="admin-field-error signer-date-error"
                       >
                         {signerRange.error}
                       </p>
@@ -1778,15 +2316,15 @@ export default function AdminApp() {
 
             <div className="admin-signers-layout">
               <div className="admin-card">
-                <div className="admin-card-title">
+                <h2 className="admin-card-title">
                   {signerRange.error
                     ? "Zeitraum korrigieren"
                     : signerLoading
-                      ? "Unterzeichner werden geladen…"
+                      ? "Newsletter-Empfänger werden geladen…"
                       : signerError
-                        ? "Unterzeichner nicht verfügbar"
-                        : `${signerTotal.toLocaleString("de-DE")} Unterzeichner im Filter`}
-                </div>
+                        ? "Newsletter-Empfänger nicht verfügbar"
+                        : `${signerTotal.toLocaleString("de-DE")} Newsletter-Empfänger`}
+                </h2>
                 {signerError && (
                   <div className="admin-read-status">
                     <p role="alert">{signerError}</p>
@@ -1802,6 +2340,7 @@ export default function AdminApp() {
                 <div className="signer-selection-actions">
                   <Button
                     type="button"
+                    className="admin-button"
                     onClick={selectAllMatching}
                     disabled={
                       signerLoading ||
@@ -1814,14 +2353,14 @@ export default function AdminApp() {
                     {selectingAll
                       ? "Empfänger werden hinzugefügt…"
                       : signerLoading || signerError || signerRange.error
-                        ? "Alle Treffer hinzufügen"
-                        : `Alle ${signerTotal.toLocaleString("de-DE")} hinzufügen`}
+                        ? "Alle Treffer zur Auswahl hinzufügen"
+                        : signerTotal > SELECTION_LIMIT
+                          ? `Die neuesten ${SELECTION_LIMIT.toLocaleString("de-DE")} von ${signerTotal.toLocaleString("de-DE")} zur Auswahl hinzufügen`
+                          : `Alle ${signerTotal.toLocaleString("de-DE")} zur Auswahl hinzufügen`}
                   </Button>
                 </div>
                 {selectionFeedback && (
-                  <p role="status" className="signer-selection-feedback">
-                    {selectionFeedback}
-                  </p>
+                  <Notice tone="success">{selectionFeedback}</Notice>
                 )}
                 <SelectedRecipients
                   compose={() => {
@@ -1864,7 +2403,10 @@ export default function AdminApp() {
                     </Checkbox.Root>
                     Diese Seite auswählen
                   </label>
-                  <ul className="signer-cards" aria-label="Unterzeichner">
+                  <ul
+                    className="admin-cards signer-cards"
+                    aria-label="Newsletter-Empfänger"
+                  >
                     {signerRows.map((r) => (
                       <li
                         key={r.id}
@@ -1882,31 +2424,41 @@ export default function AdminApp() {
                               ✓
                             </Checkbox.Indicator>
                           </Checkbox.Root>
-                          <span className="signer-card-person">
+                          <span className="admin-card-person">
                             <strong>{r.name}</strong>
-                            <span>{r.email}</span>
+                            <span>
+                              <Breakable text={r.email} />
+                            </span>
                           </span>
                         </label>
                         <Collapsible.Root>
-                          <Collapsible.Trigger className="signer-card-details">
-                            Details <span aria-hidden="true">▾</span>
+                          <Collapsible.Trigger className="admin-disclosure-trigger signer-card-details">
+                            Details
                           </Collapsible.Trigger>
                           <Collapsible.Panel>
-                            <dl>
-                              <div>
-                                <dt>{region.name}</dt>
-                                <dd>{r.kreisverband || "–"}</dd>
-                              </div>
-                              {STATES_ON && (
+                            <dl className="admin-facts">
+                              {KV_ON && r.kreisverband && (
                                 <div>
-                                  <dt>Bundesland</dt>
-                                  <dd>{r.state || "–"}</dd>
+                                  <dt>{region.name}</dt>
+                                  <dd>{r.kreisverband}</dd>
                                 </div>
                               )}
-                              {OCCUPATION_ON && (
+                              {STATES_ON && r.state && (
                                 <div>
-                                  <dt>Tätigkeit</dt>
-                                  <dd>{r.occupation || "–"}</dd>
+                                  <dt>Bundesland</dt>
+                                  <dd>{r.state}</dd>
+                                </div>
+                              )}
+                              {OCCUPATION_ON && r.occupation && (
+                                <div>
+                                  <dt>{occupationLabel}</dt>
+                                  <dd>{r.occupation}</dd>
+                                </div>
+                              )}
+                              {functionLabel && r.signerFunction && (
+                                <div>
+                                  <dt>{functionLabel}</dt>
+                                  <dd>{r.signerFunction}</dd>
                                 </div>
                               )}
                               <div>
@@ -1928,7 +2480,10 @@ export default function AdminApp() {
                   <table className="admin-table signer-table">
                     <thead>
                       <tr>
-                        <th>
+                        <th
+                          scope="col"
+                          className="admin-sticky admin-table-check"
+                        >
                           <Checkbox.Root
                             className="admin-checkbox"
                             aria-label="Seite auswählen"
@@ -1947,40 +2502,58 @@ export default function AdminApp() {
                             </Checkbox.Indicator>
                           </Checkbox.Root>
                         </th>
-                        <th>Name</th>
-                        <th>E-Mail</th>
-                        <th>{region.name}</th>
-                        {STATES_ON && <th>Bundesland</th>}
-                        {OCCUPATION_ON && <th>Tätigkeit</th>}
-                        <th>Unterschrieben</th>
+                        <th
+                          scope="col"
+                          className="admin-sticky admin-sticky-edge"
+                        >
+                          Name
+                        </th>
+                        <th scope="col">E-Mail</th>
+                        {KV_ON && <th scope="col">{region.name}</th>}
+                        {STATES_ON && <th scope="col">Bundesland</th>}
+                        {OCCUPATION_ON && (
+                          <th scope="col">{occupationLabel}</th>
+                        )}
+                        {functionLabel && <th scope="col">{functionLabel}</th>}
+                        <th scope="col">Unterschrieben</th>
                       </tr>
                     </thead>
                     <tbody>
                       {signerRows.map((r) => (
                         <tr
                           key={r.id}
-                          className="signer-row"
-                          onClick={() => toggleSigner(r.id)}
-                          aria-selected={selectedSignerIds.has(r.id)}
+                          className={`signer-row${selectedSignerIds.has(r.id) ? " is-selected" : ""}`}
                         >
-                          <td>
+                          <td className="admin-sticky admin-table-check">
                             <Checkbox.Root
                               className="admin-checkbox"
                               aria-label={`${r.name}, ${r.email} auswählen`}
                               checked={selectedSignerIds.has(r.id)}
                               onCheckedChange={() => toggleSigner(r.id)}
-                              onClick={(event) => event.stopPropagation()}
                             >
                               <Checkbox.Indicator aria-hidden="true">
                                 ✓
                               </Checkbox.Indicator>
                             </Checkbox.Root>
                           </td>
-                          <td>{r.name}</td>
-                          <td>{r.email}</td>
-                          <td>{r.kreisverband || "-"}</td>
-                          {STATES_ON && <td>{r.state || "-"}</td>}
-                          {OCCUPATION_ON && <td>{r.occupation || "-"}</td>}
+                          <td className="admin-sticky admin-sticky-edge admin-cell-wrap">
+                            {r.name}
+                          </td>
+                          <td className="admin-cell-wrap">
+                            <Breakable text={r.email} />
+                          </td>
+                          {KV_ON && (
+                            <td className="admin-cell-wrap">
+                              {r.kreisverband || "–"}
+                            </td>
+                          )}
+                          {STATES_ON && <td>{r.state || "–"}</td>}
+                          {OCCUPATION_ON && (
+                            <td className="admin-cell-wrap">
+                              {r.occupation || "–"}
+                            </td>
+                          )}
+                          {functionLabel && <td>{r.signerFunction || "–"}</td>}
                           <td>
                             {new Date(r.created_at).toLocaleDateString("de-DE")}
                           </td>
@@ -1998,12 +2571,18 @@ export default function AdminApp() {
                   !signerError &&
                   !signerRange.error &&
                   signerRows.length === 0 && (
-                    <p className="admin-muted">Keine Unterzeichner gefunden.</p>
+                    <EmptyState
+                      compact
+                      title="Keine Newsletter-Empfänger gefunden."
+                    >
+                      Ändere die Suche oder setze die Filter zurück.
+                    </EmptyState>
                   )}
                 {!signerLoading && !signerError && !signerRange.error && (
-                  <div className="signer-pagination">
+                  <div className="admin-pagination">
                     <Button
                       type="button"
+                      className="admin-button admin-button--small"
                       disabled={signerPage === 0}
                       onClick={() => setSignerPage((p) => Math.max(0, p - 1))}
                     >
@@ -2015,6 +2594,7 @@ export default function AdminApp() {
                     </span>
                     <Button
                       type="button"
+                      className="admin-button admin-button--small"
                       disabled={
                         (signerPage + 1) * SIGNER_PAGE_SIZE >= signerTotal
                       }
@@ -2043,18 +2623,17 @@ export default function AdminApp() {
                     Nachrichtenentwurf und Auswahl bleiben in diesem Browser
                     gespeichert.
                   </p>
-                  <p className="admin-muted">
-                    Der Versand verwendet die dann veröffentlichte Vorlage.
-                    Änderungen an Vorlagen gelten auch für bereits geplante
-                    Nachrichten.
-                  </p>
+                  {templates.length === 0 && noTemplateNotice}
                   {selectionDraft.error && (
-                    <p role="alert">{selectionDraft.error}</p>
+                    <Notice tone="error">{selectionDraft.error}</Notice>
                   )}
                   <Button
-                    className="admin-button"
+                    className="admin-button admin-button--small"
                     type="button"
-                    disabled={selectionSubmission.pending}
+                    disabled={
+                      selectionSubmission.pending ||
+                      Boolean(selectionSubmission.submitted)
+                    }
                     onClick={() => resetCampaignDraft(true)}
                   >
                     Entwurf zurücksetzen
@@ -2072,7 +2651,10 @@ export default function AdminApp() {
                     subject={selSubject}
                     onTemplateChange={setSelTemplate}
                     onSubjectChange={setSelSubject}
-                    disabled={selectionSubmission.pending}
+                    disabled={
+                      selectionSubmission.pending ||
+                      Boolean(selectionSubmission.submitted)
+                    }
                   />
                   <CampaignLanguages
                     templates={templates}
@@ -2101,7 +2683,7 @@ export default function AdminApp() {
                           onBlur={() => {
                             if (selDateInput && !selDate)
                               setSelectionScheduleError(
-                                "Gib ein gültiges Datum als TT.MM.JJJJ ein.",
+                                "Gib ein gültiges Datum ein, z. B. 3.12.2026.",
                               );
                           }}
                           placeholder="TT.MM.JJJJ"
@@ -2113,7 +2695,7 @@ export default function AdminApp() {
                         <Input
                           id={`${fieldId}-19`}
                           type="text"
-                          pattern="([01][0-9]|2[0-3]):[0-5][0-9]"
+                          pattern="([01]?[0-9]|2[0-3]):[0-5][0-9]"
                           placeholder="HH:MM"
                           title="Uhrzeit im 24-Stunden-Format, z. B. 18:30"
                           maxLength={5}
@@ -2150,53 +2732,9 @@ export default function AdminApp() {
                       {Intl.DateTimeFormat().resolvedOptions().timeZone}
                     </p>
                   </div>
-                  {selectionSubmission.pending && (
-                    <p role="status">
-                      Der Versandauftrag wird geprüft und gespeichert…
-                    </p>
-                  )}
-                  <div className="admin-actions">
-                    <Button
-                      className="cta"
-                      type="submit"
-                      disabled={
-                        selectionSubmission.pending ||
-                        !selectionTemplateAvailable ||
-                        !selDate ||
-                        !selTime ||
-                        selectedSignerIds.size === 0 ||
-                        !selectionAudit ||
-                        selectionAudit.total === 0
-                      }
-                    >
-                      Versand einplanen
-                    </Button>
-                    <Button
-                      className="cta"
-                      type="button"
-                      onClick={sendSelectionNow}
-                      disabled={
-                        !emailStatus?.ready ||
-                        selectionSubmission.pending ||
-                        !selectionTemplateAvailable ||
-                        selectedSignerIds.size === 0 ||
-                        !selectionAudit ||
-                        selectionAudit.total === 0
-                      }
-                    >
-                      Jetzt senden
-                    </Button>
-                  </div>
-                  {selSendStatus && (
-                    <p
-                      role={selSendStatus.success ? "status" : "alert"}
-                      className={`admin-test-feedback ${selSendStatus.success ? "admin-test-ok" : "admin-test-error"}`}
-                    >
-                      {selSendStatus.message}
-                    </p>
-                  )}
                 </div>
                 <div className="admin-test-send">
+                  <h3>3. Testen und senden</h3>
                   <CampaignTestLanguage
                     api={api}
                     templates={templates}
@@ -2217,7 +2755,7 @@ export default function AdminApp() {
                     />
                   </div>
                   <Button
-                    className="cta cta--outline"
+                    className="admin-button"
                     type="button"
                     onClick={sendSelectionTest}
                     disabled={
@@ -2232,18 +2770,70 @@ export default function AdminApp() {
                       : "Test senden"}
                   </Button>
                   {selTestStatus === "ok" && (
-                    <p className="admin-test-feedback admin-test-ok">
+                    <Notice tone="success">
                       Der Anbieter hat die Nachricht angenommen. Prüfe, ob sie
                       im Postfach angekommen ist.
-                    </p>
+                    </Notice>
                   )}
                   {selTestStatus &&
                     selTestStatus !== "ok" &&
                     selTestStatus !== "sending" && (
-                      <p className="admin-test-feedback admin-test-error">
-                        {selTestStatus}
-                      </p>
+                      <Notice tone="error">{selTestStatus}</Notice>
                     )}
+                  {selectionSubmission.pending && (
+                    <p role="status">
+                      Der Versandauftrag wird geprüft und gespeichert…
+                    </p>
+                  )}
+                  {selectionSubmission.submitted ? (
+                    <CampaignSubmitted
+                      campaign={selectionSubmission.submitted}
+                      status={campaignPhase(
+                        campaigns.find(
+                          (c) => c.id === selectionSubmission.submitted.id,
+                        ),
+                      )}
+                      onNew={() => newCampaignMessage(true)}
+                    />
+                  ) : (
+                    <div className="admin-actions">
+                      <Button
+                        className="admin-button admin-button--primary"
+                        type="submit"
+                        disabled={
+                          selectionSubmission.pending ||
+                          !selectionTemplateAvailable ||
+                          !selDate ||
+                          !selTime ||
+                          selectedSignerIds.size === 0 ||
+                          !selectionAudit ||
+                          selectionAudit.total === 0
+                        }
+                      >
+                        Versand einplanen
+                      </Button>
+                      <Button
+                        className="admin-button"
+                        type="button"
+                        onClick={sendSelectionNow}
+                        disabled={
+                          !emailStatus?.ready ||
+                          selectionSubmission.pending ||
+                          !selectionTemplateAvailable ||
+                          selectedSignerIds.size === 0 ||
+                          !selectionAudit ||
+                          selectionAudit.total === 0
+                        }
+                      >
+                        Jetzt senden
+                      </Button>
+                    </div>
+                  )}
+                  {selSendStatus && (
+                    <Notice tone={selSendStatus.success ? "success" : "error"}>
+                      {selSendStatus.message}
+                    </Notice>
+                  )}
                 </div>
               </form>
             </div>
@@ -2254,14 +2844,25 @@ export default function AdminApp() {
       {tab === "zoom" && (
         <section className="section">
           <div className="section-inner">
+            {!ZOOM_ON && (
+              <Notice
+                tone="info"
+                title="Anmeldung auf der Website ausgeschaltet"
+              >
+                Auf der Website kann sich gerade niemand zum Treffen anmelden.
+                Termin, Zoom-Link und E-Mails lassen sich hier schon
+                vorbereiten. Damit die Anmeldung erscheint, muss die Technik das
+                Treffen für den Brief einschalten (features.zoomEvent).
+              </Notice>
+            )}
             <MeetingSettings
               form={meetingForm}
               askConfirmation={askConfirmation}
             />
 
             {zoomMailings && (
-              <div className="admin-card" style={{ marginBottom: 20 }}>
-                <div className="admin-card-title">Automatische E-Mails</div>
+              <div className="admin-card">
+                <h2 className="admin-card-title">Automatische E-Mails</h2>
                 <p className="admin-muted">
                   Gespeicherter Termin: {zoomMailings.eventLabel} (
                   {new Date(zoomMailings.eventAt).toLocaleString("de-DE")}) ·
@@ -2302,8 +2903,8 @@ export default function AdminApp() {
               </div>
             )}
 
-            <div className="admin-card" style={{ marginBottom: 20 }}>
-              <div className="admin-card-title">Testnachrichten</div>
+            <div className="admin-card">
+              <h2 className="admin-card-title">Testnachrichten</h2>
               <p className="admin-muted">
                 Sende die ausgewählte Zoom-E-Mail an eine Testadresse. Die
                 angemeldeten Personen erhalten diesen Test nicht.
@@ -2321,7 +2922,7 @@ export default function AdminApp() {
               <div className="admin-actions">
                 <Button
                   type="button"
-                  className="cta cta--outline"
+                  className="admin-button"
                   onClick={() => sendZoomTest("confirmation")}
                   disabled={
                     !emailStatus?.ready ||
@@ -2333,7 +2934,7 @@ export default function AdminApp() {
                 </Button>
                 <Button
                   type="button"
-                  className="cta cta--outline"
+                  className="admin-button"
                   onClick={() => sendZoomTest("link")}
                   disabled={
                     !emailStatus?.ready ||
@@ -2345,7 +2946,7 @@ export default function AdminApp() {
                 </Button>
                 <Button
                   type="button"
-                  className="cta cta--outline"
+                  className="admin-button"
                   onClick={() => sendZoomTest("reminder")}
                   disabled={
                     !emailStatus?.ready ||
@@ -2357,88 +2958,76 @@ export default function AdminApp() {
                 </Button>
               </div>
               {zoomTestStatus === "ok" && (
-                <p className="admin-test-feedback admin-test-ok">
-                  Testnachricht gesendet
-                </p>
+                <Notice tone="success">Testnachricht gesendet</Notice>
               )}
               {zoomTestStatus === "sending" && (
-                <p className="admin-test-feedback">Wird gesendet…</p>
+                <p className="admin-muted" role="status">
+                  Wird gesendet…
+                </p>
               )}
               {zoomTestStatus &&
                 zoomTestStatus !== "ok" &&
                 zoomTestStatus !== "sending" && (
-                  <p className="admin-test-feedback admin-test-error">
-                    {zoomTestStatus}
-                  </p>
+                  <Notice tone="error">{zoomTestStatus}</Notice>
                 )}
             </div>
 
-            <div
-              className="admin-card-title"
-              style={{
-                marginBottom: 8,
-                display: "flex",
-                alignItems: "center",
-                justifyContent: "space-between",
-                gap: 12,
-                flexWrap: "wrap",
-              }}
-            >
-              <span>
-                Zoom-Anmeldungen{" "}
-                {zoomRegistrationRead.data !== null
-                  ? `· ${zoomRegs.length} gesamt`
-                  : ""}
-                {zoomShowDelegierter && (
-                  <>
-                    {" "}
-                    · {zoomRegs.filter((r) => r.delegierter).length} Delegierte
-                  </>
-                )}
-              </span>
-              <Button
-                type="button"
-                className="admin-button admin-danger-secondary"
-                onClick={clearZoomRegs}
-                disabled={
-                  zoomRegs.length === 0 ||
-                  zoomClearStatus === "clearing" ||
-                  zoomRegistrationRead.error ||
-                  zoomRegistrationRead.loading
-                }
-              >
-                {zoomClearStatus === "clearing"
-                  ? "Wird gelöscht…"
-                  : "Alle Zoom-Anmeldungen löschen"}
-              </Button>
-            </div>
-            <AdminReadStatus
-              resource={zoomRegistrationRead}
-              label="Anmeldungen"
-            />
-            {zoomClearStatus && zoomClearStatus.startsWith("ok:") && (
-              <p className="admin-test-feedback admin-test-ok">
-                {zoomClearStatus.slice(3)} Alle Zoom-Anmeldungen wurden
-                gelöscht.
-              </p>
-            )}
-            {zoomClearStatus &&
-              zoomClearStatus !== "clearing" &&
-              !zoomClearStatus.startsWith("ok:") && (
-                <p className="admin-test-feedback admin-test-error">
-                  {zoomClearStatus}
-                </p>
-              )}
-            {zoomRegistrationRead.data === null ? null : zoomRegs.length ===
-              0 ? (
-              !zoomRegistrationRead.error && <p>Noch keine Anmeldungen.</p>
-            ) : (
-              <ZoomRegistrations
-                registrations={zoomRegs}
-                showDelegierter={zoomShowDelegierter}
-                regionLabel={region.name}
+            <div className="admin-card">
+              <div className="admin-card-header">
+                <h2 className="admin-card-title">
+                  Zoom-Anmeldungen{" "}
+                  {zoomRegistrationRead.data !== null
+                    ? `· ${zoomTotal} gesamt`
+                    : ""}
+                  {zoomShowDelegierter &&
+                    zoomRegistrationRead.data !== null && (
+                      <> · {zoomRegistrationRead.data.delegates} Delegierte</>
+                    )}
+                </h2>
+                <Button
+                  type="button"
+                  className="admin-button admin-button--danger-secondary admin-button--small"
+                  onClick={clearZoomRegs}
+                  disabled={
+                    zoomTotal === 0 ||
+                    zoomClearStatus === "clearing" ||
+                    zoomRegistrationRead.error ||
+                    zoomRegistrationRead.loading
+                  }
+                >
+                  {zoomClearStatus === "clearing"
+                    ? "Wird gelöscht…"
+                    : "Alle Zoom-Anmeldungen löschen"}
+                </Button>
+              </div>
+              <AdminReadStatus
+                resource={zoomRegistrationRead}
+                label="Anmeldungen"
               />
-            )}
+              {zoomClearStatus && zoomClearStatus.startsWith("ok:") && (
+                <Notice tone="success">
+                  {zoomClearStatus.slice(3)} Alle Zoom-Anmeldungen wurden
+                  gelöscht.
+                </Notice>
+              )}
+              {zoomClearStatus &&
+                zoomClearStatus !== "clearing" &&
+                !zoomClearStatus.startsWith("ok:") && (
+                  <Notice tone="error">{zoomClearStatus}</Notice>
+                )}
+              <ZoomRegistrationList
+                key={zoomClears}
+                api={api}
+                askConfirmation={askConfirmation}
+                read={zoomRegistrationRead}
+                page={zoomPage}
+                onPage={setZoomPage}
+                search={zoomSearch}
+                onSearch={setZoomSearch}
+                showDelegierter={zoomShowDelegierter}
+                regionLabel={KV_ON ? region.name : null}
+              />
+            </div>
           </div>
         </section>
       )}
@@ -2469,21 +3058,31 @@ export default function AdminApp() {
                 </a>
               ))}
             </nav>
-            <EmailSetup api={api} onDirty={setEmailDirty} />
+            <EmailSetup
+              api={api}
+              onDirty={setEmailDirty}
+              askConfirmation={askConfirmation}
+            />
             <AdminStatistics api={api} onDirtyChange={setStatisticsDirty} />
-            <div className="admin-card stat-card">
-              <span>Mitzeichner*innen</span>
-              <strong>{stats.signerCount.toLocaleString("de-DE")}</strong>
+            <div className="stat-tiles">
+              <div className="stat-tile">
+                <span>Unterschriften</span>
+                <strong>{formatCount(stats?.signerCount)}</strong>
+              </div>
+              <div className="stat-tile">
+                <span>Newsletter</span>
+                <strong>{formatCount(stats?.subscriberCount)}</strong>
+              </div>
             </div>
-            <div className="admin-card stat-card">
-              <span>Newsletter</span>
-              <strong>{stats.subscriberCount.toLocaleString("de-DE")}</strong>
-            </div>
-            <MilestoneSettings form={milestoneForm} />
+            <MilestoneSettings
+              form={milestoneForm}
+              signerCount={stats?.signerCount}
+            />
 
-            {STATES_ON && (
-              <div className="admin-card" style={{ gridColumn: "1 / -1" }}>
-                <div className="admin-card-title">Bundesland-Zuordnung</div>
+            {KV_ON && STATES_ON && (
+              <div className="admin-card admin-card--wide">
+                <h2 className="admin-card-title">Bundesland-Zuordnung</h2>
+                {mergeFeedback("state")}
                 {stateResolution && (
                   <div className="state-resolution-stats">
                     <p>
@@ -2493,7 +3092,7 @@ export default function AdminApp() {
                     </p>
                     <p>
                       <strong>{stateResolution.resolvedSigners}</strong>{" "}
-                      Mitzeichner*innen mit Bundesland,{" "}
+                      Unterschriften mit Bundesland,{" "}
                       <strong>{stateResolution.unresolvedSigners}</strong> ohne
                     </p>
                     {stateResolution.queueLength > 0 && (
@@ -2504,31 +3103,15 @@ export default function AdminApp() {
                   </div>
                 )}
                 {unresolvedKvs.length > 0 && (
-                  <div style={{ marginTop: 12 }}>
-                    <p className="admin-muted" style={{ marginBottom: 8 }}>
-                      Offene {region.plural}:
-                    </p>
-                    <div
-                      style={{
-                        maxHeight: 300,
-                        overflowY: "auto",
-                        fontSize: 13,
-                        display: "flex",
-                        flexDirection: "column",
-                        gap: 6,
-                      }}
-                    >
+                  <div>
+                    <p className="admin-muted">Offene {region.plural}:</p>
+                    <div className="state-resolution-list">
                       {unresolvedKvs.map((kv) => (
                         <div
                           key={kv.kreisverband}
-                          style={{
-                            display: "flex",
-                            alignItems: "center",
-                            gap: 8,
-                            flexWrap: "wrap",
-                          }}
+                          className="state-resolution-row"
                         >
-                          <span style={{ minWidth: 180 }}>
+                          <span>
                             {kv.kreisverband}{" "}
                             <span className="admin-muted">({kv.count})</span>
                           </span>
@@ -2540,7 +3123,6 @@ export default function AdminApp() {
                                 [kv.kreisverband]: e.target.value,
                               }))
                             }
-                            className="admin-compact-select"
                           >
                             <option value="">– Bundesland –</option>
                             {GERMAN_STATES.map((s) => (
@@ -2551,50 +3133,14 @@ export default function AdminApp() {
                           </SelectControl>
                           <Button
                             type="button"
-                            className="cta cta--outline admin-compact-btn"
+                            className="admin-button admin-button--small"
                             disabled={
                               !kvStateSelections[kv.kreisverband] ||
-                              assigningKv === kv.kreisverband
+                              Boolean(mergeBusy)
                             }
-                            onClick={async () => {
-                              setAssigningKv(kv.kreisverband);
-                              try {
-                                const res = await api(
-                                  "/api/admin/assign-kv-state",
-                                  {
-                                    method: "POST",
-                                    body: JSON.stringify({
-                                      kreisverband: kv.kreisverband,
-                                      state: kvStateSelections[kv.kreisverband],
-                                    }),
-                                  },
-                                );
-                                if (res.ok) {
-                                  setUnresolvedKvs((prev) =>
-                                    prev.filter(
-                                      (u) => u.kreisverband !== kv.kreisverband,
-                                    ),
-                                  );
-                                  setKvStateSelections((prev) => {
-                                    const next = { ...prev };
-                                    delete next[kv.kreisverband];
-                                    return next;
-                                  });
-                                  const statusRes = await api(
-                                    "/api/admin/state-resolution-status",
-                                  );
-                                  if (statusRes.ok)
-                                    setStateResolution(await statusRes.json());
-                                }
-                              } catch {
-                                setNotice(
-                                  "Der Server hat die Aktion nicht bestätigt. Lade den aktuellen Stand, bevor du es erneut versuchst.",
-                                );
-                              }
-                              setAssigningKv(null);
-                            }}
+                            onClick={() => assignState(kv)}
                           >
-                            {assigningKv === kv.kreisverband ? "…" : "Zuordnen"}
+                            {mergeBusy === kv.kreisverband ? "…" : "Zuordnen"}
                           </Button>
                         </div>
                       ))}
@@ -2604,7 +3150,7 @@ export default function AdminApp() {
                 <div className="admin-actions">
                   <Button
                     type="button"
-                    className="cta"
+                    className="admin-button admin-button--primary"
                     disabled={resolving}
                     onClick={async () => {
                       setResolving(true);
@@ -2617,8 +3163,8 @@ export default function AdminApp() {
                           const data = await res.json();
                           setResolveMessage(
                             data.enqueued > 0
-                              ? `${data.enqueued} Mitzeichner*innen zur Zuordnung eingereiht.`
-                              : "Keine unzugeordneten Mitzeichner*innen gefunden.",
+                              ? `${data.enqueued} Unterschriften zur Zuordnung eingereiht.`
+                              : "Keine Unterschriften ohne Bundesland gefunden.",
                           );
                           const [statusRes, unresRes] = await Promise.all([
                             api("/api/admin/state-resolution-status"),
@@ -2641,7 +3187,7 @@ export default function AdminApp() {
                   </Button>
                   <Button
                     type="button"
-                    className="cta cta--outline"
+                    className="admin-button"
                     disabled={resolving}
                     onClick={async () => {
                       setResolving(true);
@@ -2677,395 +3223,36 @@ export default function AdminApp() {
                     {resolving ? "Wird gestartet…" : "Alle erneut prüfen"}
                   </Button>
                 </div>
-                {resolveMessage && (
-                  <p className="admin-muted">{resolveMessage}</p>
-                )}
+                {resolveMessage && <Notice>{resolveMessage}</Notice>}
               </div>
             )}
-            {outlierGroups.length > 0 && (
-              <div className="admin-card" style={{ gridColumn: "1 / -1" }}>
-                <div className="admin-card-title">
-                  {region.name}-Tippfehler (
-                  {outlierGroups.reduce((n, g) => n + g.outliers.length, 0)})
-                </div>
-                <div className="outlier-groups">
-                  {outlierGroups.map((group) => (
-                    <div className="outlier-group" key={group.canonical.name}>
-                      <div className="outlier-canonical">
-                        <strong>{group.canonical.name}</strong>
-                        <span className="admin-muted">
-                          {" "}
-                          ({group.canonical.count})
-                        </span>
-                      </div>
-                      {group.outliers.map((outlier) => (
-                        <div className="outlier-row" key={outlier.name}>
-                          <span className="outlier-name">
-                            {outlier.name}
-                            <span className="admin-muted">
-                              {" "}
-                              ({outlier.count})
-                            </span>
-                          </span>
-                          <span className="outlier-actions">
-                            <Button
-                              type="button"
-                              className="cta cta--outline outlier-merge-btn"
-                              disabled={merging === outlier.name}
-                              onClick={async () => {
-                                setMerging(outlier.name);
-                                try {
-                                  const res = await api("/api/admin/merge-kv", {
-                                    method: "POST",
-                                    body: JSON.stringify({
-                                      from: outlier.name,
-                                      to: group.canonical.name,
-                                    }),
-                                  });
-                                  if (res.ok) {
-                                    setOutlierGroups((prev) =>
-                                      prev
-                                        .map((g) =>
-                                          g.canonical.name ===
-                                          group.canonical.name
-                                            ? {
-                                                ...g,
-                                                canonical: {
-                                                  ...g.canonical,
-                                                  count:
-                                                    g.canonical.count +
-                                                    outlier.count,
-                                                },
-                                                outliers: g.outliers.filter(
-                                                  (o) =>
-                                                    o.name !== outlier.name,
-                                                ),
-                                              }
-                                            : g,
-                                        )
-                                        .filter((g) => g.outliers.length > 0),
-                                    );
-                                    const statusRes = await api(
-                                      "/api/admin/state-resolution-status",
-                                    );
-                                    if (statusRes.ok)
-                                      setStateResolution(
-                                        await statusRes.json(),
-                                      );
-                                  }
-                                } catch {
-                                  setNotice(
-                                    "Der Server hat die Aktion nicht bestätigt. Lade den aktuellen Stand, bevor du es erneut versuchst.",
-                                  );
-                                }
-                                setMerging(null);
-                              }}
-                            >
-                              {merging === outlier.name
-                                ? "…"
-                                : `→ ${group.canonical.name}`}
-                            </Button>
-                            <Button
-                              type="button"
-                              className="cta cta--outline outlier-merge-btn"
-                              disabled={merging === outlier.name}
-                              onClick={async () => {
-                                setMerging(outlier.name);
-                                try {
-                                  const res = await api("/api/admin/merge-kv", {
-                                    method: "POST",
-                                    body: JSON.stringify({
-                                      from: group.canonical.name,
-                                      to: outlier.name,
-                                    }),
-                                  });
-                                  if (res.ok) {
-                                    setOutlierGroups((prev) =>
-                                      prev
-                                        .map((g) =>
-                                          g.canonical.name ===
-                                          group.canonical.name
-                                            ? {
-                                                ...g,
-                                                canonical: {
-                                                  name: outlier.name,
-                                                  count:
-                                                    g.canonical.count +
-                                                    outlier.count,
-                                                },
-                                                outliers: g.outliers.filter(
-                                                  (o) =>
-                                                    o.name !== outlier.name,
-                                                ),
-                                              }
-                                            : g,
-                                        )
-                                        .filter((g) => g.outliers.length > 0),
-                                    );
-                                    const statusRes = await api(
-                                      "/api/admin/state-resolution-status",
-                                    );
-                                    if (statusRes.ok)
-                                      setStateResolution(
-                                        await statusRes.json(),
-                                      );
-                                  }
-                                } catch {
-                                  setNotice(
-                                    "Der Server hat die Aktion nicht bestätigt. Lade den aktuellen Stand, bevor du es erneut versuchst.",
-                                  );
-                                }
-                                setMerging(null);
-                              }}
-                            >
-                              {merging === outlier.name
-                                ? "…"
-                                : `→ ${outlier.name}`}
-                            </Button>
-                            <Button
-                              type="button"
-                              className="outlier-dismiss"
-                              disabled={merging === outlier.name}
-                              onClick={async () => {
-                                setMerging(outlier.name);
-                                try {
-                                  const res = await api(
-                                    "/api/admin/dismiss-outlier",
-                                    {
-                                      method: "POST",
-                                      body: JSON.stringify({
-                                        canonical: group.canonical.name,
-                                        outlier: outlier.name,
-                                      }),
-                                    },
-                                  );
-                                  if (res.ok) {
-                                    setOutlierGroups((prev) =>
-                                      prev
-                                        .map((g) =>
-                                          g.canonical.name ===
-                                          group.canonical.name
-                                            ? {
-                                                ...g,
-                                                outliers: g.outliers.filter(
-                                                  (o) =>
-                                                    o.name !== outlier.name,
-                                                ),
-                                              }
-                                            : g,
-                                        )
-                                        .filter((g) => g.outliers.length > 0),
-                                    );
-                                  }
-                                } catch {
-                                  setNotice(
-                                    "Der Server hat die Aktion nicht bestätigt. Lade den aktuellen Stand, bevor du es erneut versuchst.",
-                                  );
-                                }
-                                setMerging(null);
-                              }}
-                            >
-                              Schreibweise beibehalten
-                            </Button>
-                          </span>
-                        </div>
-                      ))}
-                    </div>
-                  ))}
-                </div>
-              </div>
-            )}
-            {occOutlierGroups.length > 0 && (
-              <div className="admin-card" style={{ gridColumn: "1 / -1" }}>
-                <div className="admin-card-title">
-                  Berufs-Tippfehler (
-                  {occOutlierGroups.reduce((n, g) => n + g.outliers.length, 0)})
-                </div>
-                <div className="outlier-groups">
-                  {occOutlierGroups.map((group) => (
-                    <div className="outlier-group" key={group.canonical.name}>
-                      <div className="outlier-canonical">
-                        <strong>{group.canonical.name}</strong>
-                        <span className="admin-muted">
-                          {" "}
-                          ({group.canonical.count})
-                        </span>
-                      </div>
-                      {group.outliers.map((outlier) => (
-                        <div className="outlier-row" key={outlier.name}>
-                          <span className="outlier-name">
-                            {outlier.name}
-                            <span className="admin-muted">
-                              {" "}
-                              ({outlier.count})
-                            </span>
-                          </span>
-                          <span className="outlier-actions">
-                            <Button
-                              type="button"
-                              className="cta cta--outline outlier-merge-btn"
-                              disabled={occMerging === outlier.name}
-                              onClick={async () => {
-                                setOccMerging(outlier.name);
-                                try {
-                                  const res = await api(
-                                    "/api/admin/merge-occupation",
-                                    {
-                                      method: "POST",
-                                      body: JSON.stringify({
-                                        from: outlier.name,
-                                        to: group.canonical.name,
-                                      }),
-                                    },
-                                  );
-                                  if (res.ok) {
-                                    setOccOutlierGroups((prev) =>
-                                      prev
-                                        .map((g) =>
-                                          g.canonical.name ===
-                                          group.canonical.name
-                                            ? {
-                                                ...g,
-                                                canonical: {
-                                                  ...g.canonical,
-                                                  count:
-                                                    g.canonical.count +
-                                                    outlier.count,
-                                                },
-                                                outliers: g.outliers.filter(
-                                                  (o) =>
-                                                    o.name !== outlier.name,
-                                                ),
-                                              }
-                                            : g,
-                                        )
-                                        .filter((g) => g.outliers.length > 0),
-                                    );
-                                  }
-                                } catch {
-                                  setNotice(
-                                    "Der Server hat die Aktion nicht bestätigt. Lade den aktuellen Stand, bevor du es erneut versuchst.",
-                                  );
-                                }
-                                setOccMerging(null);
-                              }}
-                            >
-                              {occMerging === outlier.name
-                                ? "…"
-                                : `→ ${group.canonical.name}`}
-                            </Button>
-                            <Button
-                              type="button"
-                              className="cta cta--outline outlier-merge-btn"
-                              disabled={occMerging === outlier.name}
-                              onClick={async () => {
-                                setOccMerging(outlier.name);
-                                try {
-                                  const res = await api(
-                                    "/api/admin/merge-occupation",
-                                    {
-                                      method: "POST",
-                                      body: JSON.stringify({
-                                        from: group.canonical.name,
-                                        to: outlier.name,
-                                      }),
-                                    },
-                                  );
-                                  if (res.ok) {
-                                    setOccOutlierGroups((prev) =>
-                                      prev
-                                        .map((g) =>
-                                          g.canonical.name ===
-                                          group.canonical.name
-                                            ? {
-                                                ...g,
-                                                canonical: {
-                                                  name: outlier.name,
-                                                  count:
-                                                    g.canonical.count +
-                                                    outlier.count,
-                                                },
-                                                outliers: g.outliers.filter(
-                                                  (o) =>
-                                                    o.name !== outlier.name,
-                                                ),
-                                              }
-                                            : g,
-                                        )
-                                        .filter((g) => g.outliers.length > 0),
-                                    );
-                                  }
-                                } catch {
-                                  setNotice(
-                                    "Der Server hat die Aktion nicht bestätigt. Lade den aktuellen Stand, bevor du es erneut versuchst.",
-                                  );
-                                }
-                                setOccMerging(null);
-                              }}
-                            >
-                              {occMerging === outlier.name
-                                ? "…"
-                                : `→ ${outlier.name}`}
-                            </Button>
-                            <Button
-                              type="button"
-                              className="outlier-dismiss"
-                              disabled={occMerging === outlier.name}
-                              onClick={async () => {
-                                setOccMerging(outlier.name);
-                                try {
-                                  const res = await api(
-                                    "/api/admin/dismiss-occupation-outlier",
-                                    {
-                                      method: "POST",
-                                      body: JSON.stringify({
-                                        canonical: group.canonical.name,
-                                        outlier: outlier.name,
-                                      }),
-                                    },
-                                  );
-                                  if (res.ok) {
-                                    setOccOutlierGroups((prev) =>
-                                      prev
-                                        .map((g) =>
-                                          g.canonical.name ===
-                                          group.canonical.name
-                                            ? {
-                                                ...g,
-                                                outliers: g.outliers.filter(
-                                                  (o) =>
-                                                    o.name !== outlier.name,
-                                                ),
-                                              }
-                                            : g,
-                                        )
-                                        .filter((g) => g.outliers.length > 0),
-                                    );
-                                  }
-                                } catch {
-                                  setNotice(
-                                    "Der Server hat die Aktion nicht bestätigt. Lade den aktuellen Stand, bevor du es erneut versuchst.",
-                                  );
-                                }
-                                setOccMerging(null);
-                              }}
-                            >
-                              Schreibweise beibehalten
-                            </Button>
-                          </span>
-                        </div>
-                      ))}
-                    </div>
-                  ))}
-                </div>
-              </div>
-            )}
-            <div className="admin-card">
-              <div className="admin-card-title">Sitzung</div>
-              <Button className="admin-danger" type="button" onClick={logout}>
-                Abmelden
-              </Button>
-            </div>
+            {KV_ON &&
+              outlierCard({
+                key: "kv",
+                title: `${region.name}-Tippfehler`,
+                groups: outlierGroups,
+                setGroups: setOutlierGroups,
+                mergePath: "/api/admin/merge-kv",
+                dismissPath: "/api/admin/dismiss-outlier",
+              })}
+            {OCCUPATION_ON &&
+              outlierCard({
+                key: "occupation",
+                title: `${occupationLabel}: Schreibweisen`,
+                groups: occOutlierGroups,
+                setGroups: setOccOutlierGroups,
+                mergePath: "/api/admin/merge-occupation",
+                dismissPath: "/api/admin/dismiss-occupation-outlier",
+              })}
+            <SessionSettings
+              api={api}
+              askConfirmation={askConfirmation}
+              onDone={() => {
+                setLoggedOutEverywhere(true);
+                endSessionHere();
+              }}
+            />
+            <AdminLog api={api} enabled={sessionStatus === "active"} />
           </div>
         </section>
       )}

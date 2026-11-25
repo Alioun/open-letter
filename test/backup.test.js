@@ -6,6 +6,7 @@ import {
   readdirSync,
   writeFileSync,
   mkdirSync,
+  statSync,
 } from "node:fs";
 import { tmpdir } from "node:os";
 import { join, dirname } from "node:path";
@@ -199,7 +200,8 @@ describe("backup retention", () => {
       BACKUP_DIR: backupDir,
       BACKUP_KEEP: "48",
     });
-    expect(res.exitCode).toBe(0);
+    // The run fails with the backup, so the job that started it does too.
+    expect(res.exitCode).not.toBe(0);
     expect(res.stderr.toString()).toContain("[backup] failed");
 
     // No new backup was written, yet retention ran anyway.
@@ -209,6 +211,61 @@ describe("backup retention", () => {
     expect(readdirSync(dataDir)).not.toContain(preRestore);
     // Keeping the last restore point past retention is flagged, not silent.
     expect(res.stderr.toString()).toContain("older than 48h");
+  });
+
+  test("the backup state records what worked, what failed since, and a copy kept past retention", async () => {
+    await resetDb();
+    await addVerifiedSigner();
+    const backupDir = tmp();
+    const env = { BACKUP_DIR: backupDir, BACKUP_KEEP: "48" };
+    const state = async () => {
+      const res = run(
+        [
+          "-e",
+          "const { backupStatus } = await import('./server/backup.js'); console.log(JSON.stringify(await backupStatus()));",
+        ],
+        env,
+      );
+      expect(res.exitCode, res.stderr.toString()).toBe(0);
+      return JSON.parse(res.stdout.toString());
+    };
+    expect(await state()).toMatchObject({
+      lastSuccessAt: null,
+      lastError: null,
+      expiredRestorePoint: null,
+      retentionHours: 48,
+    });
+
+    expect(runBackupIn(env).exitCode).toBe(0);
+    const worked = await state();
+    expect(Date.parse(worked.lastSuccessAt)).toBeGreaterThan(
+      Date.now() - 120_000,
+    );
+    const [file] = readdirSync(backupDir);
+    expect(worked.lastSuccessBytes).toBe(statSync(join(backupDir, file)).size);
+    expect(worked).toMatchObject({ lastError: null, expiredRestorePoint: null });
+
+    // From here the export has nowhere to write, and the one backup there is
+    // has aged past retention.
+    rmSync(join(backupDir, file));
+    const staleAt = stamp(60 * 3600_000);
+    const stale = `backup-${staleAt}.sqlite.gz`;
+    writeFileSync(join(backupDir, stale), "x");
+    for (let s = 0; s < 30; s++)
+      mkdirSync(join(backupDir, `backup-${stamp(-s * 1000)}.sqlite.tmp`), {
+        recursive: true,
+      });
+    expect(runBackupIn(env).exitCode).not.toBe(0);
+    const failed = await state();
+    expect(failed.lastSuccessAt).toBe(worked.lastSuccessAt);
+    expect(failed.lastError).toBeTruthy();
+    expect(Date.parse(failed.lastErrorAt)).toBeGreaterThan(
+      Date.parse(worked.lastSuccessAt) - 1,
+    );
+    expect(failed.expiredRestorePoint).toBe(
+      `${staleAt.replace(/T(..)-(..)-(..)$/, "T$1:$2:$3")}.000Z`,
+    );
+    expect(readdirSync(backupDir)).toContain(stale);
   });
 
   test("removes a .tmp export orphaned by a crashed run, but not a fresh one", async () => {

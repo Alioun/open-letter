@@ -42,6 +42,24 @@ export const batchDelayMs =
 // a template hasn't been seeded/edited in the DB (db/setup.js seeds the same set).
 const fallbackTemplates = letterTemplates(cfg);
 
+// Mails every letter can send without shipping a template for them, in the
+// shape of the letters' own short mails, per language (German for any other).
+// A letter replaces one by defining a template with the same slug.
+const builtInTemplates = {
+  newsletter_optin: {
+    name: "Newsletter-Einwilligung",
+    subject: "Bitte bestätige deine Newsletter-Anmeldung",
+    html_body:
+      '<p>Hallo {{name}},</p><p>du hast uns gebeten, dir unsere Kampagnen-E-Mails zu schicken. Damit wir das dürfen, brauchen wir deine Bestätigung.</p><p><a href="{{confirmUrl}}">Newsletter-Anmeldung bestätigen</a></p><p>Wenn du das nicht möchtest, musst du nichts tun: Ohne deine Bestätigung bekommst du keinen Newsletter.</p>',
+  },
+  "newsletter_optin.en": {
+    name: "Newsletter consent",
+    subject: "Please confirm your newsletter subscription",
+    html_body:
+      "<p>Hello {{name}},</p><p>you asked us to send you our campaign emails. We need your confirmation before we may do that.</p><p><a href=\"{{confirmUrl}}\">Confirm newsletter subscription</a></p><p>If you don't want this, there is nothing to do: without your confirmation you won't get the newsletter.</p>",
+  },
+};
+
 // ---- Person language ---------------------------------------------------------
 // A mail is written in the language of the person it goes to (their `lang`
 // column; null or unknown means the letter's default). With
@@ -148,7 +166,11 @@ export async function findTemplate(slug, lang) {
     const t = memoryTemplateBySlug(s) || fallbackTemplates[s];
     if (t) return t;
   }
-  return null;
+  return (
+    builtInTemplates[`${slug}.${normalizeLang(cfg, lang)}`] ||
+    builtInTemplates[slug] ||
+    null
+  );
 }
 
 // A campaign's version for a recipient in `lang`: `lang` normalised (undefined
@@ -283,6 +305,36 @@ export async function sendAlreadySignedEmail({
   const rendered = await renderTemplateBySlug(
     "already_signed",
     { name, firstName, unsubscribeUrl },
+    lang,
+  );
+
+  await sendRenderedEmail({
+    to,
+    subject: rendered.subject,
+    html: rendered.html,
+    headers,
+  });
+}
+
+// "Newsletter-Einwilligung anfragen" in the admin: the person subscribes with
+// their own click on the link, never the team for them.
+export async function sendNewsletterOptInEmail({
+  to,
+  name,
+  optInToken,
+  baseUrl,
+  headers,
+  unsubscribeUrl,
+  lang,
+}) {
+  console.log(`[email] newsletter opt-in toDomain=${getEmailDomain(to)}`);
+  const confirmUrl = langUrl(
+    `${baseUrl}/api/newsletter-einwilligung/${optInToken}`,
+    lang,
+  );
+  const rendered = await renderTemplateBySlug(
+    "newsletter_optin",
+    { name, firstName: name.split(/\s/)[0], confirmUrl, unsubscribeUrl },
     lang,
   );
 

@@ -18,7 +18,11 @@ import {
   systemTemplateBase,
 } from "../config/template-localization.js";
 import { campaignSchedule } from "../config/campaign-schedule.js";
-import { futureCampaignDate, campaignRequest } from "../src/campaign-draft.js";
+import {
+  futureCampaignDate,
+  campaignRequest,
+  submittedCampaign,
+} from "../src/campaign-draft.js";
 import { draftAfterPublication } from "../src/publishing/draft.js";
 import { publicationScope } from "../src/publishing/scope.js";
 import {
@@ -57,6 +61,7 @@ test("publication scope exposes website changes while editing email templates", 
   edited.templates[0].subject = "New subject";
   expect(publicationScope(base, edited)).toEqual({
     groups: ["Website · Texte (EN)", "E-Mail · Vorlage #1 (EN) · Betreff"],
+    templateIds: ["1"],
     label: "Website & E-Mails veröffentlichen",
   });
   edited.locales.en.copy.title = "Original";
@@ -628,45 +633,32 @@ test("email placeholder diagnostics catch broken existing, translated, and new n
   ).toEqual(["{{unsubscribeUrl}}"]);
 });
 
-test("browser campaign retries reuse their saved request key while new message intents get a new one", () => {
-  const body = {
-    template_id: "4",
-    subject: "Update",
-    scheduled_at: "2026-11-09T10:00:00Z",
-    send_now: false,
-    audience: "newsletter",
-  };
-  const first = campaignRequest(body, null, () => "first-key");
+test("a draft keeps one request key until it is reset, so it cannot become two campaigns", () => {
+  const first = campaignRequest(null, () => "first-key");
+  expect(first.key).toBe("first-key");
+  // Reloaded from the browser: the same draft, whatever was edited meanwhile.
   const restored = JSON.parse(JSON.stringify(first));
-  expect(campaignRequest(body, restored, () => "unwanted-key").key).toBe(
-    "first-key",
+  expect(campaignRequest(restored, () => "unwanted-key").key).toBe("first-key");
+  // The sent campaign stays on the record next to its key.
+  const sent = { ...restored, campaign: submittedCampaign({ id: 7 }, true) };
+  expect(campaignRequest(sent, () => "unwanted-key")).toBe(sent);
+  // A reset removes the record; the next draft starts with a key of its own.
+  expect(campaignRequest(null, () => "second-key").key).toBe("second-key");
+
+  expect(submittedCampaign({ id: 7, status: "scheduled" }, false)).toEqual({
+    id: 7,
+    outcome: "scheduled",
+  });
+  expect(submittedCampaign({ id: 7, status: "scheduled" }, true).outcome).toBe(
+    "due",
   );
-  expect(
-    campaignRequest(
-      { ...body, subject: "Another update" },
-      restored,
-      () => "new-key",
-    ).key,
-  ).toBe("new-key");
-  const immediate = campaignRequest(
-    { ...body, send_now: true },
-    null,
-    () => "immediate-key",
+  // A repeated request can find its campaign already cancelled or sent.
+  expect(submittedCampaign({ id: 7, status: "cancelled" }, true).outcome).toBe(
+    "cancelled",
   );
-  expect(
-    campaignRequest(
-      { ...body, send_now: true, scheduled_at: "2026-11-10T10:00:00Z" },
-      immediate,
-      () => "unwanted-key",
-    ).key,
-  ).toBe("immediate-key");
-  expect(
-    campaignRequest(
-      { ...body, scheduled_at: "2026-11-10T10:00:00Z" },
-      restored,
-      () => "different-date",
-    ).key,
-  ).toBe("different-date");
+  expect(submittedCampaign({ id: 7, status: "sent" }, false).outcome).toBe(
+    "sent",
+  );
 });
 
 test("new newsletter and translation IDs stay above retired publication identities and local additions", () => {

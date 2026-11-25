@@ -24,7 +24,7 @@ import {
 import { cached, invalidate } from "./cache.js";
 import { parseCopyKey } from "../config/editable.js";
 import { isCampaignTemplate } from "../config/campaign-templates.js";
-import { deleteJobsByPayload } from "../db/jobs.js";
+import { deleteJobsByPayload, deleteJobsWithPayload } from "../db/jobs.js";
 import {
   emailHmac,
   recordErasure,
@@ -34,12 +34,30 @@ import {
   NEWSLETTER_OPT_OUT,
   TREFFEN_OPT_OUT,
   HIDE_PUBLICLY,
+  HIDE_SIGNER_DETAILS,
   HIDE_INVITE_NAME,
+  BLOCK_SIGNING,
+  UNBLOCK_SIGNING,
+  CLEAR_OCCUPATION,
+  CLEAR_SIGNER_FUNCTION,
 } from "../db/erasure-log.js";
+import {
+  recordAdminAction as recordAction,
+  listAdminActions as listActions,
+  purgeAdminActions,
+  forgetDeletedSigners,
+  lastAdminActionAt as lastActionAt,
+} from "../db/admin-actions.js";
 import { eraseSubject, erasureTables } from "../db/erasure.js";
+import {
+  canonicalMailbox,
+  erasureSubject,
+  mailboxDomains,
+} from "../db/email-identity.js";
 import cfg from "../config/letter.config.js";
 import { normalizeLang } from "../config/i18n.js";
 import { resolvePrivacy } from "../config/privacy.js";
+import { SELECTION_LIMIT } from "../config/selection.js";
 
 export { MAILING_LEASE_MS, MAX_MAILING_ATTEMPTS };
 export const meetingRepository = createMeetingRepository(db);
@@ -202,6 +220,17 @@ export async function getSigners(opts) {
   );
 }
 
+// Function and organisation are public only with the signer's own recorded
+// choice (show_signer_details = 1). Being a first signer, by mark or by
+// position, decides nothing about the details; a letter with only
+// publicFirstSignerDetails shows them for its marked first signers alone.
+function publicSignerDetailsCondition() {
+  if (cfg.features.publicSignerDetails) return "(s.show_signer_details = 1)";
+  if (cfg.features.publicFirstSignerDetails)
+    return "(s.show_signer_details = 1 AND s.first_signer = 1)";
+  return "(0)";
+}
+
 async function querySigners({ filter, search, limit, offset, sort }) {
   limit = Math.min(Math.max(1, limit), 100);
   offset = Math.max(0, offset);
@@ -219,18 +248,46 @@ async function querySigners({ filter, search, limit, offset, sort }) {
   }
   const whereSql = conds.join(" AND ");
 
+  const detailsAllowed = publicSignerDetailsCondition();
+  const details =
+    cfg.features.publicFirstSignerDetails || cfg.features.publicSignerDetails
+      ? `, CASE WHEN ${detailsAllowed} THEN s.signer_function END AS signerFunction,
+         CASE WHEN ${detailsAllowed} THEN s.occupation END AS organisation`
+      : "";
+  const signerColumns = `s.name, s.kreisverband, s.state, s.created_at,
+    s.first_signer = 1 AS firstSigner${details}`;
+
   if (!searchClean) {
     const { total } = await db
       .query(`SELECT COUNT(*) AS total FROM signers s WHERE ${whereSql}`)
       .get(...params);
+    // The default view (everyone, oldest first) opens with the first
+    // signers: those with a position in its order, then the other marked
+    // ones oldest first, then everyone else. Every other view keeps its own
+    // order and only labels them.
+    const firstSignersFirst =
+      filter === "alle" &&
+      sortDir === "ASC" &&
+      (await db
+        .query(
+          `SELECT 1 FROM first_signer_pins
+           UNION ALL SELECT 1 FROM signers WHERE first_signer = 1 LIMIT 1`,
+        )
+        .get());
+    const from = firstSignersFirst
+      ? "signers s LEFT JOIN first_signer_pins p ON p.signer_id = s.id"
+      : "signers s";
+    const order = firstSignersFirst
+      ? "p.position IS NULL, p.position, s.first_signer = 0, s.created_at ASC, s.id ASC"
+      : `s.created_at ${sortDir}`;
     const signers = await db
       .query(
-        `SELECT s.name, s.kreisverband, s.state, s.created_at
-         FROM signers s WHERE ${whereSql}
-         ORDER BY s.created_at ${sortDir} LIMIT ? OFFSET ?`,
+        `SELECT ${signerColumns}
+         FROM ${from} WHERE ${whereSql}
+         ORDER BY ${order} LIMIT ? OFFSET ?`,
       )
       .all(...params, limit, offset);
-    return { signers, total };
+    return { signers: boolifyAll(signers, ["firstSigner"]), total };
   }
 
   // Substring hits (the overwhelmingly common case) are found in SQL, which
@@ -260,12 +317,15 @@ async function querySigners({ filter, search, limit, offset, sort }) {
   if (substrTotal > 0) {
     const signers = await db
       .query(
-        `SELECT s.name, s.kreisverband, s.state, s.created_at
+        `SELECT ${signerColumns}
          FROM signers s WHERE ${substrWhere}
          ORDER BY s.created_at ${sortDir} LIMIT ? OFFSET ?`,
       )
       .all(...params, pattern, pattern, limit, offset);
-    return { signers, total: substrTotal };
+    return {
+      signers: boolifyAll(signers, ["firstSigner"]),
+      total: substrTotal,
+    };
   }
 
   // Nothing contains the term, so it is probably misspelled: fall back to fuzzy
@@ -274,7 +334,7 @@ async function querySigners({ filter, search, limit, offset, sort }) {
   // queries can't pin the CPU on a table of any size.
   const rows = await db
     .query(
-      `SELECT s.name, s.kreisverband, s.state, s.created_at
+      `SELECT ${signerColumns}
        FROM signers s WHERE ${whereSql}
        ORDER BY s.created_at DESC LIMIT ?`,
     )
@@ -294,7 +354,7 @@ async function querySigners({ filter, search, limit, offset, sort }) {
 
   const total = scored.length;
   const signers = scored.slice(offset, offset + limit).map((x) => x.r);
-  return { signers, total };
+  return { signers: boolifyAll(signers, ["firstSigner"]), total };
 }
 
 // ---- admin newsletter-signer list ------------------------------------------
@@ -341,7 +401,7 @@ export async function selectedNewsletterSigners(
     ...filters,
     cap: Number.MAX_SAFE_INTEGER,
   });
-  const matchingCount = matching.filter((id) => selected.has(id)).length;
+  const matchingCount = matching.ids.filter((id) => selected.has(id)).length;
   const { whereSql, params } = newsletterBase({});
   if (!ids.length)
     return {
@@ -392,7 +452,7 @@ export async function listNewsletterSigners({
   const searchClean = search.trim().toLowerCase();
   const { whereSql, params } = newsletterBase({ state, kv, dateFrom, dateTo });
   const cols =
-    "s.id, s.name, s.email, s.kreisverband, s.occupation, s.state, s.created_at";
+    "s.id, s.name, s.email, s.kreisverband, s.occupation, s.signer_function AS signerFunction, s.state, s.created_at";
 
   if (!searchClean) {
     const { total } = await db
@@ -418,13 +478,222 @@ export async function listNewsletterSigners({
   return { signers: filtered.slice(offset, offset + limit), total };
 }
 
+// ---- admin list of every confirmed signature -------------------------------
+
+// SQL for "one of `columns` contains `term`", ignoring case. A term with a
+// non-ASCII letter needs GLOB (see querySigners).
+function containsTerm(columns, term) {
+  const nonAscii = /[^\x00-\x7f]/.test(term);
+  const pattern = nonAscii
+    ? caselessGlob(term)
+    : `%${term.replace(/[\\%_]/g, "\\$&")}%`;
+  const sql = columns
+    .map((column) =>
+      nonAscii ? `${column} GLOB ?` : `lower(${column}) LIKE ? ESCAPE '\\'`,
+    )
+    .join(" OR ");
+  return { sql: `(${sql})`, params: columns.map(() => pattern) };
+}
+
+const ADMIN_SIGNER_COLUMNS = `s.id, s.name, s.email, s.kreisverband, s.occupation,
+  s.signer_function AS signerFunction, s.lang, s.newsletter,
+  s.show_publicly AS showPublicly,
+  COALESCE(s.show_signer_details, 0) AS showSignerDetails,
+  s.created_at AS createdAt, p.position AS position,
+  s.first_signer AS firstSigner, s.email IS NULL AS handAdded`;
+const ADMIN_SIGNER_FROM =
+  "signers s LEFT JOIN first_signer_pins p ON p.signer_id = s.id";
+const ADMIN_SIGNER_FLAGS = [
+  "newsletter",
+  "showPublicly",
+  "showSignerDetails",
+  "firstSigner",
+  "handAdded",
+];
+
+// Names as a person would compare them: case, spacing and Unicode spelling
+// aside.
+const personName = (name) =>
+  String(name)
+    .normalize("NFKC")
+    .toLocaleLowerCase("de-DE")
+    .replace(/\s+/g, " ")
+    .trim();
+
+// Confirmed signatures, with an address (`handAdded` false) or added by hand
+// (true), whose name is one of `names` as personName compares them, oldest
+// first. Entries added by hand are few and read whole. Signatures with an
+// address are found in one scan: each name becomes a GLOB looser than the
+// comparison (any case, any spacing), and the comparison then decides.
+async function signersNamed(names, handAdded) {
+  if (!names.length) return [];
+  const wanted = new Set(names.map(personName));
+  const patterns = handAdded
+    ? []
+    : [...new Set(names.map((name) => name.trim()))].map((name) =>
+        name
+          .split(/\s+/)
+          .map((word) => caselessGlob(word).slice(1, -1))
+          .join("*"),
+      );
+  const rows = await db
+    .query(
+      `SELECT ${ADMIN_SIGNER_COLUMNS} FROM ${ADMIN_SIGNER_FROM}
+       WHERE s.verified = 1 AND s.email IS ${handAdded ? "NULL" : "NOT NULL"}
+         ${patterns.length ? `AND (${patterns.map(() => "s.name GLOB ?").join(" OR ")})` : ""}
+       ORDER BY s.created_at, s.id`,
+    )
+    .all(...patterns);
+  return rows.filter((row) => wanted.has(personName(row.name)));
+}
+
+// The other side of a possible duplicate: for an entry added by hand, the
+// signatures with an address and the same name; for such a signature, the
+// entries added by hand with its name.
+export async function possibleDuplicatesOf(signer) {
+  return boolifyAll(
+    (await signersNamed([signer.name], !signer.handAdded)).slice(0, 20),
+    ADMIN_SIGNER_FLAGS,
+  );
+}
+
+// Marks the admin rows that are a possible duplicate (see above).
+async function withDuplicateHints(rows) {
+  if (!rows.length) return rows;
+  const named = new Set();
+  for (const handAdded of [true, false]) {
+    const names = rows
+      .filter((row) => row.handAdded !== handAdded)
+      .map((row) => row.name);
+    for (const other of await signersNamed(names, handAdded))
+      named.add(`${!handAdded}:${personName(other.name)}`);
+  }
+  for (const row of rows)
+    row.possibleDuplicate = named.has(
+      `${row.handAdded}:${personName(row.name)}`,
+    );
+  return rows;
+}
+
+function adminRows(rows) {
+  return withDuplicateHints(boolifyAll(rows, ADMIN_SIGNER_FLAGS));
+}
+
+// The admin rows for `ids`, in that order.
+export async function adminSignersByIds(ids) {
+  if (!ids.length) return [];
+  const rows = await db
+    .query(
+      `SELECT ${ADMIN_SIGNER_COLUMNS} FROM ${ADMIN_SIGNER_FROM}
+       WHERE s.id IN (${ids.map(() => "?").join(",")})`,
+    )
+    .all(...ids);
+  const byId = new Map(rows.map((row) => [row.id, row]));
+  return adminRows(ids.map((id) => byId.get(id)).filter(Boolean));
+}
+
+// `visibility`: "public" or "hidden" narrows to signatures shown or not shown
+// on the public list. A search finds every word of it in the name, the address
+// or the region. Only when nothing contains it are the newest
+// FUZZY_SCAN_LIMIT signatures scored for a near miss ("Schmitt" for
+// "Schmidt"), best match first; the result then says `fuzzy`.
+//
+// A search is one pass in signing order that returns the matching ids; their
+// number is the total, and only the rows of the page shown are read in full.
+// Counting with a separate COUNT(*) made SQLite walk the name index and fetch
+// every row out of order: ~200 ms at 25k signatures against ~25 ms for the
+// pass.
+export async function listSigners({
+  search = "",
+  limit = 50,
+  offset = 0,
+  dateFrom = null,
+  dateTo = null,
+  visibility = "",
+}) {
+  limit = Math.min(Math.max(1, limit), 100);
+  offset = Math.max(0, offset);
+  const searchClean = search.trim().toLowerCase();
+  const conds = ["s.verified = 1"];
+  const params = [];
+  if (visibility === "public") conds.push("s.show_publicly = 1");
+  else if (visibility === "hidden") conds.push("s.show_publicly = 0");
+  if (dateFrom) {
+    conds.push("s.created_at >= ?");
+    params.push(iso(dateFrom));
+  }
+  if (dateTo) {
+    conds.push("s.created_at <= ?");
+    params.push(iso(dateTo));
+  }
+  const where = conds.join(" AND ");
+  const newestFirst = "ORDER BY s.created_at DESC, s.id DESC";
+  if (!searchClean) {
+    const { total } = await db
+      .query(`SELECT COUNT(*) AS total FROM signers s WHERE ${where}`)
+      .get(...params);
+    const signers = await db
+      .query(
+        `SELECT ${ADMIN_SIGNER_COLUMNS} FROM ${ADMIN_SIGNER_FROM}
+         WHERE ${where} ${newestFirst} LIMIT ? OFFSET ?`,
+      )
+      .all(...params, limit, offset);
+    return { signers: await adminRows(signers), total };
+  }
+
+  const terms = searchClean
+    .split(/\s+/)
+    .slice(0, 6)
+    .map((word) => containsTerm(["s.name", "s.email", "s.kreisverband"], word));
+  const found = await db
+    .query(
+      `SELECT s.id FROM signers s
+       WHERE ${[where, ...terms.map((term) => term.sql)].join(" AND ")}
+       ${newestFirst}`,
+    )
+    .all(...params, ...terms.flatMap((term) => term.params));
+  if (found.length)
+    return {
+      signers: await adminSignersByIds(
+        found.slice(offset, offset + limit).map((row) => row.id),
+      ),
+      total: found.length,
+    };
+
+  const recent = await db
+    .query(
+      `SELECT s.id, s.name, s.kreisverband FROM signers s
+       WHERE ${where} ${newestFirst} LIMIT ?`,
+    )
+    .all(...params, FUZZY_SCAN_LIMIT);
+  const scored = [];
+  for (const [index, row] of recent.entries()) {
+    const { match, score } = fuzzyMatch(
+      row.name,
+      row.kreisverband,
+      searchClean,
+    );
+    if (match) scored.push({ id: row.id, score, index });
+  }
+  scored.sort((a, b) => b.score - a.score || a.index - b.index);
+  return {
+    signers: await adminSignersByIds(
+      scored.slice(offset, offset + limit).map((hit) => hit.id),
+    ),
+    total: scored.length,
+    fuzzy: scored.length > 0,
+  };
+}
+
+// The newest `cap` matching ids, with `total` matches and whether the cap cut
+// any off.
 export async function listNewsletterSignerIds({
   search = "",
   state = "",
   kv = "",
   dateFrom = null,
   dateTo = null,
-  cap = 20000,
+  cap = SELECTION_LIMIT,
 } = {}) {
   const searchClean = search.trim().toLowerCase();
   const { whereSql, params } = newsletterBase({ state, kv, dateFrom, dateTo });
@@ -436,7 +705,11 @@ export async function listNewsletterSignerIds({
     .all(...params);
   if (searchClean)
     rows = rows.filter((r) => matchesAdminSearch(r, searchClean));
-  return rows.slice(0, cap).map((r) => r.id);
+  return {
+    ids: rows.slice(0, cap).map((r) => r.id),
+    total: rows.length,
+    truncated: rows.length > cap,
+  };
 }
 
 export async function getNewsletterSignerFilters() {
@@ -498,21 +771,85 @@ async function queryNewsletterStats() {
     .get();
 }
 
+// Start page of the admin: confirmed sign-ups since `since`, and unconfirmed
+// ones whose link still works, with those running out before `soon`.
+export async function getSignatureActivity(since, soon) {
+  const now = nowIso();
+  return await db
+    .query(
+      `SELECT
+        COUNT(*) FILTER (WHERE verified AND created_at >= ?) AS "signedSince",
+        COUNT(*) FILTER (WHERE NOT verified AND token_expires_at > ?) AS "pending",
+        COUNT(*) FILTER (
+          WHERE NOT verified AND token_expires_at > ? AND token_expires_at <= ?
+        ) AS "pendingExpiringSoon"
+      FROM signers`,
+    )
+    .get(iso(since), now, now, iso(soon));
+}
+
 // ---- signers: insert / verify / delete -------------------------------------
+
+export async function isSigningBlocked(email) {
+  const row = await db
+    .query(`SELECT 1 FROM erasure_log WHERE email_hmac = ? AND kind = ?`)
+    .get(emailHmac(canonicalMailbox(email)), BLOCK_SIGNING);
+  return Boolean(row);
+}
+
+// "Sperre aufheben" in the admin. Returns whether a block was lifted. The
+// lifting is logged too: a backup taken while the address was blocked still
+// holds the block, and a restore would bring it back without it.
+export async function unblockSigning(email) {
+  const mailbox = canonicalMailbox(email);
+  return db.transaction(
+    async () => {
+      const res = await db
+        .query(
+          `DELETE FROM erasure_log /* public-neutral */ WHERE email_hmac = ? AND kind = ?`,
+        )
+        .run(emailHmac(mailbox), BLOCK_SIGNING);
+      if (!res?.changes) return false;
+      await recordErasure(db, mailbox, UNBLOCK_SIGNING);
+      await recordAction(db, "signer.unblock", { count: 1 });
+      return true;
+    },
+    { immediate: true },
+  );
+}
+
+// "Gesperrte Adressen" in the admin: how many there are and when each was
+// blocked. A block is a keyed hash, so there is no address to show.
+export async function listSigningBlocks({ limit = 50, offset = 0 } = {}) {
+  const { total } = await db
+    .query(`SELECT COUNT(*) AS total FROM erasure_log WHERE kind = ?`)
+    .get(BLOCK_SIGNING);
+  const rows = await db
+    .query(
+      `SELECT at FROM erasure_log WHERE kind = ?
+       ORDER BY at DESC LIMIT ? OFFSET ?`,
+    )
+    .all(BLOCK_SIGNING, Math.min(Math.max(1, limit), 100), Math.max(0, offset));
+  return { total, blocks: rows.map((row) => row.at) };
+}
 
 export async function insertSigner({
   name,
   email,
   kv,
   occupation,
+  signerFunction = "",
   newsletter,
   showPublicly,
+  showSignerDetails = false,
   token,
   expiresAt,
   inviteRef = null,
   inviteShowName = false,
   lang = null,
 }) {
+  if (await isSigningBlocked(email))
+    return { ok: false, alreadyVerified: false, blocked: true };
   // A pending (unconfirmed) sign-up is only replaced once its link expired.
   // Before that, a second request for the same address, which proves nothing
   // about who sent it, must not change the name, public display or newsletter
@@ -521,14 +858,16 @@ export async function insertSigner({
   const row = await db
     .query(
       `INSERT INTO signers /* public-neutral */
-         (name, email, kreisverband, occupation, newsletter, show_publicly, verification_token, token_expires_at, pending_ref, invite_show_name, lang)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+         (name, email, kreisverband, occupation, signer_function, newsletter, show_publicly, show_signer_details, verification_token, token_expires_at, pending_ref, invite_show_name, lang)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
        ON CONFLICT (email) DO UPDATE
          SET name = excluded.name,
              kreisverband = excluded.kreisverband,
              occupation = excluded.occupation,
+             signer_function = excluded.signer_function,
              newsletter = excluded.newsletter,
              show_publicly = excluded.show_publicly,
+             show_signer_details = excluded.show_signer_details,
              verification_token = excluded.verification_token,
              token_expires_at = excluded.token_expires_at,
              pending_ref = excluded.pending_ref,
@@ -543,8 +882,10 @@ export async function insertSigner({
       email,
       kv,
       occupation || "",
+      signerFunction,
       B(newsletter),
       B(showPublicly),
+      B(showPublicly && showSignerDetails),
       token,
       iso(expiresAt),
       inviteRef,
@@ -574,13 +915,25 @@ export async function getPendingSignerByToken(token) {
   return boolify(
     (await db
       .query(
-        `SELECT name, kreisverband, occupation, newsletter, show_publicly, invite_show_name, lang
+        `SELECT name, kreisverband, occupation, signer_function AS signerFunction, newsletter, show_publicly, show_signer_details, invite_show_name, lang
          FROM signers
          WHERE verification_token = ? AND verified = 0 AND token_expires_at > ?`,
       )
       .get(token, nowIso())) || null,
     ["newsletter", "show_publicly", "invite_show_name"],
   );
+}
+
+// A confirmation mail held back while sending was down still promises its full
+// validity, so the link's clock starts when the mail goes out. Expired or
+// confirmed sign-ups are left alone.
+export async function extendPendingConfirmation(id, expiresAt) {
+  await db
+    .query(
+      `UPDATE signers /* public-neutral */ SET token_expires_at = ?
+       WHERE id = ? AND verified = 0 AND token_expires_at > ? AND token_expires_at < ?`,
+    )
+    .run(iso(expiresAt), id, nowIso(), iso(expiresAt));
 }
 
 export async function getVerifiedSignerName(email) {
@@ -768,6 +1121,372 @@ async function eraseAuthorizedEmail(email) {
   return changes > 0;
 }
 
+// Sign-ups, confirmed or not, that reach `mailbox` under any spelling (a plus
+// tag, Gmail dots), newest first.
+async function mailboxSignups(mailbox, columns) {
+  const rows = [];
+  for (const domain of mailboxDomains(mailbox)) {
+    const suffix = `@${domain}`;
+    rows.push(
+      ...(await db
+        .query(
+          `SELECT ${columns} FROM ${ADMIN_SIGNER_FROM}
+           WHERE substr(lower(trim(s.email)), ?) = ?`,
+        )
+        .all(-suffix.length, suffix)),
+    );
+  }
+  return rows
+    .filter((row) => canonicalMailbox(row.email) === mailbox)
+    .sort((a, b) => String(b.createdAt).localeCompare(String(a.createdAt)));
+}
+
+// What is left of a mailbox once one of its sign-ups was removed. A block
+// covers every spelling from then on, but those made before it are still
+// there.
+async function mailboxVariants(mailbox) {
+  return boolifyAll(
+    await mailboxSignups(
+      mailbox,
+      "s.id, s.name, s.email, s.verified, s.created_at AS createdAt",
+    ),
+    ["verified"],
+  );
+}
+
+// An entry added by hand has no address to block; it is skipped.
+async function removeAndBlock(id) {
+  const row = await db
+    .query(`SELECT email FROM signers WHERE id = ? AND email IS NOT NULL`)
+    .get(id);
+  if (!row) return null;
+  const mailbox = canonicalMailbox(row.email);
+  await eraseAuthorizedEmail(row.email);
+  await recordErasure(db, mailbox, BLOCK_SIGNING);
+  return mailbox;
+}
+
+// "Entfernen und sperren" in the admin: a fake signature goes away like a
+// self-requested deletion, and its address may not sign again. Returns null
+// for an unknown id, otherwise { variants }: the other sign-ups of the same
+// mailbox, for the admin to remove as well.
+export async function removeAndBlockSigner(id) {
+  return db.transaction(
+    async () => {
+      const mailbox = await removeAndBlock(id);
+      if (!mailbox) return null;
+      await recordAction(db, "signer.remove-block", { targetId: id, count: 1 });
+      return { variants: await mailboxVariants(mailbox) };
+    },
+    { immediate: true },
+  );
+}
+
+// The same for a selection, all or nothing. Ids already gone are skipped.
+export async function removeAndBlockSigners(ids) {
+  return db.transaction(
+    async () => {
+      const mailboxes = new Set();
+      let removed = 0;
+      for (const id of ids) {
+        const mailbox = await removeAndBlock(id);
+        if (!mailbox) continue;
+        removed++;
+        mailboxes.add(mailbox);
+      }
+      if (removed)
+        await recordAction(db, "signer.remove-block", { count: removed });
+      const variants = [];
+      for (const mailbox of mailboxes)
+        variants.push(...(await mailboxVariants(mailbox)));
+      return { removed, variants };
+    },
+    { immediate: true },
+  );
+}
+
+// "Löschen ohne Sperre": everything stored for the address goes, as if the
+// person had asked for it, and the address may sign again. An entry added by
+// hand has nothing but its row; the log keeps it gone after a restore.
+export async function eraseSigner(id) {
+  return db.transaction(
+    async () => {
+      const row = await db
+        .query(`SELECT id, email FROM signers WHERE id = ?`)
+        .get(id);
+      if (!row) return false;
+      if (row.email) await eraseAuthorizedEmail(row.email);
+      else await eraseHandEntry(row);
+      await recordAction(db, "signer.erase", { targetId: id, count: 1 });
+      return true;
+    },
+    { immediate: true },
+  );
+}
+
+async function eraseHandEntry(row) {
+  await db.query(`DELETE FROM signers WHERE id = ?`).run(row.id);
+  await recordErasure(db, erasureSubject(row), ERASE);
+  await forgetDeletedSigners(db);
+}
+
+// ---- admin: one signature ---------------------------------------------------
+
+const consentMissing = () =>
+  Object.assign(
+    new Error(
+      "Bestätige, dass die Zustimmung der Person vorliegt, bevor du etwas öffentlich schaltest.",
+    ),
+    { status: 400 },
+  );
+
+// The edit panel in the admin. `patch` holds the fields to change, already
+// cleaned like a sign-up: name, kreisverband, occupation, signerFunction,
+// lang, showPublicly, showSignerDetails, and newsletter (only `false`:
+// subscribing takes the person's own confirmation, see the opt-in mail).
+//
+// Taking something off is immediate and survives a restore. Putting the name
+// or the details on the public list for someone who had them off needs
+// `consent`; when and how the person agreed is kept on the signature. Every
+// change is logged with its old and new value.
+//
+// Returns null for an unknown or unconfirmed id, otherwise
+// { signer, changes, regionChanged }.
+export async function updateSignerByAdmin(
+  id,
+  patch,
+  { consent = false, consentNote = "" } = {},
+) {
+  return db.transaction(
+    async () => {
+      const row = await db
+        .query(
+          `SELECT id, email, name, kreisverband, occupation, signer_function,
+                  lang, show_publicly, show_signer_details, newsletter
+           FROM signers WHERE id = ? AND verified = 1`,
+        )
+        .get(id);
+      if (!row) return null;
+      const before = {
+        name: row.name,
+        occupation: row.occupation || "",
+        signerFunction: row.signer_function,
+        kreisverband: row.kreisverband || "",
+        lang: row.lang,
+        showPublicly: Boolean(row.show_publicly),
+        showSignerDetails: row.show_signer_details === 1,
+        newsletter: Boolean(row.newsletter),
+      };
+      const after = { ...before };
+      for (const key of Object.keys(before))
+        if (patch[key] !== undefined) after[key] = patch[key];
+      if (!after.showPublicly) after.showSignerDetails = false;
+      after.newsletter = before.newsletter && patch.newsletter !== false;
+      const changes = {};
+      for (const key of Object.keys(before))
+        if (after[key] !== before[key])
+          changes[key] = [before[key], after[key]];
+      if (!Object.keys(changes).length)
+        return { signer: await adminSigner(id), changes, regionChanged: false };
+
+      const madePublic =
+        (changes.showPublicly && after.showPublicly) ||
+        (changes.showSignerDetails && after.showSignerDetails);
+      if (madePublic && !consent) throw consentMissing();
+
+      const subject = erasureSubject(row);
+      const consentAt = madePublic ? nowIso() : null;
+      await db
+        .query(
+          `UPDATE signers SET name = ?, kreisverband = ?, occupation = ?,
+             signer_function = ?, lang = ?, show_publicly = ?,
+             show_signer_details = ?, newsletter = ?,
+             state = CASE WHEN kreisverband IS NOT ? THEN '' ELSE state END,
+             admin_consent_at = COALESCE(?, admin_consent_at),
+             admin_consent_note = CASE WHEN ? IS NULL THEN admin_consent_note ELSE ? END
+           WHERE id = ?`,
+        )
+        .run(
+          after.name,
+          after.kreisverband,
+          after.occupation,
+          after.signerFunction,
+          after.lang,
+          B(after.showPublicly),
+          changes.showSignerDetails
+            ? B(after.showSignerDetails)
+            : row.show_signer_details,
+          B(after.newsletter),
+          after.kreisverband,
+          consentAt,
+          consentAt,
+          consentNote,
+          id,
+        );
+      if (changes.showPublicly) {
+        if (after.showPublicly) await forgetErasure(db, subject, HIDE_PUBLICLY);
+        else await recordErasure(db, subject, HIDE_PUBLICLY);
+      }
+      if (changes.showSignerDetails) {
+        if (after.showSignerDetails)
+          await forgetErasure(db, subject, HIDE_SIGNER_DETAILS);
+        else await recordErasure(db, subject, HIDE_SIGNER_DETAILS);
+      }
+      if (changes.newsletter)
+        await recordErasure(db, subject, NEWSLETTER_OPT_OUT);
+      await rememberClearedDetails(subject, before, after);
+      await recordAction(db, "signer.edit", {
+        targetId: id,
+        detail: { changes, ...(madePublic && { consentNote }) },
+      });
+      return {
+        signer: await adminSigner(id),
+        changes,
+        regionChanged: Boolean(changes.kreisverband),
+      };
+    },
+    { immediate: true },
+  );
+}
+
+// An organisation or function someone had taken off must not come back with
+// a restored backup; one they entered again must stay.
+async function rememberClearedDetails(subject, before, after) {
+  for (const [kind, field] of [
+    [CLEAR_OCCUPATION, "occupation"],
+    [CLEAR_SIGNER_FUNCTION, "signerFunction"],
+  ]) {
+    if (after[field] === undefined || after[field] === before[field]) continue;
+    if (after[field]) await forgetErasure(db, subject, kind);
+    else await recordErasure(db, subject, kind);
+  }
+}
+
+async function adminSigner(id) {
+  const row = await db
+    .query(
+      `SELECT ${ADMIN_SIGNER_COLUMNS}, s.admin_consent_at AS consentAt,
+              s.admin_consent_note AS consentNote
+       FROM ${ADMIN_SIGNER_FROM} WHERE s.id = ? AND s.verified = 1`,
+    )
+    .get(id);
+  return row ? (await adminRows([row]))[0] : null;
+}
+
+// One confirmed signature as the edit panel shows it, with what the log holds
+// about it.
+export async function getSignerForAdmin(id) {
+  const signer = await adminSigner(id);
+  if (!signer) return null;
+  const { actions } = await listActions(db, { signerId: id, limit: 20 });
+  return { ...signer, history: actions };
+}
+
+// "Adresse nachschlagen" in the admin: everything stored for a mailbox, the
+// unconfirmed sign-ups included, and why a mail may not have arrived.
+export async function lookupSignups(email) {
+  const signups = boolifyAll(
+    await mailboxSignups(
+      canonicalMailbox(email),
+      `${ADMIN_SIGNER_COLUMNS}, s.verified,
+       CASE WHEN s.verified = 0 THEN s.token_expires_at END AS confirmationExpiresAt`,
+    ),
+    [...ADMIN_SIGNER_FLAGS, "verified"],
+  );
+  const tables = await erasureTables(db);
+  const addresses = [...new Set([email, ...signups.map((row) => row.email)])];
+  const mail = tables.has("email_attempts")
+    ? await db
+        .query(
+          `SELECT status, COALESCE(created_at, updated_at) AS at
+           FROM email_attempts
+           WHERE subject_hmac IN (${addresses.map(() => "?").join(",")})
+           ORDER BY at DESC LIMIT 10`,
+        )
+        .all(...addresses.map((address) => emailHmac(address)))
+    : [];
+  const ids = new Set(signups.map((row) => row.id));
+  let queued = 0;
+  if (tables.has("_honker_live") && ids.size) {
+    for (const job of await db
+      .query(`SELECT payload FROM _honker_live WHERE queue = 'emails'`)
+      .all()) {
+      try {
+        if (ids.has(JSON.parse(job.payload)?.signerId)) queued++;
+      } catch {
+        // not a mail of ours
+      }
+    }
+  }
+  const meeting = (await db
+    .query(`SELECT 1 FROM zoom_registrations WHERE lower(trim(email)) = ?`)
+    .get(email))
+    ? "registered"
+    : (await db
+          .query(`SELECT 1 FROM zoom_pending WHERE lower(trim(email)) = ?`)
+          .get(email))
+      ? "pending"
+      : null;
+  return {
+    blocked: await isSigningBlocked(email),
+    signups,
+    mail,
+    queued,
+    meeting,
+  };
+}
+
+// ---- admin: exports and log ---------------------------------------------------
+
+// What the public list shows about each signature, and nothing else: function
+// and organisation only where the person agreed to them being public.
+export async function exportPublicSigners() {
+  const detailsAllowed = publicSignerDetailsCondition();
+  const rows = await db
+    .query(
+      `SELECT s.name, s.kreisverband, s.state, s.created_at AS createdAt,
+              CASE WHEN ${detailsAllowed} THEN s.signer_function ELSE '' END AS signerFunction,
+              CASE WHEN ${detailsAllowed} THEN s.occupation ELSE '' END AS organisation
+       FROM signers s WHERE s.verified = 1 AND s.show_publicly = 1
+       ORDER BY s.created_at, s.id`,
+    )
+    .all();
+  await recordAction(db, "export.signers", { count: rows.length });
+  return rows;
+}
+
+export async function exportMeetingRegistrations() {
+  const rows = boolifyAll(
+    await db
+      .query(
+        `SELECT name, kreisverband, delegierter, created_at AS createdAt
+         FROM zoom_registrations ORDER BY created_at, id`,
+      )
+      .all(),
+    ["delegierter"],
+  );
+  await recordAction(db, "export.meeting-registrations", {
+    count: rows.length,
+  });
+  return rows;
+}
+
+export function recordAdminAction(action, entry) {
+  return recordAction(db, action, entry);
+}
+
+export function lastAdminActionAt(action, targetId) {
+  return lastActionAt(db, action, targetId);
+}
+
+export function listAdminActions(page) {
+  return listActions(db, page);
+}
+
+export function purgeOldAdminActions(before) {
+  return purgeAdminActions(db, before);
+}
+
 export async function eraseEmail(email) {
   return db.transaction(() => eraseAuthorizedEmail(email), { immediate: true });
 }
@@ -816,8 +1535,8 @@ export async function getSignerForMail(id) {
   return (
     (await db
       .query(
-        `SELECT id, name, email, verified, verification_token, token_expires_at, invite_code, lang, created_at
-         FROM signers WHERE id = ?`,
+        `SELECT id, name, email, verified, newsletter, verification_token, token_expires_at, invite_code, lang, created_at
+         FROM signers WHERE id = ? AND email IS NOT NULL`,
       )
       .get(id)) || null
   );
@@ -873,15 +1592,61 @@ export async function getZoomRegistrationCount() {
   );
 }
 
-export async function listZoomRegistrations() {
-  return boolifyAll(
-    await db
-      .query(
-        `SELECT name, email, kreisverband, delegierter, created_at
-         FROM zoom_registrations ORDER BY created_at DESC`,
-      )
-      .all(),
-    ["delegierter"],
+// `search` narrows the page to names and addresses containing it; `matches` is
+// how many there are, `total` stays the number of all registrations.
+export async function listZoomRegistrations({
+  limit = 100,
+  offset = 0,
+  search = "",
+} = {}) {
+  const term = search.trim().toLowerCase();
+  const filter = term
+    ? containsTerm(["name", "email"], term)
+    : { sql: "1", params: [] };
+  const [{ zoomCount, zoomDelegateCount }, { matches }, registrations] =
+    await Promise.all([
+      getZoomCounts(),
+      db
+        .query(
+          `SELECT COUNT(*) AS matches FROM zoom_registrations WHERE ${filter.sql}`,
+        )
+        .get(...filter.params),
+      db
+        .query(
+          `SELECT id, name, email, kreisverband, delegierter, created_at
+           FROM zoom_registrations WHERE ${filter.sql}
+           ORDER BY created_at DESC, id DESC
+           LIMIT ? OFFSET ?`,
+        )
+        .all(
+          ...filter.params,
+          Math.min(Math.max(1, limit), 200),
+          Math.max(0, offset),
+        ),
+    ]);
+  return {
+    registrations: boolifyAll(registrations, ["delegierter"]),
+    total: zoomCount,
+    delegates: zoomDelegateCount,
+    matches,
+  };
+}
+
+// "Entfernen" on one row of the admin's meeting list: what the person's own
+// "vom Treffen abmelden" link does, logged the same way so that restoring a
+// backup does not bring the registration back. The signature is not touched.
+export async function removeZoomRegistration(id) {
+  return db.transaction(
+    async () => {
+      const row = await db
+        .query(`DELETE FROM zoom_registrations WHERE id = ? RETURNING email`)
+        .get(id);
+      if (!row) return false;
+      await recordErasure(db, row.email, TREFFEN_OPT_OUT);
+      await deleteJobsByPayload("emails", "registrationId", id);
+      return true;
+    },
+    { immediate: true },
   );
 }
 
@@ -1291,6 +2056,10 @@ export async function resetZoomMailings() {
   );
 }
 
+// "Alle Zoom-Anmeldungen löschen": the confirmed registrations, and with them
+// the sign-ups still waiting for their confirmation click, whose link would
+// otherwise register that person again afterwards. Mail queued for either
+// goes too. Returns the number of confirmed registrations removed.
 export async function clearZoomRegistrations() {
   return db.transaction(
     async () => {
@@ -1298,6 +2067,9 @@ export async function clearZoomRegistrations() {
         .query("SELECT COUNT(*) AS count FROM zoom_registrations")
         .get();
       await db.query("DELETE FROM zoom_registrations").run();
+      await db.query("DELETE FROM zoom_pending /* public-neutral */").run();
+      for (const subject of ["registrationId", "pendingId"])
+        await deleteJobsWithPayload("emails", subject);
       await advanceZoomGeneration();
       const settings = await getZoomSettings();
       await saveZoomSetting(
@@ -1530,7 +2302,8 @@ export async function listCampaigns() {
   const rows = await db
     .query(
       `SELECT c.id, c.template_id, t.name AS template_name, c.subject,${CAMPAIGN_I18N ? " c.i18n," : ""} c.scheduled_at,
-              c.sent_at, c.status, c.recipient_count, c.sent_offset, c.attempts, c.audience, c.failure,
+              c.sent_at, c.status, c.recipient_count, c.sent_offset, c.audience_size, c.attempts, c.audience, c.failure,
+              c.delivery_expires_at IS NOT NULL AS started,
               COALESCE(json_array_length(c.recipient_ids), 0) AS selection_count, c.created_at
        FROM campaigns c
        LEFT JOIN email_templates t ON t.id = c.template_id
@@ -1540,7 +2313,10 @@ export async function listCampaigns() {
   if (CAMPAIGN_I18N) {
     for (const row of rows) row.i18n = parseCampaignI18n(row.i18n);
   }
-  for (const row of rows) row.failure = parseCampaignI18n(row.failure);
+  for (const row of rows) {
+    row.failure = parseCampaignI18n(row.failure);
+    row.started = Boolean(row.started);
+  }
   return rows;
 }
 
@@ -1612,7 +2388,7 @@ export async function createCampaign({
       .get(requestKey);
     if (previous && previous.request_hash !== requestHash) {
       const error = new Error(
-        "Diese Anfragekennung wurde bereits für eine andere Nachricht verwendet. Bitte den Nachrichtenentwurf prüfen und erneut vorbereiten.",
+        `Aus diesem Entwurf ist bereits Kampagne #${previous.id} entstanden; sie bleibt, wie sie ist. Für eine weitere Nachricht setze den Entwurf zurück.`,
       );
       error.status = 409;
       throw error;
@@ -1626,6 +2402,35 @@ export async function createCampaign({
   }
   if (row && CAMPAIGN_I18N) row.i18n = parseCampaignI18n(row.i18n);
   return row || null;
+}
+
+// Campaigns that will still send with one of these templates without anyone
+// pressing a button: scheduled, being sent, or waiting for their next attempt.
+// An aborted one only resumes through its retry review, which names the
+// template it is about to use.
+export async function getPendingCampaignsUsing(templateIds, connection = db) {
+  const ids = new Set(templateIds.map(Number));
+  const rows = await connection
+    .query(
+      `SELECT id, template_id, subject, scheduled_at, status, i18n FROM campaigns
+       WHERE status IN ('scheduled', 'sending', 'failed')
+       ORDER BY scheduled_at, id`,
+    )
+    .all();
+  return rows
+    .filter(
+      (row) =>
+        ids.has(row.template_id) ||
+        Object.values(parseCampaignI18n(row.i18n) || {}).some((entry) =>
+          ids.has(Number(entry?.templateId)),
+        ),
+    )
+    .map(({ id, subject, scheduled_at, status }) => ({
+      id,
+      subject,
+      scheduled_at,
+      status,
+    }));
 }
 
 // Load a single campaign (for the job worker), with recipient_ids parsed.
@@ -1648,6 +2453,31 @@ export async function cancelCampaign(id) {
     .query(
       `UPDATE campaigns SET status = 'cancelled' WHERE id = ? AND status = 'scheduled' RETURNING id`,
     )
+    .get(id);
+  return Boolean(row);
+}
+
+// "Versand stoppen" in the admin. A send that has begun stops where it is: one
+// that is running, one waiting for its next try, and one put back to
+// 'scheduled' while the mail service was unavailable (deferCampaign). The
+// worker notices between recipients. Whoever was reached stays in the delivery
+// log, so "Erneut versuchen" picks up with the rest. Returns how many were
+// reached, or null when the campaign had not begun or is already over.
+export async function stopCampaign(id) {
+  const row = await db
+    .query(
+      `UPDATE campaigns SET status = 'aborted', failure = '{"category":"stopped-by-admin"}'
+       WHERE id = ? AND (status IN ('sending', 'failed')
+         OR (status = 'scheduled' AND delivery_expires_at IS NOT NULL))
+       RETURNING id`,
+    )
+    .get(id);
+  return row ? countDelivered(`campaign:${id}`) : null;
+}
+
+export async function isCampaignSending(id) {
+  const row = await db
+    .query(`SELECT 1 FROM campaigns WHERE id = ? AND status = 'sending'`)
     .get(id);
   return Boolean(row);
 }
@@ -1723,14 +2553,31 @@ export async function setCampaignProgress(id, deliveredCount) {
     .run(deliveredCount, deliveredCount, nowIso(), id);
 }
 
-export async function markCampaignSent(id, recipientCount) {
+export async function setCampaignAudienceSize(id, size) {
   await db
     .query(
-      `UPDATE campaigns SET status = 'sent', sent_at = ?, recipient_count = ?, sent_offset = ?, failure = NULL WHERE id = ?`,
+      `UPDATE campaigns /* public-neutral */ SET audience_size = ? WHERE id = ?`,
     )
-    .run(nowIso(), recipientCount, recipientCount, id);
+    .run(size, id);
 }
 
+// Only a running send completes: one the admin stopped during its last
+// recipient stays stopped, with its progress counted.
+export async function markCampaignSent(id, recipientCount) {
+  const done = await db
+    .query(
+      `UPDATE campaigns SET status = 'sent', sent_at = ?, recipient_count = ?, sent_offset = ?, failure = NULL
+       WHERE id = ? AND status = 'sending'`,
+    )
+    .run(nowIso(), recipientCount, recipientCount, id);
+  if (!done.changes)
+    await db
+      .query(`UPDATE campaigns SET sent_offset = ? WHERE id = ?`)
+      .run(recipientCount, id);
+}
+
+// Only a running send fails: one the admin stopped meanwhile stays stopped
+// instead of going back to "wird erneut versucht".
 export async function markCampaignFailed(
   id,
   failure = { category: "unknown" },
@@ -1740,7 +2587,7 @@ export async function markCampaignFailed(
       `UPDATE campaigns
        SET status = CASE WHEN attempts >= ? THEN 'aborted' ELSE 'failed' END,
            heartbeat_at = ?, failure = ?
-       WHERE id = ?`,
+       WHERE id = ? AND status = 'sending'`,
     )
     .run(MAX_MAILING_ATTEMPTS, nowIso(), JSON.stringify(failure), id);
 }
@@ -2029,6 +2876,42 @@ export async function optOutNewsletter(token) {
   return Boolean(row);
 }
 
+// The link in the mail the admin sends with "Newsletter-Einwilligung
+// anfragen". It carries the signer's settings token, which already lets its
+// holder switch the newsletter on, so it is valid exactly as long.
+export async function getNewsletterOptIn(token) {
+  return boolify(
+    (await db
+      .query(
+        `SELECT id, name, newsletter, lang FROM signers
+         WHERE unsubscribe_token = ? AND unsubscribe_token_created_at > ?
+           AND verified = 1`,
+      )
+      .get(token, isoAgo(TOKEN_EDIT_WINDOW))) || null,
+    ["newsletter"],
+  );
+}
+
+// The person's own click on that page: the consent the newsletter needs.
+export async function confirmNewsletterOptIn(token) {
+  return db.transaction(
+    async () => {
+      const signer = await getNewsletterOptIn(token);
+      if (!signer) return null;
+      if (signer.newsletter) return signer;
+      const row = await db
+        .query(`UPDATE signers SET newsletter = 1 WHERE id = ? RETURNING email`)
+        .get(signer.id);
+      await forgetErasure(db, row.email, NEWSLETTER_OPT_OUT);
+      await recordAction(db, "signer.newsletter-confirmed", {
+        targetId: signer.id,
+      });
+      return signer;
+    },
+    { immediate: true },
+  );
+}
+
 // "Unterschrift vollständig löschen" on the settings page: erases the signature
 // and everything else stored for that address, incl. a Treffen registration.
 // Accepts a signer or a Treffen token, like the rest of the settings page.
@@ -2044,18 +2927,93 @@ export async function deleteSignerByUnsubscribeToken(token, source) {
   );
 }
 
+// Sign-ups that ran out without a confirmation mail ever being accepted by the
+// mail service: the person did everything right and their signature was lost.
+// Only how many per UTC day, never who, as JSON {"2026-11-22": 3} under this
+// app_settings key, for the last UNMAILED_DAYS days.
+const UNMAILED_KEY = "signups_expired_unmailed";
+const UNMAILED_DAYS = 30;
+
+async function readExpiredUnmailed(now) {
+  const row = await db
+    .query(`SELECT value FROM app_settings WHERE key = ?`)
+    .get(UNMAILED_KEY);
+  const oldest = new Date(now.getTime() - UNMAILED_DAYS * 86400_000)
+    .toISOString()
+    .slice(0, 10);
+  return Object.fromEntries(
+    Object.entries(row ? JSON.parse(row.value) : {}).filter(
+      ([day]) => day > oldest,
+    ),
+  );
+}
+
+// For the start page of the admin.
+export async function getExpiredUnmailedSignups(now = new Date()) {
+  const days = await readExpiredUnmailed(now);
+  return {
+    count: Object.values(days).reduce((sum, n) => sum + n, 0),
+    lastDay: Object.keys(days).sort().at(-1) ?? null,
+    days: UNMAILED_DAYS,
+  };
+}
+
+// Whether the mail service accepted any mail to this address since `since`.
+async function mailAcceptedSince(email, since) {
+  const row = await db
+    .query(
+      `SELECT 1 FROM email_attempts
+       WHERE subject_hmac = ? AND status = 'delivered' AND updated_at >= ? LIMIT 1`,
+    )
+    .get(emailHmac(email), since);
+  return Boolean(row);
+}
+
 // DSGVO data minimisation: drop sign-ups that were never email-confirmed once
 // their verification token has expired (token TTL is 24h). Confirmed rows
 // (verified = 1, token cleared) are never touched. Returns the number deleted.
-export async function deleteExpiredUnverifiedSigners() {
-  const res = await db
-    .query(
-      // Only ever removes unverified rows, which no public read counts, so it
-      // must not drop the read cache every five minutes.
-      `DELETE FROM signers /* public-neutral */ WHERE verified = 0 AND token_expires_at < ?`,
-    )
-    .run(nowIso());
-  return res?.changes ?? 0;
+// This is the only place an unconfirmed sign-up ends without the person or the
+// team asking for it, so it is where the lost ones are counted.
+export async function deleteExpiredUnverifiedSigners(now = new Date()) {
+  return db.transaction(
+    async () => {
+      const expired = await db
+        .query(
+          `SELECT email, created_at FROM signers WHERE verified = 0 AND token_expires_at < ?`,
+        )
+        .all(iso(now));
+      if (!expired.length) return 0;
+      const hasAttempts = (await erasureTables(db)).has("email_attempts");
+      let unmailed = 0;
+      for (const signup of expired)
+        if (
+          !hasAttempts ||
+          !(await mailAcceptedSince(signup.email, signup.created_at))
+        )
+          unmailed++;
+      await db
+        .query(
+          // Only ever removes unverified rows, which no public read counts, so it
+          // must not drop the read cache every five minutes.
+          `DELETE FROM signers /* public-neutral */ WHERE verified = 0 AND token_expires_at < ?`,
+        )
+        .run(iso(now));
+      if (unmailed) {
+        const days = await readExpiredUnmailed(now);
+        const today = iso(now).slice(0, 10);
+        days[today] = (days[today] || 0) + unmailed;
+        await db
+          .query(
+            `INSERT INTO app_settings (key, value, updated_at) VALUES (?, ?, ?)
+             ON CONFLICT (key) DO UPDATE
+               SET value = excluded.value, updated_at = excluded.updated_at`,
+          )
+          .run(UNMAILED_KEY, JSON.stringify(days), iso(now));
+      }
+      return expired.length;
+    },
+    { immediate: true },
+  );
 }
 
 // Upper bound on how long anything is kept (privacy.signerRetentionYears after
@@ -2077,6 +3035,7 @@ export async function deleteExpiredByAge(cutoff) {
   const zoom = await db
     .query(`DELETE FROM zoom_registrations WHERE created_at < ?`)
     .run(at);
+  await forgetDeletedSigners(db);
   return (signers?.changes ?? 0) + (zoom?.changes ?? 0);
 }
 
@@ -2132,8 +3091,9 @@ export async function getUnifiedUnsubscribeState(token, source) {
 
   const signer = await db
     .query(
-      `SELECT name, kreisverband, occupation, newsletter, show_publicly, invite_show_name, invite_code, verified
-    FROM signers WHERE email = ?`,
+      `SELECT name, kreisverband, occupation, signer_function AS signerFunction, newsletter, show_publicly,
+              ${publicSignerDetailsCondition()} AS showSignerDetails, invite_show_name, invite_code, verified
+         FROM signers s WHERE email = ?`,
     )
     .get(email);
   const zoom = await db
@@ -2167,6 +3127,14 @@ export async function getUnifiedUnsubscribeState(token, source) {
     name: signer?.name ?? "",
     kreisverband: signer?.kreisverband ?? "",
     occupation: signer?.occupation ?? "",
+    ...(cfg.sign.fields.signerFunction && {
+      signerFunction: signer?.signerFunction ?? "",
+    }),
+    ...(cfg.features.publicSignerDetails && {
+      showSignerDetails: Boolean(
+        signer?.show_publicly && signer?.showSignerDetails,
+      ),
+    }),
     showPublicly: Boolean(signer?.show_publicly ?? true),
     inviteShowName: Boolean(signer?.invite_show_name),
     hasInviteCode: Boolean(signer?.invite_code),
@@ -2185,45 +3153,82 @@ export async function getUnifiedUnsubscribeState(token, source) {
 // when the Kreisverband changes lets the state backfill re-resolve it.
 export async function updateSignerByEmail(
   email,
-  { name, kreisverband, occupation, newsletter, showPublicly, inviteShowName },
+  {
+    name,
+    kreisverband,
+    occupation,
+    signerFunction,
+    newsletter,
+    showPublicly,
+    showSignerDetails,
+    inviteShowName,
+  },
 ) {
   // inviteShowName is undefined when invite links are off: left unchanged.
   const inviteName = inviteShowName === undefined ? null : B(inviteShowName);
-  const row = await db
-    .query(
-      `UPDATE signers SET
-        name = ?,
-        kreisverband = ?,
-        occupation = ?,
-        newsletter = ?,
-        show_publicly = ?,
-        invite_show_name = COALESCE(?, invite_show_name),
-        state = CASE WHEN kreisverband IS NOT ? THEN '' ELSE state END
-      WHERE email = ?
-      RETURNING id`,
-    )
-    .get(
-      name,
-      kreisverband,
-      occupation,
-      B(newsletter),
-      B(showPublicly),
-      inviteName,
-      kreisverband,
-      email,
-    );
-  if (row) {
-    if (newsletter) await forgetErasure(db, email, NEWSLETTER_OPT_OUT);
-    else await recordErasure(db, email, NEWSLETTER_OPT_OUT);
-    // Taking the name off the public list must survive a restore as well.
-    if (showPublicly) await forgetErasure(db, email, HIDE_PUBLICLY);
-    else await recordErasure(db, email, HIDE_PUBLICLY);
-    // Withdrawn consent to the name on the invite link, likewise.
-    if (inviteShowName === false)
-      await recordErasure(db, email, HIDE_INVITE_NAME);
-    else if (inviteShowName) await forgetErasure(db, email, HIDE_INVITE_NAME);
-  }
-  return Boolean(row);
+  const visibleDetails =
+    showSignerDetails === undefined
+      ? null
+      : B(showPublicly && showSignerDetails);
+  return db.transaction(
+    async () => {
+      const before = await db
+        .query(
+          `SELECT occupation, signer_function AS signerFunction
+           FROM signers WHERE email = ?`,
+        )
+        .get(email);
+      const row = await db
+        .query(
+          `UPDATE signers SET
+          name = ?,
+          kreisverband = ?,
+          occupation = ?,
+          signer_function = COALESCE(?, signer_function),
+          newsletter = ?,
+          show_publicly = ?,
+          show_signer_details = COALESCE(?, show_signer_details),
+          invite_show_name = COALESCE(?, invite_show_name),
+          state = CASE WHEN kreisverband IS NOT ? THEN '' ELSE state END
+        WHERE email = ?
+        RETURNING id`,
+        )
+        .get(
+          name,
+          kreisverband,
+          occupation,
+          signerFunction ?? null,
+          B(newsletter),
+          B(showPublicly),
+          visibleDetails,
+          inviteName,
+          kreisverband,
+          email,
+        );
+      if (row) {
+        if (newsletter) await forgetErasure(db, email, NEWSLETTER_OPT_OUT);
+        else await recordErasure(db, email, NEWSLETTER_OPT_OUT);
+        // Taking the name off the public list must survive a restore as well.
+        if (showPublicly) await forgetErasure(db, email, HIDE_PUBLICLY);
+        else await recordErasure(db, email, HIDE_PUBLICLY);
+        if (visibleDetails === 1)
+          await forgetErasure(db, email, HIDE_SIGNER_DETAILS);
+        else if (visibleDetails === 0)
+          await recordErasure(db, email, HIDE_SIGNER_DETAILS);
+        // Withdrawn consent to the name on the invite link, likewise.
+        if (inviteShowName === false)
+          await recordErasure(db, email, HIDE_INVITE_NAME);
+        else if (inviteShowName)
+          await forgetErasure(db, email, HIDE_INVITE_NAME);
+        await rememberClearedDetails(email, before, {
+          occupation,
+          signerFunction,
+        });
+      }
+      return Boolean(row);
+    },
+    { immediate: true },
+  );
 }
 
 // Used after a self-service edit to re-queue state resolution when the
@@ -2268,8 +3273,8 @@ export async function deleteZoomByEmail(email) {
 }
 
 // Erasure-log entries older than `before` (see db/erasure-log.js).
-export async function purgeOldErasureLog(before) {
-  return purgeErasureLog(db, before);
+export async function purgeOldErasureLog(before, blocksBefore) {
+  return purgeErasureLog(db, before, blocksBefore);
 }
 
 // ---- occupations -----------------------------------------------------------
@@ -2313,6 +3318,18 @@ export async function getOccupations() {
   return cached("occupations", queryOccupations);
 }
 
+export async function getSignerFunctions() {
+  return cached("signer-functions", () =>
+    db
+      .query(
+        `SELECT signer_function AS label, COUNT(*) AS count FROM signers
+       WHERE verified = 1 AND show_publicly = 1 AND signer_function != ''
+       GROUP BY signer_function ORDER BY count DESC, signer_function ASC`,
+      )
+      .all(),
+  );
+}
+
 async function queryOccupations() {
   const rows = await db
     .query(
@@ -2321,6 +3338,7 @@ async function queryOccupations() {
        GROUP BY occupation ORDER BY count DESC, occupation ASC`,
     )
     .all();
+  if (cfg.sign.fields.signerFunction) return rows;
   const groups = new Map();
   for (const row of rows) {
     const key = normalizeOccupation(row.occupation);
@@ -2359,12 +3377,19 @@ export async function getDistinctOccupations() {
 }
 
 export async function mergeOccupation(fromOcc, toOcc) {
-  const rows = await db
-    .query(
-      `UPDATE signers SET occupation = ? WHERE occupation = ? RETURNING id`,
-    )
-    .all(toOcc, fromOcc);
-  return rows.length;
+  return db.transaction(
+    async () => {
+      const rows = await db
+        .query(
+          `UPDATE signers SET occupation = ? WHERE occupation = ? RETURNING id`,
+        )
+        .all(toOcc, fromOcc);
+      return recordMerge("occupation", fromOcc, toOcc, rows.length, {
+        ids: rows.map((row) => row.id),
+      });
+    },
+    { immediate: true },
+  );
 }
 
 export async function insertOccNotTypo(canonical, outlier) {
@@ -2414,12 +3439,154 @@ export async function getDistinctKreisverbands() {
 }
 
 export async function mergeKreisverband(fromKv, toKv) {
-  const rows = await db
+  return db.transaction(
+    async () => {
+      // The merge clears the state for re-resolution, so taking it back needs
+      // the one each signature had.
+      const rows = await db
+        .query(`SELECT id, state FROM signers WHERE kreisverband = ?`)
+        .all(fromKv);
+      await db
+        .query(
+          `UPDATE signers SET kreisverband = ?, state = '' WHERE kreisverband = ?`,
+        )
+        .run(toKv, fromKv);
+      return recordMerge("kreisverband", fromKv, toKv, rows.length, {
+        states: rows.map((row) => [row.id, row.state || ""]),
+      });
+    },
+    { immediate: true },
+  );
+}
+
+// "Bundesland zuweisen": the Land for every signature of a Kreisverband that
+// has none yet, remembered in the resolution cache for later sign-ups.
+export async function assignKvState(kreisverband, state) {
+  return db.transaction(
+    async () => {
+      const cache =
+        (await db
+          .query(
+            `SELECT state, source FROM kv_state_cache WHERE kreisverband = ?`,
+          )
+          .get(kreisverband)) || null;
+      await upsertKvStateCache(kreisverband, state, "manual");
+      const rows = await db
+        .query(
+          `UPDATE signers SET state = ? WHERE kreisverband = ? AND state = '' RETURNING id`,
+        )
+        .all(state, kreisverband);
+      return recordMerge("state", kreisverband, state, rows.length, {
+        ids: rows.map((row) => row.id),
+        cache,
+      });
+    },
+    { immediate: true },
+  );
+}
+
+// ---- taking a merge back ---------------------------------------------------
+
+// How long a merge can be taken back; its record is deleted after that.
+const MERGE_UNDO_MS = 30 * DAY;
+
+async function recordMerge(kind, from, to, updated, detail) {
+  if (!updated) return { updated, undoId: null };
+  const { id } = await db
     .query(
-      `UPDATE signers SET kreisverband = ?, state = '' WHERE kreisverband = ? RETURNING id`,
+      `INSERT INTO admin_merges /* public-neutral */ (kind, from_value, to_value, detail, created_at)
+       VALUES (?, ?, ?, ?, ?) RETURNING id`,
     )
-    .all(toKv, fromKv);
-  return rows.length;
+    .get(kind, from, to, JSON.stringify(detail), nowIso());
+  return { updated, undoId: id };
+}
+
+// Each restores only signatures that still hold what the merge gave them: one
+// edited or erased since stays as it is, and so does a state set since.
+const UNDO_MERGE = {
+  async occupation({ from_value, to_value }, { ids }) {
+    const res = await db
+      .query(
+        `UPDATE signers SET occupation = ?
+         WHERE occupation = ? AND id IN (SELECT value FROM json_each(?))`,
+      )
+      .run(from_value, to_value, JSON.stringify(ids));
+    return res.changes;
+  },
+  async kreisverband({ from_value, to_value }, { states }) {
+    const byState = Map.groupBy(states, ([, state]) => state);
+    let restored = 0;
+    for (const [state, group] of byState) {
+      const res = await db
+        .query(
+          `UPDATE signers SET kreisverband = ?,
+             state = CASE WHEN state = '' THEN ? ELSE state END
+           WHERE kreisverband = ? AND id IN (SELECT value FROM json_each(?))`,
+        )
+        .run(
+          from_value,
+          state,
+          to_value,
+          JSON.stringify(group.map(([id]) => id)),
+        );
+      restored += res.changes;
+    }
+    return restored;
+  },
+  async state({ from_value, to_value }, { ids, cache }) {
+    // Left in place, the cache entry would assign the Land again. A later
+    // assignment has replaced it already and stays.
+    const current = await db
+      .query(`SELECT state, source FROM kv_state_cache WHERE kreisverband = ?`)
+      .get(from_value);
+    if (current?.state === to_value && current.source === "manual") {
+      if (cache)
+        await upsertKvStateCache(from_value, cache.state, cache.source);
+      else
+        await db
+          .query(`DELETE FROM kv_state_cache WHERE kreisverband = ?`)
+          .run(from_value);
+    }
+    const res = await db
+      .query(
+        `UPDATE signers SET state = ''
+         WHERE kreisverband = ? AND state = ? AND id IN (SELECT value FROM json_each(?))`,
+      )
+      .run(from_value, to_value, JSON.stringify(ids));
+    return res.changes;
+  },
+};
+
+// Returns { kind, restored }, "undone" for a merge already taken back, or
+// null for one that is unknown or older than the undo period.
+export async function undoMerge(id) {
+  return db.transaction(
+    async () => {
+      const merge = await db
+        .query(`SELECT * FROM admin_merges WHERE id = ?`)
+        .get(id);
+      if (!merge) return null;
+      if (merge.undone_at) return "undone";
+      const restored = await UNDO_MERGE[merge.kind](
+        merge,
+        JSON.parse(merge.detail),
+      );
+      await db
+        .query(
+          `UPDATE admin_merges /* public-neutral */ SET undone_at = ? WHERE id = ?`,
+        )
+        .run(nowIso(), id);
+      return { kind: merge.kind, restored };
+    },
+    { immediate: true },
+  );
+}
+
+export async function deleteExpiredMerges() {
+  const res = await db
+    .query(`DELETE FROM admin_merges /* public-neutral */ WHERE created_at < ?`)
+    .run(isoAgo(MERGE_UNDO_MS));
+  return res?.changes ?? 0;
 }
 
 export async function updateSignerState(id, state) {

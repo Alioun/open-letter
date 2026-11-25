@@ -109,9 +109,9 @@ test("email conflict review exposes saved and local SMTP differences without exp
     "Aktuell gespeichert",
     "Deine Eingabe",
     "Mit meinen Eingaben weiterarbeiten",
-    "Revision 4",
   ])
     expect(html).toContain(text);
+  expect(html).not.toContain("Revision");
   expect(html).not.toContain(local.secret);
   expect(html).toContain("neu eingegebenen Zugangsdaten bleiben");
 });

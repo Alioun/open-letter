@@ -133,6 +133,7 @@ export default {
     backupRetentionHours: 48,
     erasureLogDays: 7,
     deliveryLogDays: 30,
+    adminLogDays: 30,
   },
 
   email: {

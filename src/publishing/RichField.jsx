@@ -78,7 +78,7 @@ export default function RichField({
   return (
     <div className="publication-rich-field">
       <Button
-        className="rich-format-toggle"
+        className="admin-button admin-button--small admin-button--block rich-format-toggle"
         aria-expanded={formattingOpen}
         aria-controls={formattingId}
         onClick={() => setFormattingOpen((open) => !open)}

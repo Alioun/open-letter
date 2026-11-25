@@ -25,6 +25,10 @@ import { themeCss } from "../../config/theme-css.js";
 import { updateLayout } from "./layout.js";
 import "@puckeditor/core/puck.css";
 
+// The editor canvas renders the public page, so it loads the public
+// stylesheets (filled in by admin-main from the server) instead of
+// mirroring the admin's own styles.
+export const previewStylesheets = [];
 const usePuck = createUsePuck();
 const EditorContext = createContext(null);
 const SECTION_LABELS = {
@@ -32,13 +36,53 @@ const SECTION_LABELS = {
   Hero: "Titel & Unterschriftenzahl",
   Letter: "Offener Brief",
   Sign: "Unterschreiben",
-  Signers: "Unterzeichner",
+  Signers: "Unterzeichner*innen",
   Faq: "Fragen & Antworten",
   Meeting: "Treffen",
   Text: "Textabschnitt",
   Image: "Bild",
   CallToAction: "Aufruf",
   Footer: "Fußzeile",
+};
+
+// Puck's own interface texts (lib/dictionary.ts in @puckeditor/core).
+const PUCK_DE = {
+  "header-undo": "Rückgängig",
+  "header-redo": "Wiederholen",
+  "header-toggle-leftsidebar": "Linke Seitenleiste ein- oder ausblenden",
+  "header-toggle-rightsidebar": "Rechte Seitenleiste ein- oder ausblenden",
+  "header-toggle-menubar": "Menü ein- oder ausblenden",
+  "action-selectparent": "Übergeordneten Abschnitt wählen",
+  "action-drag": "Zum Verschieben ziehen",
+  "action-duplicate": "Duplizieren",
+  "action-delete": "Löschen",
+  "label-page": "Seite",
+  "label-component": "Abschnitt",
+  "outline-empty": "Keine Abschnitte",
+  "outline-item-collapse": "Einklappen",
+  "outline-item-expand": "Ausklappen",
+  "outline-header-title": "Gliederung",
+  "outline-header-collapseall": "Alle einklappen",
+  "outline-item-duplicate": "Duplizieren",
+  "outline-item-delete": "Löschen",
+  "drawer-category-collapse": "{title} einklappen",
+  "drawer-category-expand": "{title} ausklappen",
+  "drawer-category-other": "Weitere",
+  "canvas-noconfig": "Keine Einstellungen für {type}",
+  "field-readonly": "Nur lesen",
+  "viewport-zoom-in": "Vergrößern",
+  "viewport-zoom-out": "Verkleinern",
+  "viewport-zoom-auto": "{zoom} % (auto)",
+  "viewport-toggle-menu": "Ansichten ein- oder ausblenden",
+  "viewport-switch": "Zur Ansicht {label} wechseln",
+  "viewport-switch-default": "Ansicht wechseln",
+  "plugin-blocks": "Abschnitte",
+  "plugin-outline": "Gliederung",
+  "plugin-fields": "Felder",
+  "plugin-components": "Abschnitte",
+  "layout-maximize": "Maximieren",
+  "layout-minimize": "Minimieren",
+  "loader-loading": "Wird geladen",
 };
 
 function LayoutSync({ layout }) {
@@ -306,8 +350,8 @@ function createPuckConfig(showMeeting) {
                   if (!block) return null;
                   return (
                     <Collapsible.Root className="publication-appearance-fields">
-                      <Collapsible.Trigger>
-                        Gestaltung & Abstände ▾
+                      <Collapsible.Trigger className="admin-disclosure-trigger">
+                        Gestaltung & Abstände
                       </Collapsible.Trigger>
                       <Collapsible.Panel>
                         {Object.entries(appearanceFields).map(
@@ -357,27 +401,27 @@ function createPuckConfig(showMeeting) {
   return puckConfig;
 }
 
+// Publishing and undo live above the editor, for the whole draft; the
+// header only keeps Puck in step with the draft's layout.
 const editorOverrides = {
   headerActions: function HeaderActions() {
-    const { document, publishDisabled, publish, publishLabel } =
-      useContext(EditorContext);
-    return (
-      <>
-        <LayoutSync layout={document.layout} />
-        <Button
-          className="publication-puck-publish"
-          disabled={publishDisabled}
-          onClick={publish}
-        >
-          {publishLabel}
-        </Button>
-      </>
-    );
-  },
-  iframe: function PreviewFrame({ children }) {
     const { document } = useContext(EditorContext);
+    return <LayoutSync layout={document.layout} />;
+  },
+  iframe: function PreviewFrame({ children, document: frame }) {
+    const { document } = useContext(EditorContext);
+    // The letter stylesheet scopes its rules to <html data-letter>, which the
+    // admin page itself does not carry.
+    useEffect(() => {
+      const letter = window.document.querySelector('meta[name="x-letter"]');
+      if (frame && letter)
+        frame.documentElement.dataset.letter = letter.content;
+    }, [frame]);
     return (
       <>
+        {previewStylesheets.map((href) => (
+          <link key={href} rel="stylesheet" href={href} />
+        ))}
         <style>{themeCss(document.appearance.theme)}</style>
         {children}
       </>
@@ -390,14 +434,15 @@ export default function VisualEditor({
   config,
   lang,
   change,
-  publish,
-  publishDisabled,
-  publishLabel,
+  sectionRequest,
   editCopy,
 }) {
   const pendingDuplicate = useRef(null);
   const editorRoot = useRef(null);
   const [pendingSection, setPendingSection] = useState(null);
+  useEffect(() => {
+    if (sectionRequest) setPendingSection(sectionRequest.id);
+  }, [sectionRequest]);
   const [addedSection, setAddedSection] = useState(null);
   const puckConfig = useMemo(
     () => createPuckConfig(config.features.zoomEvent),
@@ -410,9 +455,6 @@ export default function VisualEditor({
         config,
         lang,
         change,
-        publish,
-        publishDisabled,
-        publishLabel,
         editCopy,
         pendingSection,
         setPendingSection,
@@ -432,6 +474,7 @@ export default function VisualEditor({
         ].map(([type, label]) => (
           <Button
             key={type}
+            className="admin-button admin-button--small"
             aria-label={`${label}-Abschnitt hinzufügen`}
             onClick={() => {
               const id = `${type}-${crypto.randomUUID()}`;
@@ -489,6 +532,7 @@ export default function VisualEditor({
           headerTitle="Layout bearbeiten"
           config={puckConfig}
           data={document.layout}
+          iframe={{ syncHostStyles: false }}
           onAction={(action, next, previous) => {
             if (action.type !== "duplicate") return;
             const source = previous.data.content[action.sourceIndex];
@@ -511,8 +555,8 @@ export default function VisualEditor({
               updateLayout(d, layout, duplicate);
             });
           }}
-          onPublish={publish}
           overrides={editorOverrides}
+          dictionary={PUCK_DE}
           viewports={[
             { width: 360, height: "auto", label: "Smartphone" },
             { width: 768, height: "auto", label: "Tablet" },

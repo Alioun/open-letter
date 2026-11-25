@@ -99,6 +99,7 @@ export function FreeTextChoice({
   onChange,
   items = [],
   placeholder,
+  maxLength,
 }) {
   return (
     <Autocomplete.Root items={items} value={value} onValueChange={onChange}>
@@ -106,6 +107,7 @@ export function FreeTextChoice({
         type="text"
         id={id}
         placeholder={placeholder}
+        maxLength={maxLength}
         autoComplete="off"
       />
       <Autocomplete.Portal>
@@ -212,9 +214,18 @@ function CalendarDayButton({ day, modifiers, className, ...props }) {
   );
 }
 
+// request: { message, title?, confirmLabel?, danger?, returnFocus? }. A danger
+// request gets a solid red confirm button; give it a verb label ("Löschen").
 export function ConfirmDialog({ request, resolve }) {
   const cancelButton = useRef(null);
   if (!request) return null;
+  const {
+    message,
+    title = "Aktion bestätigen",
+    confirmLabel = "Bestätigen",
+    danger = false,
+    returnFocus,
+  } = request;
   return (
     <AlertDialog.Root
       open
@@ -225,32 +236,94 @@ export function ConfirmDialog({ request, resolve }) {
       <AlertDialog.Portal>
         <AlertDialog.Backdrop className="base-modal-backdrop" />
         <AlertDialog.Popup
-          className="modal base-confirm"
+          className={`admin-dialog${danger ? " admin-dialog--danger" : ""}`}
           initialFocus={cancelButton}
-          finalFocus={() =>
-            request.returnFocus?.isConnected ? request.returnFocus : true
-          }
+          finalFocus={() => (returnFocus?.isConnected ? returnFocus : true)}
         >
-          <AlertDialog.Title>Aktion bestätigen</AlertDialog.Title>
+          <AlertDialog.Title>{title}</AlertDialog.Title>
           <AlertDialog.Description
-            className="base-confirm-message"
+            className="admin-dialog-message"
             tabIndex={0}
           >
-            {request.message}
+            {message}
           </AlertDialog.Description>
           <div className="admin-actions">
             <AlertDialog.Close
               ref={cancelButton}
+              className="admin-button"
               onClick={() => resolve(false)}
             >
               Abbrechen
             </AlertDialog.Close>
-            <Button onClick={() => resolve(true)}>
-              {request.confirmLabel || "Bestätigen"}
+            <Button
+              className={`admin-button ${danger ? "admin-button--danger" : "admin-button--primary"}`}
+              onClick={() => resolve(true)}
+            >
+              {confirmLabel}
             </Button>
           </div>
         </AlertDialog.Popup>
       </AlertDialog.Portal>
     </AlertDialog.Root>
   );
+}
+
+const NOTICE_ROLES = {
+  error: "alert",
+  warning: "status",
+  success: "status",
+  info: "status",
+};
+
+// Result and status messages. Errors are announced assertively.
+export function Notice({
+  tone = "info",
+  title,
+  action,
+  onDismiss,
+  className = "",
+  children,
+  ...props
+}) {
+  return (
+    <div
+      role={NOTICE_ROLES[tone]}
+      className={`admin-notice admin-notice--${tone} ${className}`.trim()}
+      {...props}
+    >
+      <div className="admin-notice-body">
+        {title && <strong className="admin-notice-title">{title}</strong>}
+        {children}
+      </div>
+      {action && <div className="admin-notice-actions">{action}</div>}
+      {onDismiss && (
+        <Button
+          type="button"
+          className="admin-button admin-button--quiet admin-button--small admin-notice-dismiss"
+          aria-label="Hinweis schließen"
+          onClick={onDismiss}
+        >
+          ×
+        </Button>
+      )}
+    </div>
+  );
+}
+
+export function EmptyState({ title, action, compact = false, children }) {
+  return (
+    <div className={`admin-empty${compact ? " admin-empty--compact" : ""}`}>
+      {title && <p className="admin-empty-title">{title}</p>}
+      {children && <div className="admin-empty-body">{children}</div>}
+      {action && <div className="admin-actions">{action}</div>}
+    </div>
+  );
+}
+
+// Lets long e-mail addresses and domains wrap after "@" and "." instead of
+// mid-word.
+export function Breakable({ text }) {
+  return String(text ?? "")
+    .split(/(?<=[@.])/)
+    .flatMap((part, i) => (i ? [<wbr key={i} />, part] : [part]));
 }

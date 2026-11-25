@@ -27,8 +27,57 @@ function inviteStatsPrivacy(invite) {
   return `Der Statistik-Link zeigt keine genaue Zahl, sondern nur einen Bereich (Grenzen: ${bounds.join(", ")}). Nur wenn die Anzahl gerade eine dieser Grenzen erreicht, ${risk}`;
 }
 
+export function groupedFieldPrivacy(label, functionLabel) {
+  const fields = functionLabel
+    ? `in den Feldern „${label}“ und „${functionLabel}“`
+    : `im Feld „${label}“`;
+  return `Für diese Unterschriften veröffentlichen wir die Anzahl je Angabe ${fields}, getrennt von den Namen.`;
+}
+
+export const firstSignerDetailsPrivacy =
+  "Bei Erstunterzeichner*innen, die der Veröffentlichung zugestimmt haben, zeigen wir auch Funktion und Organisation neben dem Namen.";
+
+// Removed fake signatures and the block on their address. `years` is
+// "{{signerRetentionYears}}" in the stored policy.
+export function blockedAddressPrivacy(years) {
+  return `Unterschriften, die offensichtlich nicht ernst gemeint oder unter falschem Namen abgegeben wurden, können wir entfernen. Damit dieselbe E-Mail-Adresse nicht erneut so eingetragen wird, speichern wir danach nur eine verschlüsselte Prüfsumme der Adresse, nicht die Adresse selbst. Rechtsgrundlage ist Art. 6 Abs. 1 lit. f DS-GVO (berechtigtes Interesse an einer unverfälschten Unterschriftenliste). Die Prüfsumme wird nach ${years} Jahren gelöscht. Wenn du meinst, dass deine Adresse zu Unrecht gesperrt ist, schreib uns.`;
+}
+
+// The admin's Protokoll and consent notes. `days` is "{{adminLogDays}}" in the
+// stored policy, filled in when the page is served.
+export function adminLogPrivacy(days) {
+  return `Wenn unser Team eine Unterschrift in der Verwaltung ändert – etwa auf deinen Wunsch eine Angabe entfernt oder die Anzeige deines Namens ein- oder ausschaltet –, halten wir das in einem internen Protokoll mit dem alten und dem neuen Wert fest, damit wir Anfragen nachvollziehen können. Gibst du uns deine Zustimmung zur Veröffentlichung auf anderem Weg, etwa per E-Mail, vermerken wir das bei deiner Unterschrift. E-Mail-Adressen stehen nicht in diesem Protokoll. Die Einträge löschen wir nach ${days} Tagen, die alten und neuen Werte schon vorher, sobald die Unterschrift gelöscht wird. Rechtsgrundlage ist Art. 6 Abs. 1 lit. f DS-GVO (berechtigtes Interesse an einer nachvollziehbaren Bearbeitung deiner Anfragen).`;
+}
+
+// First signers the team adds by hand, without the form.
+export const handEntryPrivacy =
+  "Erstunterzeichner*innen, die nicht über das Formular unterschrieben haben, tragen wir mit ihrer Zustimmung von Hand ein, etwa nach einem Telefonat oder einer E-Mail. Dafür speichern wir nur den Namen, das Datum und einen Vermerk über die Zustimmung, Organisation und Funktion nur, wenn die Person sie angibt, aber keine E-Mail-Adresse; diese Einträge erhalten keine E-Mails. Rechtsgrundlage ist die Einwilligung der Person (Art. 6 Abs. 1 lit. a DS-GVO). Sie kann sie jederzeit mit einer Nachricht an uns widerrufen, dann löschen wir den Eintrag; sonst gilt dieselbe Speicherdauer wie für Unterschriften.";
+
+export const newsletterConsentPrivacy = {
+  before:
+    "ausschließlich versendet, wenn du beim Unterschreiben die entsprechende Checkbox aktiviert hast",
+  after:
+    "ausschließlich versendet, wenn du beim Unterschreiben die entsprechende Checkbox aktiviert oder dich später über den Bestätigungslink in einer E-Mail von uns angemeldet hast",
+};
+
+export function signerDetailsPrivacy(config) {
+  if (config.features.publicSignerDetails)
+    return "Wenn du der öffentlichen Anzeige von Funktion und Organisation zugestimmt hast, zeigen wir diese Angaben neben deinem Namen.";
+  return config.features.publicFirstSignerDetails
+    ? firstSignerDetailsPrivacy
+    : "";
+}
+
 export function DefaultPrivacyBody({ config: cfg }) {
   const region = () => regionLabels(cfg);
+  const occupationLabel = cfg.sign.fields.occupation.label;
+  const functionLabel = cfg.sign.fields.signerFunction?.label;
+  const detailsNotice = signerDetailsPrivacy(cfg);
+  const optionalSignerFields = [
+    cfg.features.kreisverbandField && region().name,
+    cfg.features.occupationField && occupationLabel,
+    functionLabel,
+  ].filter(Boolean);
   const privacy = Object.fromEntries(
     Object.keys(resolvePrivacy(cfg)).map((k) => [k, `{{${k}}}`]),
   );
@@ -67,11 +116,8 @@ export function DefaultPrivacyBody({ config: cfg }) {
         <strong>b) Unterschriften</strong>
         <br />
         Beim Mitzeichnen werden Name und E-Mail-Adresse
-        {[
-          cfg.features.kreisverbandField && region().name,
-          cfg.features.occupationField && "Beruf",
-        ].filter(Boolean).length > 0 &&
-          ` sowie optional ${[cfg.features.kreisverbandField && region().name, cfg.features.occupationField && "Beruf"].filter(Boolean).join(" und ")}`}{" "}
+        {optionalSignerFields.length > 0 &&
+          ` sowie optional ${optionalSignerFields.join(" und ")}`}{" "}
         gespeichert. Rechtsgrundlage ist deine ausdrückliche Einwilligung (Art.
         6 Abs. 1 lit. a DS-GVO). Die Daten werden{" "}
         <strong>ausschließlich für diese Petition verwendet</strong> und – mit
@@ -85,6 +131,9 @@ export function DefaultPrivacyBody({ config: cfg }) {
         sobald der {privacy.confirmationLinkHours} Stunden gültige
         Bestätigungslink abgelaufen ist.
       </p>
+      <p>{blockedAddressPrivacy(privacy.signerRetentionYears)}</p>
+      <p>{adminLogPrivacy(privacy.adminLogDays)}</p>
+      <p>{handEntryPrivacy}</p>
       <p>
         Wenn du zustimmst, dass dein Name öffentlich angezeigt wird, erscheinen
         dein Name
@@ -93,7 +142,8 @@ export function DefaultPrivacyBody({ config: cfg }) {
           " und das daraus ermittelte Bundesland"}{" "}
         sowie das Datum der Unterzeichnung in der Liste auf dieser Website.
         {cfg.features.occupationField &&
-          " Berufsangaben dieser Unterschriften werden nur als Anzahl je Beruf veröffentlicht, nicht zusammen mit dem Namen."}{" "}
+          ` ${groupedFieldPrivacy(occupationLabel, functionLabel)}`}{" "}
+        {detailsNotice && `${detailsNotice} `}
         Ohne diese Zustimmung wird deine Unterschrift nur mitgezählt. Du kannst
         das über den Link in unseren E-Mails jederzeit ändern.
       </p>
@@ -101,12 +151,9 @@ export function DefaultPrivacyBody({ config: cfg }) {
         <strong>c) Newsletter / Kampagnen-Updates</strong>
         <br />
         Kampagnen-E-Mails werden{" "}
-        <strong>
-          ausschließlich versendet, wenn du beim Unterschreiben die
-          entsprechende Checkbox aktiviert hast
-        </strong>
-        . Du kannst diese Einwilligung jederzeit widerrufen – über den
-        Abmeldelink in jeder E-Mail oder durch eine Nachricht an{" "}
+        <strong>{newsletterConsentPrivacy.after}</strong>. Du kannst diese
+        Einwilligung jederzeit widerrufen – über den Abmeldelink in jeder E-Mail
+        oder durch eine Nachricht an{" "}
         <a href="mailto:{{controllerEmail}}">{"{{controllerEmail}}"}</a>. Deine
         Unterschrift bleibt davon unberührt. Über den Link in unseren E-Mails zu
         deiner Unterschrift und in Kampagnen-E-Mails kannst du außerdem deine

@@ -90,6 +90,8 @@ export const UI_DEFAULTS = {
     loadMore: "Weitere laden",
     mapChipAria: "{name}: {count} Unterschriften, Details anzeigen",
     mapPopupAria: "{name}: {count} Unterschriften",
+    // Under the name of a first signer, before the region.
+    firstSigner: "Erstunterzeichnet",
   },
   // "vor …" on each signer row.
   time: {
@@ -104,6 +106,8 @@ export const UI_DEFAULTS = {
   },
   // Sign form.
   signForm: {
+    emailDelayed:
+      "Der E-Mail-Versand ist gerade eingeschränkt. Du kannst trotzdem unterschreiben: Deine Unterschrift wird gespeichert, und den Bestätigungslink bekommst du automatisch, sobald der Versand wieder läuft.",
     badge: "Mitzeichnen",
     nameLabel: "Name",
     nameHint: "wird öffentlich gezeigt",
@@ -115,6 +119,9 @@ export const UI_DEFAULTS = {
     publicLabel:
       "Mein Name{fields} darf öffentlich auf dieser Seite angezeigt werden.",
     publicFieldsExtra: " (und ggf. {fields})",
+    visibilityLegend: "Was soll in der öffentlichen Liste stehen?",
+    visibilityPrivate: "Meine Unterschrift privat halten",
+    visibilityName: "Nur meinen Namen anzeigen",
     optional: "(optional)",
     newsletterLabel:
       "Haltet mich zur Initiative auf dem Laufenden (gelegentliche E-Mails, jederzeit abbestellbar).",
@@ -123,6 +130,9 @@ export const UI_DEFAULTS = {
       "Mit Klick auf „Mitzeichnen“ schicken wir dir einen Bestätigungslink an deine E-Mail-Adresse. Erst danach zählt deine Unterschrift.",
     errName: "Bitte gib deinen vollständigen Namen an.",
     errEmail: "Bitte gib eine gültige E-Mail-Adresse an.",
+    pausedTitle: "Unterzeichnen pausiert",
+    pausedMessage:
+      "Der Versand der Bestätigungs-E-Mails ist vorübergehend gestört. Wir arbeiten daran, damit du bald wieder unterzeichnen kannst. Wir bitten um etwas Geduld und danken für dein Verständnis!",
   },
   // "Bitte E-Mail bestätigen" after submitting.
   emailModal: {
@@ -137,6 +147,11 @@ export const UI_DEFAULTS = {
     resendWait: "Erneut senden in {seconds}s",
     resend: "Link erneut anfordern",
     ok: "Verstanden",
+    delayedTitle: "Unterschrift gespeichert",
+    delayedSent:
+      "Danke, {name}. Deine Unterschrift ist gespeichert. Der E-Mail-Versand ist gerade eingeschränkt, deshalb kommt der Bestätigungslink etwas später an:",
+    delayedHint:
+      "Du musst nichts weiter tun. Die E-Mail kommt automatisch, sobald der Versand wieder läuft, und der Link ist ab dann {hours} Stunden gültig.",
   },
   // After confirming.
   successModal: {
@@ -356,6 +371,7 @@ const UI_EN = {
     loadMore: "Load more",
     mapChipAria: "{name}: {count} signatures, show details",
     mapPopupAria: "{name}: {count} signatures",
+    firstSigner: "First signatory",
   },
   time: {
     prefix: "",
@@ -368,6 +384,8 @@ const UI_EN = {
     months: "{n} mo ago",
   },
   signForm: {
+    emailDelayed:
+      "Email delivery is limited right now. You can still sign: your signature is saved, and the confirmation link reaches you automatically once delivery works again.",
     badge: "Sign",
     nameLabel: "Name",
     nameHint: "shown publicly",
@@ -377,6 +395,9 @@ const UI_EN = {
     emailPlaceholder: "anna@example.org",
     publicLabel: "My name{fields} may be shown publicly on this page.",
     publicFieldsExtra: " (and {fields}, if given)",
+    visibilityLegend: "What should appear in the public list?",
+    visibilityPrivate: "Keep my signature private",
+    visibilityName: "Show only my name",
     optional: "(optional)",
     newsletterLabel:
       "Keep me posted about the campaign (occasional emails, unsubscribe any time).",
@@ -385,6 +406,9 @@ const UI_EN = {
       "When you click “Sign”, we email you a confirmation link. Your signature only counts after that.",
     errName: "Please enter your full name.",
     errEmail: "Please enter a valid email address.",
+    pausedTitle: "Signing paused",
+    pausedMessage:
+      "Confirmation emails are temporarily unavailable. We’re working to restore them so you can sign again soon.",
   },
   emailModal: {
     title: "Please confirm your email",
@@ -397,6 +421,11 @@ const UI_EN = {
     resendWait: "Resend in {seconds}s",
     resend: "Send the link again",
     ok: "Got it",
+    delayedTitle: "Signature saved",
+    delayedSent:
+      "Thank you, {name}. Your signature is saved. Email delivery is limited right now, so the confirmation link will arrive a little later at:",
+    delayedHint:
+      "There's nothing else to do. The email arrives automatically once delivery works again, and the link is valid for {hours} hours from then.",
   },
   successModal: {
     title: "Signature counted",

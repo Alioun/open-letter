@@ -12,8 +12,10 @@ import {
   issueUnsubscribeTokenForRecipient,
   countDelivered,
   setCampaignProgress,
+  setCampaignAudienceSize,
   markCampaignFailed,
   markCampaignSent,
+  isCampaignSending,
   claimCampaignById,
   deferCampaign,
 } from "./db.js";
@@ -88,6 +90,9 @@ export function createCampaignDelivery({
     const mailing = `campaign:${campaign.id}`;
     const delivered = await getDeliveredEmails(mailing);
     const todo = recipients.filter((r) => !delivered.has(r.email));
+    // Reached so far, including people who left the audience since, plus
+    // who is still to come: the denominator for "18 von 122".
+    await setCampaignAudienceSize(campaign.id, delivered.size + todo.length);
 
     console.log(
       `[campaign] ${campaign.id} starting (attempt ${campaign.attempts}): ${recipients.length} in audience, ${delivered.size} already reached, remaining=${todo.length}, audience=${audience}`,
@@ -99,6 +104,12 @@ export function createCampaignDelivery({
       if (!canContinue()) {
         await deferCampaign(campaign.id, 5);
         throw new DeliveryDeferred("worker-stopping", 5);
+      }
+      if (!(await isCampaignSending(campaign.id))) {
+        console.log(
+          `[campaign] ${campaign.id} stopped in the admin: ${await countDelivered(mailing)} reached`,
+        );
+        return;
       }
       const identity = {
         source: isZoom ? "meeting" : "signer",

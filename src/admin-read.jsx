@@ -57,7 +57,7 @@ export function AdminReadStatus({ resource, label }) {
       {resource.loading && <span role="status">{label} werden geladen…</span>}
       <Button
         type="button"
-        className="admin-button"
+        className="admin-button admin-button--small"
         disabled={resource.loading}
         onClick={resource.reload}
       >

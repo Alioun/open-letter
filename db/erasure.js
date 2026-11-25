@@ -1,6 +1,7 @@
-import { emailHmac } from "./email-identity.js";
+import { emailHmac, erasureSubject } from "./email-identity.js";
 import { legacyAttemptScopes } from "./email-attempts.js";
 import { inDatabaseTransaction } from "./connection.js";
+import { forgetDeletedSigners } from "./admin-actions.js";
 
 const SUBJECTS = [
   { table: "signers", jobField: "signerId" },
@@ -40,8 +41,8 @@ export async function eraseSubject(
       .all(before, before, ...(email ? [email] : []));
     const ids = new Set();
     for (const row of rows) {
-      if (!matches(row.email)) continue;
-      addresses.add(row.email);
+      if (!matches(erasureSubject(row))) continue;
+      if (row.email) addresses.add(row.email);
       ids.add(row.id);
       const res = await db
         .query(`DELETE FROM ${table} WHERE id = ?`)
@@ -50,6 +51,8 @@ export async function eraseSubject(
     }
     deletedIds.set(jobField, ids);
   }
+  if (tables.has("admin_actions") && tables.has("signers"))
+    await forgetDeletedSigners(db);
 
   if (tables.has("mailing_deliveries")) {
     const rows = await db

@@ -2,7 +2,7 @@ import { Collapsible } from "@base-ui/react/collapsible";
 import { Input } from "@base-ui/react/input";
 import { useEffect, useState, useRef } from "react";
 import { Button } from "@base-ui/react/button";
-import { Choice } from "../ui.jsx";
+import { Choice, Notice } from "../ui.jsx";
 import RichField from "./RichField.jsx";
 import {
   TEMPLATE_LINKS,
@@ -13,6 +13,11 @@ import {
 } from "../../config/template-placeholders.js";
 import { isCampaignTemplate } from "../../config/campaign-templates.js";
 import { LANGUAGES, DEFAULT_LANG } from "../../config/letter.config.js";
+
+const STARTER_BODY = {
+  de: '<p>Hallo {{firstName}},</p><p>hier steht deine Nachricht.</p><p><a href="{{unsubscribeUrl}}">Newsletter abbestellen</a></p>',
+  en: '<p>Hello {{firstName}},</p><p>Your update.</p><p><a href="{{unsubscribeUrl}}">Unsubscribe</a></p>',
+};
 import {
   systemTemplateBase,
   systemTemplateSlug,
@@ -148,11 +153,15 @@ export default function TemplatesField({
     <div className="publication-template-grid">
       <aside>
         {issues.length > 0 && (
-          <div className="template-issues" role="alert">
-            <strong>Veröffentlichung gesperrt</strong>
+          <Notice
+            tone="error"
+            title="Veröffentlichung gesperrt"
+            className="template-issues"
+          >
             {issues.map((item) => (
               <Button
                 key={item.id}
+                className="admin-button admin-button--small"
                 onClick={() => {
                   const target = templates.find((t) => t.id === item.id);
                   const base = systemTemplateBase(target.slug, LANGUAGES);
@@ -168,7 +177,7 @@ export default function TemplatesField({
                 {item.name} reparieren
               </Button>
             ))}
-          </div>
+          </Notice>
         )}
         <div className="admin-mobile-section">
           <label>E-Mail-Vorlage</label>
@@ -198,8 +207,7 @@ export default function TemplatesField({
                     slug,
                     name: name.trim(),
                     subject: name.trim(),
-                    html_body:
-                      '<p>Hello {{firstName}},</p><p>Your update.</p><p><a href="{{unsubscribeUrl}}">Unsubscribe</a></p>',
+                    html_body: STARTER_BODY[DEFAULT_LANG] || STARTER_BODY.en,
                   });
                 });
                 select(slug);
@@ -214,8 +222,14 @@ export default function TemplatesField({
                   required
                 />
               </label>
-              {allocationError && <p role="status">{allocationError}</p>}
-              <Button type="submit" disabled={Boolean(allocationError)}>
+              {allocationError && (
+                <Notice tone="warning">{allocationError}</Notice>
+              )}
+              <Button
+                type="submit"
+                className="admin-button admin-button--primary admin-button--small"
+                disabled={Boolean(allocationError)}
+              >
                 Im Entwurf anlegen
               </Button>
             </form>
@@ -225,6 +239,7 @@ export default function TemplatesField({
           {entries.map((t) => (
             <Button
               key={t.id}
+              className="admin-button"
               aria-pressed={t.slug === (baseSlug || source?.slug)}
               onClick={() => select(t.slug)}
             >
@@ -257,13 +272,14 @@ export default function TemplatesField({
               />
             </div>
             {!template && (
-              <div className="template-fallback-notice" role="status">
+              <Notice tone="warning" className="template-fallback-notice">
                 <p>
                   Für {language.toUpperCase()} fehlt diese Systemnachricht. Der
                   Versand verwendet derzeit die Vorlage in{" "}
                   {DEFAULT_LANG.toUpperCase()}.
                 </p>
                 <Button
+                  className="admin-button admin-button--small"
                   disabled={Boolean(allocationError)}
                   onClick={() => {
                     focusTranslation.current = true;
@@ -289,10 +305,10 @@ export default function TemplatesField({
                   Übersetzung für {language.toUpperCase()} anlegen
                 </Button>
                 {allocationError && <p>{allocationError}</p>}
-              </div>
+              </Notice>
             )}
             {template && translationStatus && (
-              <p role="status">{translationStatus}</p>
+              <Notice tone="success">{translationStatus}</Notice>
             )}
           </div>
         )}
@@ -419,13 +435,27 @@ export default function TemplatesField({
                 der Veröffentlichung verwendet der Versand diese Version.
               </p>
             )}
-            {previewStatus && (
-              <p role={previewError ? "alert" : "status"}>{previewStatus}</p>
-            )}
-            {previewError && (
-              <Button onClick={() => setPreviewAttempt((n) => n + 1)}>
-                Vorschau erneut laden
-              </Button>
+            {previewError ? (
+              <Notice
+                tone="error"
+                action={
+                  <Button
+                    className="admin-button admin-button--small"
+                    onClick={() => setPreviewAttempt((n) => n + 1)}
+                  >
+                    Vorschau erneut laden
+                  </Button>
+                }
+              >
+                {previewStatus}
+              </Notice>
+            ) : (
+              !preview &&
+              previewStatus && (
+                <div className="admin-loading-frame" role="status">
+                  {previewStatus}
+                </div>
+              )
             )}
             {preview && (
               <div>

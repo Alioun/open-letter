@@ -3,8 +3,7 @@ import AdminApp from "./AdminApp.jsx";
 import AdminCrashRecovery from "./AdminCrashRecovery.jsx";
 import { ErrorBoundary } from "./ErrorBoundary.jsx";
 import cfg, { LANGUAGES } from "../config/letter.config.js";
-import { injectThemeCss } from "../config/theme-css.js";
-import "./index.css";
+import { previewStylesheets } from "./publishing/puck.jsx";
 import "./admin.css";
 
 const embedded = document.getElementById("admin-config");
@@ -12,8 +11,8 @@ if (embedded) {
   const data = JSON.parse(embedded.textContent);
   Object.assign(cfg.features, data.features);
   LANGUAGES.splice(0, LANGUAGES.length, ...data.languages);
+  previewStylesheets.push(...data.previewCss);
 }
-injectThemeCss(cfg.theme);
 
 // Admin dashboard entrypoint. Served only at the secret /${ADMIN_PATH} route
 // (see server/index.js) via admin.html, so AdminApp is bundled separately and

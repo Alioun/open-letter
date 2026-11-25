@@ -1,5 +1,6 @@
 import { useEffect, useState, useRef } from "react";
 import { Button } from "@base-ui/react/button";
+import { Notice } from "./ui.jsx";
 
 export default function SelectedRecipients({
   api,
@@ -61,6 +62,7 @@ export default function SelectedRecipients({
         <div className="selected-recipient-actions">
           <Button
             ref={toggle}
+            className="admin-button admin-button--small"
             aria-label={
               open ? "Auswahl schließen" : "Ausgewählte Empfänger prüfen"
             }
@@ -71,6 +73,7 @@ export default function SelectedRecipients({
             {open ? "Schließen" : "Prüfen"}
           </Button>
           <Button
+            className="admin-button admin-button--small"
             aria-label={`Nachricht an ${ids.length} verfassen`}
             onClick={compose}
           >
@@ -87,21 +90,32 @@ export default function SelectedRecipients({
               ? "Auswahlprüfung fehlgeschlagen"
               : "Auswahl wird geprüft…"}
       </p>
-      {error && <p role="alert">{error}</p>}
+      {error && <Notice tone="error">{error}</Notice>}
       {open && (
         <div id="selected-recipient-list">
           <h3>Ausgewählte Empfänger</h3>
-          <Button onClick={clear}>Auswahl aufheben</Button>
+          <Button className="admin-button admin-button--small" onClick={clear}>
+            Auswahl aufheben
+          </Button>
           <p>
             Hier stehen alle ausgewählten Personen, auch die außerhalb des
             aktuellen Filters. Du kannst sie einzeln entfernen.
           </p>
           {data?.unavailable > 0 && (
-            <p role="status">
+            <Notice
+              tone="warning"
+              action={
+                <Button
+                  className="admin-button admin-button--small"
+                  onClick={clear}
+                >
+                  Auswahl leeren und neu wählen
+                </Button>
+              }
+            >
               {data.unavailable} gespeicherte Einträge sind nicht mehr als
-              Newsletter-Empfänger verfügbar und erhalten keine Nachricht.{" "}
-              <Button onClick={clear}>Auswahl leeren und neu wählen</Button>
-            </p>
+              Newsletter-Empfänger verfügbar und erhalten keine Nachricht.
+            </Notice>
           )}
           <ul>
             {data?.signers.map((person) => (
@@ -111,6 +125,7 @@ export default function SelectedRecipients({
                   <small>{person.email}</small>
                 </span>
                 <Button
+                  className="admin-button admin-button--small"
                   onClick={() => {
                     remove(person.id);
                     (ids.length > 1
@@ -129,13 +144,18 @@ export default function SelectedRecipients({
           </ul>
           {data && data.total > 25 && (
             <div className="admin-actions">
-              <Button disabled={page === 0} onClick={() => setPage(page - 1)}>
+              <Button
+                className="admin-button admin-button--small"
+                disabled={page === 0}
+                onClick={() => setPage(page - 1)}
+              >
                 Zurück
               </Button>
               <span>
                 Seite {page + 1} / {Math.ceil(data.total / 25)}
               </span>
               <Button
+                className="admin-button admin-button--small"
                 disabled={(page + 1) * 25 >= data.total}
                 onClick={() => setPage(page + 1)}
               >

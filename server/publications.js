@@ -3,7 +3,13 @@ import { themeIssues } from "../config/theme-validation.js";
 import { readFileSync } from "node:fs";
 import { renderToStaticMarkup } from "react-dom/server";
 import { createElement } from "react";
-import { DefaultPrivacyBody } from "../config/privacy-content.jsx";
+import {
+  DefaultPrivacyBody,
+  adminLogPrivacy,
+  blockedAddressPrivacy,
+  handEntryPrivacy,
+  newsletterConsentPrivacy,
+} from "../config/privacy-content.jsx";
 import { contentFor } from "../config/content.jsx";
 import { migrateFaq } from "../config/faq.js";
 import cfg, {
@@ -159,6 +165,50 @@ export function migrateDocument(input) {
   return doc;
 }
 
+// A published policy predates blocked addresses, the Protokoll, the
+// newsletter consent mail and hand-added first signers: state all four. The
+// block paragraph goes after the one about storing signatures, and the
+// Protokoll paragraph after the block paragraph; each goes at the end when
+// the team rewrote the one before it. The Protokoll has to be there somewhere,
+// since publishing requires its {{adminLogDays}}. A policy that already names
+// {{adminLogDays}} is left as the team wrote it.
+const SIGNATURES_PARAGRAPH_END = "Bestätigungslink abgelaufen ist.</p>";
+const BLOCK_PARAGRAPH_END =
+  "deine Adresse zu Unrecht gesperrt ist, schreib uns.</p>";
+function reconcileAdminPrivacy(copy) {
+  let html = copy["legal.privacyHtml"];
+  if (typeof html !== "string") return;
+  html = html.replace(
+    `<strong>${newsletterConsentPrivacy.before}</strong>`,
+    `<strong>${newsletterConsentPrivacy.after}</strong>`,
+  );
+  if (!html.includes("Prüfsumme")) {
+    const paragraph = `<p>${blockedAddressPrivacy("{{signerRetentionYears}}")}</p>`;
+    html = html.includes(SIGNATURES_PARAGRAPH_END)
+      ? html.replace(
+          SIGNATURES_PARAGRAPH_END,
+          SIGNATURES_PARAGRAPH_END + paragraph,
+        )
+      : html + paragraph;
+  }
+  if (!html.includes("{{adminLogDays}}")) {
+    const paragraph = `<p>${adminLogPrivacy("{{adminLogDays}}")}</p>`;
+    html = html.includes(BLOCK_PARAGRAPH_END)
+      ? html.replace(BLOCK_PARAGRAPH_END, BLOCK_PARAGRAPH_END + paragraph)
+      : html + paragraph;
+  }
+  // Hand-added first signers: after the Protokoll paragraph, or at the end.
+  // A policy that mentions entries "von Hand" already is left alone.
+  if (!html.includes("von Hand ein")) {
+    const logParagraph = `<p>${adminLogPrivacy("{{adminLogDays}}")}</p>`;
+    const paragraph = `<p>${handEntryPrivacy}</p>`;
+    html = html.includes(logParagraph)
+      ? html.replace(logParagraph, logParagraph + paragraph)
+      : html + paragraph;
+  }
+  copy["legal.privacyHtml"] = html;
+}
+
 export function reconcileStoredDocument(input) {
   const doc = migrateDocument(input);
   if (
@@ -172,26 +222,31 @@ export function reconcileStoredDocument(input) {
   archive.locales ||= {};
   archive.fields ||= {};
   archive.sections ||= {};
-  const meetingIndex = doc.layout.content.findIndex(
-    (section) => section.type === "Meeting",
-  );
-  if (!cfg.features.zoomEvent && meetingIndex !== -1) {
-    archive.sections.Meeting = {
-      block: doc.layout.content.splice(meetingIndex, 1)[0],
-      index: meetingIndex,
-    };
-  } else if (cfg.features.zoomEvent && meetingIndex === -1) {
-    const retired = archive.sections.Meeting;
-    const block =
-      retired?.block ||
-      defaults.layout.content.find((section) => section.type === "Meeting");
-    const index = retired?.index ?? doc.layout.content.length - 1;
-    doc.layout.content.splice(
-      Math.max(2, Math.min(index, doc.layout.content.length - 1)),
-      0,
-      structuredClone(block),
+  for (const [type, enabled] of [
+    ["Faq", cfg.features.faq !== false],
+    ["Meeting", cfg.features.zoomEvent],
+  ]) {
+    const index = doc.layout.content.findIndex(
+      (section) => section.type === type,
     );
-    delete archive.sections.Meeting;
+    if (!enabled && index !== -1) {
+      archive.sections[type] = {
+        block: doc.layout.content.splice(index, 1)[0],
+        index,
+      };
+    } else if (enabled && index === -1) {
+      const retired = archive.sections[type];
+      const block =
+        retired?.block ||
+        defaults.layout.content.find((section) => section.type === type);
+      const position = retired?.index ?? doc.layout.content.length - 1;
+      doc.layout.content.splice(
+        Math.max(2, Math.min(position, doc.layout.content.length - 1)),
+        0,
+        structuredClone(block),
+      );
+      delete archive.sections[type];
+    }
   }
   doc.metadata ||= {};
   for (const lang of Object.keys(doc.locales || {})) {
@@ -213,6 +268,7 @@ export function reconcileStoredDocument(input) {
       delete archive.locales[lang];
     }
     const locale = doc.locales[lang];
+    reconcileAdminPrivacy(locale.copy);
     const retired = (archive.fields[lang] ||= {});
     const allowed = new Set(publicationFields[lang].map((field) => field.path));
     for (const [path, value] of Object.entries(locale.copy)) {
@@ -277,7 +333,7 @@ export function cleanDocument(input, knownAssets = []) {
         (!record(doc.archive.sections) ||
           Object.entries(doc.archive.sections).some(
             ([type, entry]) =>
-              type !== "Meeting" ||
+              !["Faq", "Meeting"].includes(type) ||
               !record(entry) ||
               !record(entry.block) ||
               entry.block.type !== type ||
@@ -482,13 +538,21 @@ export function configFromDocument(doc, lang, emailFacts) {
     },
     analytics: doc.analytics.mode,
   };
+  if (config.features.faq === false) delete config.publication.blocks.faq;
   if (emailFacts) config.email = { ...config.email, ...emailFacts };
   return config;
 }
 
 export async function createPublicationStore(
   connection,
-  { prepare = async () => ({}), onSwap = () => {}, assets } = {},
+  {
+    prepare = async () => ({}),
+    onSwap = () => {},
+    // (next, previous, connection), inside the publish transaction: a throw
+    // here refuses the publication, whichever route asked for it.
+    beforeCommit = async () => {},
+    assets,
+  } = {},
 ) {
   await connection.run(
     readFileSync(new URL("../db/publishing.sql", import.meta.url), "utf8"),
@@ -621,6 +685,7 @@ export async function createPublicationStore(
             if ((latest.revision || 0) !== expectedRevision)
               throw new RevisionConflict(latest.revision || 0);
             await validateAgainstStorage(output.document);
+            await beforeCommit(output.document, snapshot?.document, connection);
             await connection
               .query(
                 "INSERT INTO publications /* public-neutral */ (revision,document,published_at) VALUES (?,?,?)",

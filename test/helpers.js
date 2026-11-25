@@ -14,6 +14,8 @@ const APP_TABLES = [
   "kv_state_cache",
   "kv_not_typo",
   "occupation_not_typo",
+  "admin_merges",
+  "admin_actions",
   "mailing_deliveries",
 ];
 

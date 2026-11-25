@@ -17,12 +17,17 @@
 CREATE TABLE IF NOT EXISTS signers (
   id                            INTEGER PRIMARY KEY AUTOINCREMENT,
   name                          TEXT NOT NULL,
-  email                         TEXT NOT NULL UNIQUE,
+  -- NULL only for a first signer the team added by hand in the admin: such
+  -- an entry has no address, so nothing can ever be mailed to it (see the
+  -- CHECK below).
+  email                         TEXT UNIQUE,
   kreisverband                  TEXT DEFAULT '',
   occupation                    TEXT DEFAULT '',
+  signer_function               TEXT NOT NULL DEFAULT '',
   state                         TEXT DEFAULT '',
   newsletter                    INTEGER NOT NULL DEFAULT 0,
   show_publicly                 INTEGER NOT NULL DEFAULT 1,
+  show_signer_details            INTEGER CHECK(show_signer_details IN (0, 1)),
   verified                      INTEGER NOT NULL DEFAULT 0,
   verification_token            TEXT UNIQUE,
   token_expires_at              TEXT,
@@ -44,11 +49,26 @@ CREATE TABLE IF NOT EXISTS signers (
   invite_show_name              INTEGER NOT NULL DEFAULT 0,
   invite_count                  INTEGER NOT NULL DEFAULT 0,
   pending_ref                   TEXT,
-  created_at                    TEXT DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ','now'))
+  -- Set when the team switched public display on for someone in the admin:
+  -- when they recorded that the person agreed, and their note on how.
+  admin_consent_at              TEXT,
+  admin_consent_note            TEXT,
+  -- Marked as a first signer: the public list labels the name. Where the
+  -- name stands is separate (first_signer_pins).
+  first_signer                  INTEGER NOT NULL DEFAULT 0 CHECK(first_signer IN (0, 1)),
+  created_at                    TEXT DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ','now')),
+  CHECK (email IS NOT NULL OR (verified = 1 AND newsletter = 0
+    AND verification_token IS NULL AND unsubscribe_token IS NULL))
 );
 
 CREATE INDEX IF NOT EXISTS idx_signers_verified
   ON signers (verified, created_at DESC);
+
+-- Where a signature stands at the top of the public list (default view only).
+CREATE TABLE IF NOT EXISTS first_signer_pins (
+  signer_id INTEGER PRIMARY KEY REFERENCES signers(id) ON DELETE CASCADE,
+  position INTEGER NOT NULL UNIQUE CHECK(position > 0)
+);
 
 -- Every public read filters on `verified = 1 AND show_publicly = 1` and then
 -- needs one more column. Without that column in the index SQLite walks the
@@ -138,6 +158,9 @@ CREATE TABLE IF NOT EXISTS campaigns (
   -- Texts in further languages (features.multiLanguage), JSON
   -- {"<lang>": {"templateId": …, "subject": "…"}}; NULL = default text only.
   i18n            TEXT,
+  -- Recipients in the audience when the latest attempt started, so the admin
+  -- can show "18 von 122" while it sends.
+  audience_size   INTEGER,
   request_key     TEXT,
   request_hash    TEXT,
   created_at      TEXT DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ','now'))
@@ -247,4 +270,34 @@ CREATE TABLE IF NOT EXISTS occupation_not_typo (
   outlier       TEXT NOT NULL,
   created_at    TEXT DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ','now')),
   PRIMARY KEY (canonical, outlier)
+);
+
+-- Spelling variants merged in the admin, kept so a merge can be taken back:
+-- which signatures it changed and what they held before. `detail` is JSON:
+--   occupation    {"ids": [signer id, ...]}
+--   kreisverband  {"states": [[signer id, previous state], ...]}
+--   state         {"ids": [...], "cache": previous kv_state_cache row or null}
+-- For 'state', from_value is the Kreisverband and to_value the Land assigned.
+CREATE TABLE IF NOT EXISTS admin_merges (
+  id          INTEGER PRIMARY KEY AUTOINCREMENT,
+  kind        TEXT NOT NULL,
+  from_value  TEXT NOT NULL,
+  to_value    TEXT NOT NULL,
+  detail      TEXT NOT NULL,
+  created_at  TEXT NOT NULL,
+  undone_at   TEXT
+);
+
+-- What was done in the admin and when (db/admin-actions.js). Never an email
+-- address. `detail` is JSON and only set for edits of a signature:
+--   {"changes": {"<field>": [old, new], ...}, "consentNote": "..."}
+-- It is cleared when that signature is deleted; rows go after
+-- privacy.adminLogDays.
+CREATE TABLE IF NOT EXISTS admin_actions (
+  id         INTEGER PRIMARY KEY AUTOINCREMENT,
+  at         TEXT NOT NULL,
+  action     TEXT NOT NULL,
+  target_id  INTEGER,
+  count      INTEGER,
+  detail     TEXT
 );

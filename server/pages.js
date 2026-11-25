@@ -150,6 +150,37 @@ const PAGE_COPY_EN = {
 
 const PAGE_COPY = { en: PAGE_COPY_EN };
 
+// The page behind the link in the "Newsletter-Einwilligung" mail the team
+// sends from the admin. Kept apart from the page copy above, which is part of
+// the letter's published configuration and so of the public letter page.
+const NEWSLETTER_OPT_IN_COPY = {
+  de: {
+    heading: "Newsletter abonnieren",
+    intro: "Hallo <strong>{firstName}</strong>, möchtest du unsere Kampagnen-E-Mails erhalten?",
+    button: "Ja, Newsletter abonnieren",
+    note: "Du kannst dich jederzeit über den Link in jeder E-Mail wieder abmelden. Wenn du das nicht möchtest, schließe diese Seite einfach.",
+    doneHeading: "Du bist angemeldet",
+    doneText: "Danke! Du erhältst ab jetzt unsere Kampagnen-E-Mails. Abmelden kannst du dich jederzeit über den Link in jeder E-Mail.",
+    expiredHeading: "Link abgelaufen",
+    expiredText: "Dieser Link ist leider nicht mehr gültig. Schreib uns, dann schicken wir dir einen neuen.",
+  },
+  en: {
+    heading: "Subscribe to the newsletter",
+    intro: "Hello <strong>{firstName}</strong>, would you like to receive our campaign emails?",
+    button: "Yes, subscribe",
+    note: "You can unsubscribe at any time with the link in every email. If you don't want this, just close this page.",
+    doneHeading: "You're subscribed",
+    doneText: "Thank you! You'll receive our campaign emails from now on. You can unsubscribe at any time with the link in every email.",
+    expiredHeading: "Link expired",
+    expiredText: "Sorry, this link is no longer valid. Write to us and we'll send you a new one.",
+  },
+};
+
+// German for any language without a text of its own.
+export function newsletterOptInCopy(lang) {
+  return NEWSLETTER_OPT_IN_COPY[lang] || NEWSLETTER_OPT_IN_COPY.de;
+}
+
 // Default page copy for a language; German for "de" and anything unknown.
 export function defaultPageCopy(lang) {
   return PAGE_COPY[lang] || DEFAULT_PAGE_COPY;

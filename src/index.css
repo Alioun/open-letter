@@ -1307,6 +1307,17 @@ h1.headline .banner {
   margin-bottom: 16px;
 }
 
+.form-notice {
+  margin-bottom: 16px;
+  padding: 12px 14px;
+  border-left: 4px solid var(--rot);
+  border-radius: var(--radius-input, 0);
+  background: var(--fond);
+  color: var(--akzent);
+  font-size: 14px;
+  line-height: 1.5;
+}
+
 .field .err {
   color: var(--fehler);
   font-size: 12px;
@@ -1326,13 +1337,39 @@ h1.headline .banner {
   margin: 18px 0 26px;
 }
 
-.check {
+.check,
+.sign-visibility label {
   display: flex;
   gap: 12px;
   align-items: flex-start;
   cursor: pointer;
   font-size: 13.5px;
   line-height: 1.5;
+}
+
+.sign-visibility {
+  display: grid;
+  gap: 10px;
+  min-inline-size: 0;
+  margin: 0;
+  padding: 0;
+  border: 0;
+}
+
+.sign-visibility legend {
+  margin-bottom: 8px;
+  padding: 0;
+  font-size: 13.5px;
+  font-weight: 600;
+}
+
+.sign-visibility input {
+  width: 20px;
+  height: 20px;
+  margin: 0;
+  flex-shrink: 0;
+  accent-color: var(--rot);
+  cursor: pointer;
 }
 
 .check input {
@@ -1970,6 +2007,15 @@ h1.headline .banner {
   font-size: 12px;
   color: var(--grau);
   margin-top: 2px;
+}
+
+.signer .kv-details {
+  overflow-wrap: anywhere;
+}
+
+.signer .kv .first-signer-label {
+  color: var(--fehler);
+  font-weight: 700;
 }
 
 .signer .time {

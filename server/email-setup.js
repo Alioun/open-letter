@@ -8,7 +8,10 @@ import { RevisionConflict } from "./publications.js";
 import { resolvePrivacy } from "../config/privacy.js";
 import { ensureEmailAttemptSubjects } from "../db/email-attempts.js";
 import { emailHmac } from "../db/erasure-log.js";
-import { identifiedEmailTest } from "../config/email-test.js";
+import {
+  EMAIL_TEST_SUBJECT,
+  identifiedEmailTest,
+} from "../config/email-test.js";
 
 export class DeliveryDeferred extends Error {
   constructor(category, retryAfterS = 60) {
@@ -141,6 +144,34 @@ export function smtpOptions(p) {
     connectionTimeout: 15000,
     greetingTimeout: 15000,
     socketTimeout: 30000,
+  };
+}
+
+async function failedMailDetail(connection, retryableS) {
+  const byKind = await connection
+    .query(
+      `SELECT json_extract(payload, '$.kind') AS kind, COUNT(*) AS count
+       FROM _honker_dead WHERE queue='emails' GROUP BY 1 ORDER BY 2 DESC`,
+    )
+    .all();
+  const span = await connection
+    .query(
+      `SELECT MIN(died_at) AS first, MAX(died_at) AS last,
+              SUM(created_at > unixepoch() - ?) AS retryable
+       FROM _honker_dead WHERE queue='emails'`,
+    )
+    .get(retryableS);
+  const iso = (seconds) =>
+    seconds ? new Date(seconds * 1000).toISOString() : null;
+  return {
+    byKind: byKind.map((row) => ({
+      kind: row.kind || "other",
+      count: row.count,
+    })),
+    firstAt: iso(span?.first),
+    lastAt: iso(span?.last),
+    retryable: span?.retryable ?? 0,
+    retryableHours: Math.round(retryableS / 3600),
   };
 }
 
@@ -286,6 +317,23 @@ export async function createEmailManager(
     if (!Number.isInteger(expected) || expected !== state.revision)
       throw new RevisionConflict(state.revision);
   };
+  const jobTables = async () =>
+    Boolean(
+      await connection
+        .query(
+          "SELECT 1 FROM sqlite_master WHERE type='table' AND name='_honker_live'",
+        )
+        .get(),
+    );
+  // Mail held back for reconciliation waits up to an hour before its next try.
+  async function wakeWaitingEmails() {
+    if (!(await jobTables())) return;
+    await connection
+      .query(
+        "UPDATE _honker_live /* public-neutral */ SET run_at = unixepoch() WHERE queue='emails' AND state IN ('pending','scheduled') AND run_at > unixepoch()",
+      )
+      .run();
+  }
   async function persist(next) {
     const changed =
       next.ready !== state.ready ||
@@ -302,7 +350,10 @@ export async function createEmailManager(
         JSON.stringify(candidate),
         JSON.stringify(details),
       );
+    const recovered = next.ready && !state.ready;
     state = next;
+    // Mail held while sending was down goes out now, not at its next retry.
+    if (recovered) await wakeWaitingEmails();
     if (changed) onActivate(manager.facts);
   }
   function transport(p) {
@@ -321,6 +372,7 @@ export async function createEmailManager(
     failure: state.failure || null,
     setupFailure: state.setupFailure || null,
     lastSuccess: state.lastSuccess || null,
+    activatedAt: state.activatedAt || null,
   });
   async function verify(p) {
     if (p.provider !== "resend") await transport(p).verify();
@@ -383,6 +435,7 @@ export async function createEmailManager(
           source: "admin",
           candidate,
           validation: null,
+          setupFailure: null,
         });
         return publicState();
       });
@@ -403,8 +456,8 @@ export async function createEmailManager(
           p,
           {
             to: recipient,
-            subject: "Campaign email setup test",
-            html: "<p>This is your campaign email setup test. Confirm receipt in the administration.</p>",
+            subject: EMAIL_TEST_SUBJECT,
+            html: "<p>Diese Testnachricht prüft den E-Mail-Versand. Bestätige ihren Empfang in der Verwaltung.</p>",
           },
           `setup-${p.revision}-${randomUUID()}`,
         );
@@ -427,6 +480,10 @@ export async function createEmailManager(
                 checkedAt: new Date().toISOString(),
               },
           setupFailure: failure,
+          // A working test of the active profile ends its current failure.
+          ...(!failure && identity(p) === identity(state.active)
+            ? { failure: null }
+            : {}),
         });
         return publicState();
       });
@@ -465,6 +522,7 @@ export async function createEmailManager(
           active: state.candidate || state.active,
           candidate: null,
           ready: true,
+          activatedAt: new Date().toISOString(),
           failure: null,
           setupFailure: null,
           validation: null,
@@ -531,10 +589,17 @@ export async function createEmailManager(
                 if (attempt?.status === "delivered") return 0;
                 if (inFlight.has(scope))
                   throw new DeliveryDeferred("delivery-in-progress", 5);
+                // A dropped connection leaves it open whether the provider took
+                // the message. A transactional mail is sent again: a second
+                // confirmation mail is harmless, a missing one loses the
+                // signature once its link expires. Campaign mail waits for the
+                // admin, since a second newsletter reaches many people.
+                const retryUnclear = priority === "transactional";
                 if (
-                  attempt?.status === "attempting" ||
-                  (attempt?.status === "unresolved" &&
-                    attempt.provider !== "resend")
+                  !retryUnclear &&
+                  (attempt?.status === "attempting" ||
+                    (attempt?.status === "unresolved" &&
+                      attempt.provider !== "resend"))
                 )
                   throw new DeliveryDeferred(
                     "provider-reconciliation-required",
@@ -545,7 +610,7 @@ export async function createEmailManager(
                       (p) =>
                         p?.revision === attempt.profile_revision &&
                         p.provider === attempt.provider,
-                    )
+                    ) || (retryUnclear ? state.active : undefined)
                   : state.active;
                 if (!profile)
                   throw new DeliveryDeferred(
@@ -598,9 +663,14 @@ export async function createEmailManager(
                 } else {
                   await connection
                     .query(
-                      "UPDATE email_attempts /* public-neutral */ SET status='attempting',updated_at=? WHERE scope=?",
+                      "UPDATE email_attempts /* public-neutral */ SET status='attempting',profile_revision=?,provider=?,updated_at=? WHERE scope=?",
                     )
-                    .run(new Date().toISOString(), scope);
+                    .run(
+                      profile.revision,
+                      profile.provider,
+                      new Date().toISOString(),
+                      scope,
+                    );
                 }
                 inFlight.add(scope);
                 return 0;
@@ -658,7 +728,8 @@ export async function createEmailManager(
               "UPDATE email_attempts /* public-neutral */ SET status='delivered',updated_at=? WHERE scope=?",
             )
             .run(at, scope);
-          await persist({ ...state, lastSuccess: at });
+          // A mail went out, so whatever stopped the last one is over.
+          await persist({ ...state, lastSuccess: at, failure: null });
         });
       } catch (e) {
         const d = { ...diagnostic(e), correlationId: attempt.correlation_id };
@@ -669,7 +740,8 @@ export async function createEmailManager(
             )
             .run(
               d.category === "quota" ||
-                Number(e.responseCode || e.status) >= 400
+                Number(e.responseCode || e.status) >= 400 ||
+                priority === "transactional"
                 ? "retryable"
                 : "unresolved",
               JSON.stringify(d),
@@ -696,7 +768,7 @@ export async function createEmailManager(
             ].includes(d.category)
               ? { ready: false }
               : {}),
-            failure: d,
+            failure: { ...d, at: new Date().toISOString() },
           });
         });
         if (d.category === "quota")
@@ -729,6 +801,32 @@ export async function createEmailManager(
         return manager.diagnostics();
       });
     },
+    // One decision for every unclear delivery, instead of one per message.
+    reconcileAll(resolution, expected) {
+      return locked(async () => {
+        check(expected);
+        if (!["delivered", "retryable"].includes(resolution))
+          throw new ValidationError(
+            "Wähle, ob alle als zugestellt gelten oder erneut gesendet werden.",
+          );
+        const open = await connection
+          .query(
+            "SELECT scope FROM email_attempts WHERE status IN ('unresolved','attempting')",
+          )
+          .all();
+        const at = new Date().toISOString();
+        for (const { scope } of open) {
+          if (inFlight.has(scope)) continue;
+          await connection
+            .query(
+              "UPDATE email_attempts /* public-neutral */ SET status=?,updated_at=? WHERE scope=? AND status IN ('unresolved','attempting')",
+            )
+            .run(resolution, at, scope);
+        }
+        if (resolution === "retryable") await wakeWaitingEmails();
+        return manager.diagnostics();
+      });
+    },
     async diagnostics() {
       const jobs = await connection
         .query(
@@ -752,6 +850,12 @@ export async function createEmailManager(
                 )
                 .get()
             ).n,
+            // What the failed mails were, when they failed, and how many are
+            // still young enough to send again. Kinds and counts only.
+            failedDetail: await failedMailDetail(
+              connection,
+              resolvePrivacy(config).emailJobRetentionS,
+            ),
           }
         : { available: false, queued: null, failed: null };
       return {
@@ -797,5 +901,6 @@ export async function createEmailManager(
     },
   };
   if (restored && state.restoreMarker === restored.value) await persist(state);
+  if (state.ready) await wakeWaitingEmails();
   return manager;
 }

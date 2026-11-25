@@ -188,6 +188,32 @@ test("uncertain SMTP recipient remains pending while later recipients are accept
   expect((await repository.getCampaignById(c.id)).status).toBe("failed");
 });
 
+test("a retry counts people reached before they left the audience", async () => {
+  let failing = true;
+  const { template, service } = await setup(async (p) => {
+    if (failing && p.to === "late@example.org")
+      throw new Error("socket closed after DATA");
+  });
+  const left = await addVerifiedSigner({ email: "left@example.org" });
+  await addVerifiedSigner({ email: "stays@example.org" });
+  await addVerifiedSigner({ email: "late@example.org" });
+  const c = await campaign(template);
+  await service.handle({ campaignId: c.id });
+  await db.query("UPDATE signers SET newsletter = 0 WHERE id = ?").run(left.id);
+  await db
+    .query(
+      "UPDATE campaigns SET heartbeat_at='2000-01-01T00:00:00.000Z' WHERE id=?",
+    )
+    .run(c.id);
+  failing = false;
+  await service.handle({ campaignId: c.id });
+  const listed = (await repository.listCampaigns()).find(
+    (row) => row.id === c.id,
+  );
+  expect(listed.sent_offset).toBeLessThanOrEqual(listed.audience_size);
+  expect(listed.audience_size).toBe(3);
+});
+
 test("one paced run renders and accepts every recipient without restarting its audience", async () => {
   const calls = [];
   const { template, service } = await setup(async (p) => {
@@ -198,6 +224,8 @@ test("one paced run renders and accepts every recipient without restarting its a
   await service.handle({ campaignId: c.id });
   expect(calls).toHaveLength(5);
   expect(new Set(calls).size).toBe(5);
+  const [listed] = await repository.listCampaigns();
+  expect(listed).toMatchObject({ audience_size: 5, sent_offset: 5 });
   expect(
     (await db.query("SELECT attempts FROM campaigns WHERE id=?").get(c.id))
       .attempts,
@@ -209,4 +237,120 @@ test("one paced run renders and accepts every recipient without restarting its a
         .get()
     ).n,
   ).toBe(5);
+});
+
+// A send held inside the provider request for its first recipient.
+async function heldSend({ failing = () => false } = {}) {
+  const calls = [];
+  let entered, release;
+  const started = new Promise((r) => (entered = r));
+  const held = new Promise((r) => (release = r));
+  const fixture = await setup(async (p) => {
+    if (p.to === "admin@example.org") return;
+    calls.push(p.to);
+    if (calls.length === 1) {
+      entered();
+      await held;
+    }
+    if (failing(p.to)) throw new Error("socket closed after DATA");
+  });
+  return { ...fixture, calls, started, release };
+}
+
+test("a stopped send finishes the mail in flight, mails nobody else, and resumes without repeats", async () => {
+  const { template, service, calls, started, release } = await heldSend();
+  for (const name of ["first", "second", "third"])
+    await addVerifiedSigner({ email: `${name}@example.org` });
+  const c = await campaign(template);
+  const work = service.handle({ campaignId: c.id });
+  await started;
+  let reachedAtStop;
+  try {
+    reachedAtStop = await repository.stopCampaign(c.id);
+  } finally {
+    release();
+  }
+  await work;
+  expect(reachedAtStop).toBe(0);
+  expect(calls).toEqual(["first@example.org"]);
+  const [stopped] = await repository.listCampaigns();
+  expect(stopped).toMatchObject({
+    status: "aborted",
+    sent_offset: 1,
+    failure: { category: "stopped-by-admin" },
+  });
+
+  expect(await repository.retryAbortedCampaign(c.id)).toBe(true);
+  await service.handle({ campaignId: c.id });
+  expect(calls.toSorted()).toEqual([
+    "first@example.org",
+    "second@example.org",
+    "third@example.org",
+  ]);
+  expect((await repository.getCampaignById(c.id)).status).toBe("sent");
+});
+
+test("a send stopped while its mail in flight fails stays stopped", async () => {
+  const { template, service, started, release } = await heldSend({
+    failing: () => true,
+  });
+  await addVerifiedSigner();
+  const c = await campaign(template);
+  const work = service.handle({ campaignId: c.id });
+  await started;
+  try {
+    await repository.stopCampaign(c.id);
+  } finally {
+    release();
+  }
+  await work;
+  expect((await repository.getCampaignById(c.id)).status).toBe("aborted");
+});
+
+test("a send stopped during its last recipient stays stopped when that mail goes out", async () => {
+  const { template, service, started, release } = await heldSend({
+    failing: () => false,
+  });
+  await addVerifiedSigner();
+  const c = await campaign(template);
+  const work = service.handle({ campaignId: c.id });
+  await started;
+  try {
+    await repository.stopCampaign(c.id);
+  } finally {
+    release();
+  }
+  await work;
+  expect(await repository.getCampaignById(c.id)).toMatchObject({
+    status: "aborted",
+    sent_offset: 1,
+  });
+});
+
+test("a send waiting for the mail service can be stopped, one that never began cannot", async () => {
+  const { template } = await setup(async () => {});
+  await addVerifiedSigner();
+  const begun = await campaign(template);
+  await repository.claimCampaignById(begun.id);
+  await repository.deferCampaign(begun.id, 300);
+  expect((await repository.getCampaignById(begun.id)).status).toBe("scheduled");
+  expect(await repository.stopCampaign(begun.id)).toBe(0);
+  expect(await repository.claimCampaignById(begun.id)).toBeNull();
+
+  const untouched = await repository.createCampaign({
+    templateId: template.id,
+    subject: "Later",
+    scheduledAt: new Date(Date.now() + 3600_000),
+  });
+  expect(await repository.stopCampaign(untouched.id)).toBeNull();
+  expect((await repository.getCampaignById(untouched.id)).status).toBe(
+    "scheduled",
+  );
+  const listed = await repository.listCampaigns();
+  expect(
+    listed.map((row) => [row.id, row.started]).toSorted((a, b) => a[0] - b[0]),
+  ).toEqual([
+    [begun.id, true],
+    [untouched.id, false],
+  ]);
 });

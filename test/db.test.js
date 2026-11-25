@@ -399,6 +399,33 @@ describe("getSigners + fuzzy search", () => {
   });
 });
 
+describe("adding every matching recipient to a selection", () => {
+  test("says how many matched and whether the limit cut any off", async () => {
+    const ids = [];
+    for (const age of [3, 2, 1])
+      ids.push(
+        (
+          await addVerifiedSigner({
+            newsletter: 1,
+            created_at: isoAgoDays(age),
+          })
+        ).id,
+      );
+    await addVerifiedSigner({ newsletter: 0 });
+
+    expect(await q.listNewsletterSignerIds()).toEqual({
+      ids: ids.toReversed(),
+      total: 3,
+      truncated: false,
+    });
+    expect(await q.listNewsletterSignerIds({ cap: 2 })).toEqual({
+      ids: [ids[2], ids[1]],
+      total: 3,
+      truncated: true,
+    });
+  });
+});
+
 describe("stats", () => {
   test("getStats counts verified/today/week/kv", async () => {
     await addVerifiedSigner({ kreisverband: "Berlin" });
@@ -467,6 +494,47 @@ describe("campaigns", () => {
     expect(audit.signers).toEqual([
       { id: available.id, name: available.name, email: available.email },
     ]);
+  });
+  test("only campaigns that will send without further action hold their templates", async () => {
+    const template = await addTemplate();
+    const translated = await addTemplate();
+    const other = await addTemplate();
+    const campaign = (subject, extra = {}) =>
+      q.createCampaign({
+        templateId: template.id,
+        subject,
+        scheduledAt: future(),
+        ...extra,
+      });
+    const scheduled = await campaign("Scheduled");
+    const cancelled = await campaign("Cancelled");
+    await q.cancelCampaign(cancelled.id);
+    const sent = await campaign("Sent");
+    await db
+      .query("UPDATE campaigns SET status = 'sending' WHERE id = ?")
+      .run(sent.id);
+    await q.markCampaignSent(sent.id, 0);
+    const aborted = await campaign("Aborted");
+    await db
+      .query("UPDATE campaigns SET status = 'aborted' WHERE id = ?")
+      .run(aborted.id);
+    const retrying = await campaign("Retrying");
+    await db
+      .query("UPDATE campaigns SET status = 'failed' WHERE id = ?")
+      .run(retrying.id);
+    await db
+      .query("UPDATE campaigns SET i18n = ? WHERE id = ?")
+      .run(JSON.stringify({ en: { templateId: translated.id } }), retrying.id);
+
+    const holding = async (...ids) =>
+      (await q.getPendingCampaignsUsing(ids)).map((c) => c.subject).sort();
+    expect(await holding(template.id)).toEqual(["Retrying", "Scheduled"]);
+    expect(await holding(translated.id)).toEqual(["Retrying"]);
+    expect(await holding(other.id)).toEqual([]);
+    expect((await q.getPendingCampaignsUsing([template.id]))[0]).toMatchObject({
+      id: scheduled.id,
+      status: "scheduled",
+    });
   });
   test("concurrent and restarted campaign requests produce one campaign and cancelled requests stay cancelled", async () => {
     const template = await addTemplate();
@@ -666,9 +734,13 @@ describe("campaigns", () => {
       }),
     ).toContain(c.id);
 
+    // The last allowed attempt is claimed and fails too.
     await db
-      .query("UPDATE campaigns SET attempts = ? WHERE id = ?")
-      .run(q.MAX_MAILING_ATTEMPTS, c.id);
+      .query("UPDATE campaigns SET attempts = ?, heartbeat_at = ? WHERE id = ?")
+      .run(q.MAX_MAILING_ATTEMPTS - 1, minutesAgo(600), c.id);
+    expect(await q.claimCampaignById(c.id)).toMatchObject({
+      attempts: q.MAX_MAILING_ATTEMPTS,
+    });
     await q.markCampaignFailed(c.id, failure);
     expect((await q.listCampaigns())[0].failure).toEqual(failure);
     let row = await db
@@ -708,6 +780,9 @@ describe("campaigns", () => {
       subject: "o",
       scheduledAt: past(),
     });
+    await db
+      .query("UPDATE campaigns SET status = 'sending' WHERE id = ?")
+      .run(done.id);
     await q.markCampaignSent(done.id, 1);
     await q.claimCampaignById(open.id);
     await q.markCampaignFailed(open.id);

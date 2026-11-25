@@ -1,4 +1,5 @@
-import { Collapsible } from "@base-ui/react/collapsible";
+import TechnicalReport from "./TechnicalReport.jsx";
+import { temporaryFailureAdvice } from "./delivery-advice.js";
 const repairs = {
   "missing-template": [
     "Vorlage nicht mehr verfügbar",
@@ -49,12 +50,17 @@ const repairs = {
     "Prüfe den Anbieterstatus und die Netzwerkverbindung. Nachrichten werden innerhalb ihrer Gültigkeit erneut versucht.",
   ],
 };
-export default function EmailFailure({ failure, title }) {
+// `profile` (the active mail profile) lets the advice name the server and
+// port the send could not reach.
+export default function EmailFailure({ failure, title, profile }) {
   if (!failure) return null;
-  const [heading, advice] = repairs[failure.category] || [
-    "Versand prüfen",
-    "Prüfe das Versandprofil und sende erneut eine Testnachricht. Gleiche unklare Zustellungen anhand der Vorgangs-ID beim Anbieter ab.",
-  ];
+  const temporary = temporaryFailureAdvice(failure, profile);
+  const [heading, advice] = temporary
+    ? [temporary.heading, temporary.text]
+    : repairs[failure.category] || [
+        "Versand prüfen",
+        "Prüfe das Versandprofil und sende erneut eine Testnachricht. Gleiche unklare Zustellungen anhand der Vorgangs-ID beim Anbieter ab.",
+      ];
   return (
     <div className="email-failure" role="alert">
       <strong>
@@ -62,19 +68,27 @@ export default function EmailFailure({ failure, title }) {
         {heading}
       </strong>
       <p>{advice}</p>
-      <Collapsible.Root>
-        <Collapsible.Trigger className="admin-disclosure-trigger">
-          Technische Angaben
-        </Collapsible.Trigger>
-        <Collapsible.Panel keepMounted className="admin-disclosure-panel">
-          <p>
-            Kategorie: {failure.category} · Protokoll:{" "}
-            {failure.protocol || failure.code || "—"}
-            <br />
-            Vorgangs-ID: {failure.correlationId || "—"}
-          </p>
-        </Collapsible.Panel>
-      </Collapsible.Root>
+      {temporary && (
+        <>
+          <ol className="email-failure-steps">
+            {temporary.steps.map((step) => (
+              <li key={step}>{step}</li>
+            ))}
+          </ol>
+          <p>{temporary.meanwhile}</p>
+        </>
+      )}
+      <TechnicalReport
+        lines={[
+          `${title ? `${title}: ` : ""}${heading}`,
+          failure.at && `Zeitpunkt: ${failure.at}`,
+          `Kategorie: ${failure.category}`,
+          `Fehlercode: ${failure.protocol || failure.code || "–"}`,
+          profile?.host && `Server: ${profile.host}:${profile.port}`,
+          profile?.provider && `Anbieter: ${profile.provider}`,
+          `Vorgangs-ID: ${failure.correlationId || "–"}`,
+        ].filter(Boolean)}
+      />
     </div>
   );
 }

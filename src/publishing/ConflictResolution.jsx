@@ -417,6 +417,7 @@ export default function ConflictResolution({
       </p>
       <div className="admin-actions">
         <Button
+          className="admin-button admin-button--primary"
           disabled={remaining > 0}
           onClick={() => onAccept(result.document, current)}
         >

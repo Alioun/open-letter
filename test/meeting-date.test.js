@@ -40,3 +40,24 @@ test("meeting inputs use explicit German dates and a 24-hour clock, rejecting am
   ])
     expect(() => meetingDateForSave(invalid)).toThrow("TT.MM.JJJJ, HH:MM");
 });
+
+test("short meeting dates and times without leading zeros are accepted", () => {
+  const expected = new Date(2026, 11, 3, 9, 30).toISOString();
+  for (const input of ["3.12.2026, 9:30", "03.12.2026 09:30", "3.12.2026,9:30"])
+    expect(meetingDateForSave(input)).toBe(expected);
+});
+
+test("a meeting time the clock change skips is refused, not moved", () => {
+  const zone = process.env.TZ;
+  process.env.TZ = "Europe/Berlin";
+  try {
+    expect(() => meetingDateForSave("28.3.2027, 2:30")).toThrow(
+      "Zeitumstellung",
+    );
+    expect(meetingDateForSave("28.3.2027, 3:30")).toBe(
+      "2027-03-28T01:30:00.000Z",
+    );
+  } finally {
+    process.env.TZ = zone;
+  }
+});

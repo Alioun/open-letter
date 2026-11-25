@@ -10,7 +10,7 @@ export function FieldEditor({ field, value, onChange }) {
   switch (field.type) {
     case "bool":
       return (
-        <label className="check admin-check">
+        <label className="admin-check">
           <Checkbox.Root
             className="admin-checkbox"
             id={id}
@@ -34,9 +34,9 @@ export function FieldEditor({ field, value, onChange }) {
       );
     case "sections":
       return (
-        <div style={{ display: "flex", gap: 12, flexWrap: "wrap" }}>
+        <div className="admin-check-group">
           {Object.entries(SECTION_LABELS).map(([sid, label]) => (
-            <label key={sid} className="check admin-check">
+            <label key={sid} className="admin-check">
               <Checkbox.Root
                 className="admin-checkbox"
                 checked={(value || []).includes(sid)}

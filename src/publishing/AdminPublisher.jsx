@@ -12,7 +12,7 @@ import {
   THEME_STYLE_FIELDS,
 } from "../../config/theme-validation.js";
 import { cssDiagnostics } from "../../config/css-policy.js";
-import { Choice, ConfirmDialog } from "../ui.jsx";
+import { Choice, ConfirmDialog, EmptyState, Notice } from "../ui.jsx";
 import { FieldEditor } from "../AdminCopy.jsx";
 import { usePublicationDraft } from "./draft.js";
 import { publicationScope } from "./scope.js";
@@ -86,6 +86,14 @@ const DESIGN_LABELS = {
   grauHell: "Linien und helle Details",
   erfolg: "Erfolg",
   fehler: "Fehler",
+  onAkzent: "Schrift auf der Kontrastfarbe",
+  ctaBg: "Hauptschaltfläche · Hintergrund",
+  ctaFg: "Hauptschaltfläche · Schrift",
+  ctaHoverBg: "Hauptschaltfläche beim Zeigen · Hintergrund",
+  ctaHoverFg: "Hauptschaltfläche beim Zeigen · Schrift",
+  goalFill: "Fortschrittsbalken",
+  heroBg: "Hintergrund des Titelbereichs",
+  statBg: "Hintergrund der Unterschriftenzahl",
   display: "Schrift für Überschriften",
   body: "Schrift für Fließtext",
   shadowOffset: "Versatz des Schattens",
@@ -127,6 +135,21 @@ function Publisher({ publication, setPublication, api, workspace }) {
   const draft = usePublicationDraft(publication);
   const doc = draft.document;
   const scope = publicationScope(draft.base || publication.document, doc);
+  const campaignRead = useAdminRead(
+    api,
+    "/api/admin/campaigns",
+    scope.templateIds.length > 0,
+    Array.isArray,
+  );
+  const changedTemplates = new Set(scope.templateIds);
+  const affected = (campaignRead.data || []).filter(
+    (campaign) =>
+      ["scheduled", "failed"].includes(campaign.status) &&
+      [
+        campaign.template_id,
+        ...Object.values(campaign.i18n || {}).map((text) => text?.templateId),
+      ].some((id) => id != null && changedTemplates.has(String(id))),
+  );
   const [lang, setLang] = useState(DEFAULT_LANG);
   const [templateSelection, setTemplateSelection] = useState({
     slug: doc.templates[0]?.slug,
@@ -163,6 +186,10 @@ function Publisher({ publication, setPublication, api, workspace }) {
   const [reviewOpen, setReviewOpen] = useState(false);
   const [confirmation, setConfirmation] = useState(null);
   const [copyGroup, setCopyGroup] = useState("hero");
+  const [sectionRequest, setSectionRequest] = useState(null);
+  const letterBlock = doc.layout.content.find(
+    (block) => block.type === "Letter",
+  );
   const [conflict, setConflict] = useState(null);
   const [importOpen, setImportOpen] = useState(false);
   const [imported, setImported] = useState(null);
@@ -300,8 +327,9 @@ function Publisher({ publication, setPublication, api, workspace }) {
       setImportBusy(false);
     }
   }
-  const ask = (message, action) =>
+  const ask = (message, action, options) =>
     setConfirmation({
+      ...options,
       message,
       returnFocus:
         document.querySelector('.publication-toolbar [aria-haspopup="menu"]') ||
@@ -325,8 +353,12 @@ function Publisher({ publication, setPublication, api, workspace }) {
       } else if (previous.document?.locales && previous.document?.layout) {
         setStatus("");
         ask(
-          "Die vorherige Veröffentlichung als Entwurf laden? Sie ersetzt deine aktuellen Änderungen. Du kannst diesen Schritt rückgängig machen.",
+          "Sie ersetzt deine aktuellen Änderungen. Du kannst diesen Schritt rückgängig machen.",
           () => draft.change((d) => Object.assign(d, previous.document)),
+          {
+            title: "Vorherige Veröffentlichung als Entwurf laden?",
+            confirmLabel: "Als Entwurf laden",
+          },
         );
       } else throw new Error("Invalid history");
     } catch {
@@ -416,7 +448,9 @@ function Publisher({ publication, setPublication, api, workspace }) {
         }),
       });
       const data = await res.json();
-      if (res.status === 409) {
+      // Only a stale edit carries the current revision; any other conflict
+      // (a template a campaign still needs) is a rejection with its reason.
+      if (res.status === 409 && Number.isInteger(data.revision)) {
         setStale(true);
         setStatus("");
         return;
@@ -552,9 +586,9 @@ function Publisher({ publication, setPublication, api, workspace }) {
     >
       <div className="publication-heading">
         <div>
-          <h1 ref={publisherHeading} tabIndex={-1}>
-            {tab === "emails" ? "E-Mail-Vorlagen" : "Veröffentlichen"}
-          </h1>
+          <h2 ref={publisherHeading} tabIndex={-1}>
+            {tab === "emails" ? "E-Mail-Vorlagen" : "Website"}
+          </h2>
           {draft.dirty && (
             <p
               className="publication-scope"
@@ -585,20 +619,42 @@ function Publisher({ publication, setPublication, api, workspace }) {
                       <li key={group}>{group}</li>
                     ))}
                   </ul>
-                  {scope.groups.some((group) =>
-                    group.startsWith("E-Mail ·"),
-                  ) && (
-                    <p>
-                      Diese Änderungen gelten auch für geplante Nachrichten. Der
-                      Versand verwendet die dann veröffentlichte Vorlage.
-                    </p>
+                  {affected.length > 0 ? (
+                    <>
+                      <strong>
+                        Diese geplanten Kampagnen verwenden die geänderten
+                        Vorlagen
+                      </strong>
+                      <ul>
+                        {affected.map((campaign) => (
+                          <li key={campaign.id}>
+                            {campaign.subject} ·{" "}
+                            {new Date(campaign.scheduled_at).toLocaleString(
+                              "de-DE",
+                              { dateStyle: "medium", timeStyle: "short" },
+                            )}
+                          </li>
+                        ))}
+                      </ul>
+                      <p>Sie werden mit der neuen Fassung gesendet.</p>
+                    </>
+                  ) : (
+                    scope.templateIds.length > 0 &&
+                    (campaignRead.data ? (
+                      <p>Keine geplante Kampagne verwendet diese Vorlagen.</p>
+                    ) : (
+                      <p>
+                        Diese Änderungen gelten auch für geplante Nachrichten.
+                        Der Versand verwendet die dann veröffentlichte Vorlage.
+                      </p>
+                    ))
                   )}
                 </div>
               </Collapsible.Panel>
             </Collapsible.Root>
           )}
           <Button
-            className="publication-publish"
+            className="admin-button admin-button--primary publication-publish"
             aria-controls={recoveryVisible ? "publication-recovery" : undefined}
             aria-describedby={
               draft.dirty ? "publication-review-content" : undefined
@@ -624,7 +680,11 @@ function Publisher({ publication, setPublication, api, workspace }) {
       </div>
       <div className="publication-toolbar">
         <span className={`publication-state ${draft.dirty ? "is-dirty" : ""}`}>
-          <span>{draft.dirty ? "● Lokaler Entwurf" : "✓ Veröffentlicht"}</span>
+          <span>
+            {draft.dirty
+              ? "● Entwurf, nur in diesem Browser gespeichert"
+              : "✓ Veröffentlicht"}
+          </span>
           <span className="publication-revision">
             {" "}
             · Revision {draft.revision}
@@ -633,13 +693,14 @@ function Publisher({ publication, setPublication, api, workspace }) {
         {tab !== "emails" && (
           <Choice
             label="Inhaltssprache"
+            className="admin-choice--small"
             value={lang}
             onChange={setLang}
             options={LANGUAGES.map((l) => [l, l.toUpperCase()])}
           />
         )}
         <Button
-          className="publication-undo"
+          className="admin-button admin-button--small publication-undo"
           aria-label="Rückgängig"
           title="Rückgängig"
           disabled={!draft.canUndo}
@@ -652,7 +713,7 @@ function Publisher({ publication, setPublication, api, workspace }) {
         </Button>
         <Menu.Root>
           <Menu.Trigger
-            className="publication-more"
+            className="admin-button admin-button--small publication-more"
             aria-label="Weitere Aktionen"
           >
             <span className="publication-actions-label">
@@ -663,14 +724,14 @@ function Publisher({ publication, setPublication, api, workspace }) {
             </span>
           </Menu.Trigger>
           <Menu.Portal>
-            <Menu.Positioner sideOffset={6}>
+            <Menu.Positioner sideOffset={6} className="admin-choice-positioner">
               <Menu.Popup className="admin-choice-popup">
                 <Menu.Item
                   className="admin-choice-item"
                   disabled={!draft.dirty}
                   onClick={() =>
                     ask(
-                      "Lokalen Entwurf verwerfen und zur veröffentlichten Version zurückkehren?",
+                      "Deine lokalen Änderungen gehen verloren. Danach siehst du wieder die veröffentlichte Version.",
                       async () => {
                         try {
                           const res = await api("/api/admin/publication");
@@ -690,6 +751,11 @@ function Publisher({ publication, setPublication, api, workspace }) {
                         } catch (e) {
                           setStatus(e.message);
                         }
+                      },
+                      {
+                        title: "Lokalen Entwurf verwerfen?",
+                        confirmLabel: "Entwurf verwerfen",
+                        danger: true,
                       },
                     )
                   }
@@ -734,7 +800,12 @@ function Publisher({ publication, setPublication, api, workspace }) {
             Veröffentlichung bleiben deine Änderungen in diesem Browser.
           </p>
           <p>{WORKSPACES[tab][2]}</p>
-          <Button onClick={() => setShowHelp(false)}>Hinweise schließen</Button>
+          <Button
+            className="admin-button admin-button--small"
+            onClick={() => setShowHelp(false)}
+          >
+            Hinweise schließen
+          </Button>
         </Collapsible.Panel>
       </Collapsible.Root>
       {importOpen && (
@@ -761,26 +832,23 @@ function Publisher({ publication, setPublication, api, workspace }) {
           {importBusy && <p role="status">Datei wird geprüft…</p>}
         </section>
       )}
-      {status && (
-        <p className="publication-feedback" role="status">
-          {status}
-        </p>
-      )}
-      {historyBusy && (
-        <p className="publication-feedback" role="status">
-          Vorherige Veröffentlichung wird geladen…
-        </p>
-      )}
+      {status && <Notice>{status}</Notice>}
+      {historyBusy && <Notice>Vorherige Veröffentlichung wird geladen…</Notice>}
       {historyError && (
-        <div className="publication-feedback" role="alert">
-          <p>
-            Die vorherige Veröffentlichung konnte nicht geladen werden. Dein
-            Entwurf bleibt erhalten.
-          </p>
-          <Button className="admin-button" onClick={loadPrevious}>
-            Vorherige Version erneut laden
-          </Button>
-        </div>
+        <Notice
+          tone="error"
+          action={
+            <Button
+              className="admin-button admin-button--small"
+              onClick={loadPrevious}
+            >
+              Vorherige Version erneut laden
+            </Button>
+          }
+        >
+          Die vorherige Veröffentlichung konnte nicht geladen werden. Dein
+          Entwurf bleibt erhalten.
+        </Notice>
       )}
       {recoveryVisible && (
         <div
@@ -821,7 +889,9 @@ function Publisher({ publication, setPublication, api, workspace }) {
           </div>
           {publishError?.detail && (
             <Collapsible.Root>
-              <Collapsible.Trigger>Technische Angaben</Collapsible.Trigger>
+              <Collapsible.Trigger className="admin-disclosure-trigger">
+                Technische Angaben
+              </Collapsible.Trigger>
               <Collapsible.Panel>{publishError.detail}</Collapsible.Panel>
             </Collapsible.Root>
           )}
@@ -854,7 +924,9 @@ function Publisher({ publication, setPublication, api, workspace }) {
           }}
         />
       )}
-      {draft.storageWarning && <p role="alert">{draft.storageWarning}</p>}
+      {draft.storageWarning && (
+        <Notice tone="error">{draft.storageWarning}</Notice>
+      )}
       {designIssues.length > 0 && tab !== "theme" && (
         <div className="email-failure" role="alert">
           <p>Prüfe die markierten Designwerte, bevor du veröffentlichst.</p>
@@ -922,16 +994,7 @@ function Publisher({ publication, setPublication, api, workspace }) {
             config={config}
             lang={lang}
             change={draft.change}
-            publish={publish}
-            publishLabel={publishing ? "Wird veröffentlicht…" : scope.label}
-            publishDisabled={
-              publishing ||
-              errors.length > 0 ||
-              stale ||
-              !draft.dirty ||
-              Boolean(conflict) ||
-              importBusy
-            }
+            sectionRequest={sectionRequest}
             editCopy={(group) => {
               setCopyGroup(group);
               setSearch("");
@@ -958,6 +1021,17 @@ function Publisher({ publication, setPublication, api, workspace }) {
               onChange={(e) => setSearch(e.target.value)}
             />
             <span>{matchedFields.length} Felder</span>
+            {letterBlock && (
+              <Button
+                className="admin-button admin-button--small"
+                onClick={() => {
+                  setTab("visual");
+                  setSectionRequest({ id: letterBlock.props.id });
+                }}
+              >
+                Offenen Brief bearbeiten
+              </Button>
+            )}
           </div>
           <div className="publication-fields publication-copy-fields">
             {matchedFields.map((field) => (
@@ -1008,10 +1082,9 @@ function Publisher({ publication, setPublication, api, workspace }) {
             ))}
           </div>
           {!matchedFields.length && (
-            <p className="admin-empty">
-              Keine passenden Texte. Ändere den Suchbegriff oder wähle einen
-              anderen Bereich.
-            </p>
+            <EmptyState title="Keine passenden Texte.">
+              Ändere den Suchbegriff oder wähle einen anderen Bereich.
+            </EmptyState>
           )}
         </Tabs.Panel>
         <Tabs.Panel value="emails">
@@ -1143,7 +1216,7 @@ function Publisher({ publication, setPublication, api, workspace }) {
               }
             />
           </div>
-          <label>
+          <label className="field">
             Öffentliches Bild hochladen · PNG, JPEG oder WebP, bis 8 MB
             <input
               type="file"
@@ -1263,9 +1336,9 @@ function Publisher({ publication, setPublication, api, workspace }) {
             }
           />
           {cssErrors.map((e, i) => (
-            <p role="alert" key={i}>
+            <Notice tone="error" key={i}>
               {e.message}
-            </p>
+            </Notice>
           ))}
         </Tabs.Panel>
         <Tabs.Panel value="preview">
@@ -1292,6 +1365,7 @@ function Publisher({ publication, setPublication, api, workspace }) {
               ]}
             />
             <Button
+              className="admin-button admin-button--primary"
               data-preview-action="website"
               disabled={previewBusy || errors.length > 0}
               onClick={() => fullPreview()}
@@ -1304,10 +1378,10 @@ function Publisher({ publication, setPublication, api, workspace }) {
             </Button>
           </div>
           {preview && !previewFresh && (
-            <p className="publication-feedback" role="status">
+            <Notice tone="warning">
               Die Vorschau ist veraltet. Aktualisiere sie für die gewählte
               Sprache, den Seitenzustand und deinen aktuellen Entwurf.
-            </p>
+            </Notice>
           )}
           {previewFailure?.key === previewKey && !previewFailure.imageOnly && (
             <PreviewFailure
@@ -1317,13 +1391,10 @@ function Publisher({ publication, setPublication, api, workspace }) {
             />
           )}
           {!preview && (
-            <div className="admin-empty">
-              <h3>Website prüfen</h3>
-              <p>
-                Wähle Bildschirmgröße und Seitenzustand. Öffne dann die
-                Vorschau. Deine Änderungen werden dabei nicht veröffentlicht.
-              </p>
-            </div>
+            <EmptyState title="Website prüfen">
+              Wähle Bildschirmgröße und Seitenzustand. Öffne dann die Vorschau.
+              Deine Änderungen werden dabei nicht veröffentlicht.
+            </EmptyState>
           )}
           {preview && previewFresh && (
             <div className="publication-preview-stage">
@@ -1347,7 +1418,6 @@ function Publisher({ publication, setPublication, api, workspace }) {
                   width: Number(width),
                   maxWidth: "none",
                   height: 900,
-                  border: "1px solid #ccc",
                 }}
               />
             </div>

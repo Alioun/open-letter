@@ -34,3 +34,10 @@ export function checkRateLimit(ip, key, maxRequests, windowMs) {
   windowSizes.set(id, windowMs);
   return { allowed: true, retryAfter: 0 };
 }
+
+// Take back the slot an allowed request took, for limits that count only the
+// requests that end a certain way (failed logins): the slot is held while the
+// outcome is open, so requests arriving together cannot overshoot the limit.
+export function releaseRateLimit(ip, key) {
+  windows.get(`${key}:${ip}`)?.pop();
+}

@@ -1,7 +1,7 @@
 import { Collapsible } from "@base-ui/react/collapsible";
 import { useEffect, useRef, useState } from "react";
 import { Button } from "@base-ui/react/button";
-import { Choice } from "./ui.jsx";
+import { Choice, Notice } from "./ui.jsx";
 import StatisticsChart, { statisticsDate as date } from "./StatisticsChart.jsx";
 
 const number = (value) => Number(value || 0).toLocaleString("de-DE");
@@ -83,6 +83,7 @@ export default function AdminStatistics({ api, onDirtyChange }) {
               options={STATISTICS_MODES}
             />
             <Button
+              className="admin-button admin-button--primary"
               disabled={busy || loading || mode === data.mode}
               onClick={async () => {
                 setBusy(true);
@@ -99,7 +100,7 @@ export default function AdminStatistics({ api, onDirtyChange }) {
                   if (!res.ok) {
                     setSaveError(
                       res.status === 409
-                        ? "Inzwischen wurde eine neue Version veröffentlicht. Lade die Statistik neu und prüfe den gespeicherten Stand. Deine Auswahl bleibt erhalten."
+                        ? "Inzwischen wurde eine andere Einstellung gespeichert. Lade die Statistik neu und prüfe den gespeicherten Stand. Deine Auswahl bleibt erhalten."
                         : res.status === 401
                           ? "Der Server hat das Speichern nicht bestätigt. Melde dich erneut an und lade die Statistik neu. Deine Auswahl bleibt erhalten."
                           : res.status === 503
@@ -109,7 +110,7 @@ export default function AdminStatistics({ api, onDirtyChange }) {
                     return;
                   }
                   if (await refresh({ reset: true }))
-                    setStatus("Statistikeinstellung veröffentlicht.");
+                    setStatus("Statistikeinstellung gespeichert.");
                   else
                     setSaveError(
                       "Die Einstellung ist gespeichert. Der aktuelle Stand konnte danach nicht geladen werden. Lade die Statistik neu, um ihn zu prüfen.",
@@ -142,20 +143,17 @@ export default function AdminStatistics({ api, onDirtyChange }) {
         </p>
       )}
       {saveError && (
-        <p
-          className="statistics-read-error"
-          role="alert"
-          tabIndex={-1}
-          ref={saveFeedback}
-        >
+        <Notice tone="error" tabIndex={-1} ref={saveFeedback}>
           {saveError}
-        </p>
+        </Notice>
       )}
       {readError && (
-        <div className="statistics-read-error" role="alert">
-          {data && <strong>Stand veraltet · zuletzt geladene Zahlen</strong>}
-          <p>{readError}</p>
-        </div>
+        <Notice
+          tone="error"
+          title={data && "Stand veraltet · zuletzt geladene Zahlen"}
+        >
+          {readError}
+        </Notice>
       )}
       <p role="status">
         {status || (!data && !readError ? "Statistik wird geladen…" : "")}
@@ -176,11 +174,11 @@ export default function AdminStatistics({ api, onDirtyChange }) {
               </p>
             </div>
           )}
-          {data.unavailable && (
-            <p role="alert">
+          {data.unavailable && data.mode === "builtin" && (
+            <Notice tone="error">
               Der Statistik-Speicher ist nicht erreichbar. Die öffentlichen
               Seiten funktionieren weiter.
-            </p>
+            </Notice>
           )}
           {(data.mode === "builtin" || views > 0) && (
             <>
@@ -232,9 +230,9 @@ export default function AdminStatistics({ api, onDirtyChange }) {
                         <table className="admin-table statistics-daily-table">
                           <thead>
                             <tr>
-                              <th>Datum</th>
-                              <th>Seitenaufrufe</th>
-                              <th>Besucher · ca.</th>
+                              <th scope="col">Datum</th>
+                              <th scope="col">Seitenaufrufe</th>
+                              <th scope="col">Besucher · ca.</th>
                             </tr>
                           </thead>
                           <tbody>
@@ -264,13 +262,13 @@ export default function AdminStatistics({ api, onDirtyChange }) {
                         <table className="admin-table statistics-breakdown-table">
                           <thead>
                             <tr>
-                              <th>
+                              <th scope="col">
                                 {title === "Verweisende Domains"
                                   ? "Domain"
                                   : "Seite"}
                               </th>
-                              <th>Aufrufe</th>
-                              <th>Besucher · ca.</th>
+                              <th scope="col">Aufrufe</th>
+                              <th scope="col">Besucher · ca.</th>
                             </tr>
                           </thead>
                           <tbody>

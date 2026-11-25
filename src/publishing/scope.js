@@ -6,11 +6,13 @@ export function publicationScope(before, after) {
   const languages = Object.keys(after.locales || before.locales || {});
   const groups = new Set();
   const emailChanges = new Map();
+  const templateIds = new Set();
   let website = false;
   let emails = false;
   for (const { path } of changes) {
     if (path[0] === "templates") {
       emails = true;
+      templateIds.add(path[1]);
       const previous = before.templates?.find(
         (template) => String(template.id) === path[1],
       );
@@ -61,6 +63,7 @@ export function publicationScope(before, after) {
     groups.add(`${template} · ${[...fields].join(", ")}`);
   return {
     groups: [...groups],
+    templateIds: [...templateIds],
     label:
       website && emails
         ? "Website & E-Mails veröffentlichen"

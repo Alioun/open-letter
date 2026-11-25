@@ -13,6 +13,8 @@ import {
 } from "../config/letter.config.js";
 import { themeCss } from "../config/theme-css.js";
 
+export const SIGNING_PAUSED = process.env.SIGNING_PAUSED === "1";
+
 export async function buildFrontend() {
   const assets = new Map();
   const entries = {};
@@ -78,6 +80,7 @@ export async function buildFrontend() {
 export function publicConfig(config) {
   const copy = structuredClone(config);
   delete copy.i18n;
+  copy.features.signingPaused = SIGNING_PAUSED;
   copy.email = {
     provider: config.email.provider,
     processor: config.email.processor,
@@ -126,6 +129,6 @@ export function adminHtml(entries, letter, config) {
     .replace('src="src/admin-main.jsx"', `src="${entries.admin.script}"`)
     .replace(
       "</head>",
-      `<script type="application/json" id="admin-config">${escapeJson({ features: config.features, languages: LANGUAGES })}</script>${entries.admin.css.map((path) => `<link rel="stylesheet" href="${path}">`).join("")}</head>`,
+      `<script type="application/json" id="admin-config">${escapeJson({ features: config.features, languages: LANGUAGES, previewCss: entries.preview.css })}</script>${entries.admin.css.map((path) => `<link rel="stylesheet" href="${path}">`).join("")}</head>`,
     );
 }

@@ -20,6 +20,8 @@ import {
   NEWSLETTER_OPT_OUT,
   TREFFEN_OPT_OUT,
   HIDE_PUBLICLY,
+  BLOCK_SIGNING,
+  UNBLOCK_SIGNING,
 } from "../db/erasure-log.js";
 
 beforeEach(resetDb);
@@ -116,7 +118,7 @@ describe("erasure log", () => {
     await q.updateSignerByEmail(s.email, {
       name: "X",
       kreisverband: "",
-      occupation: "",
+      occupation: s.occupation,
       newsletter: true,
       showPublicly: true,
     });
@@ -146,11 +148,72 @@ describe("erasure log", () => {
     expect((await readErasureLog(db)).map((e) => e.kind)).not.toContain(HIDE_PUBLICLY);
   });
 
+  test("a lifted signing block stays lifted after restoring a backup from before", async () => {
+    const blockedIn = async (database) =>
+      Boolean(
+        await database
+          .query("SELECT 1 FROM erasure_log WHERE kind = ?")
+          .get(BLOCK_SIGNING),
+      );
+    const joke = await addVerifiedSigner({ email: "mistake@example.org" });
+    await q.removeAndBlockSigner(joke.id);
+    // The backup is taken now: it holds the block.
+    await applyErasureLog(restored, await readErasureLog(db));
+    expect(await blockedIn(restored)).toBe(true);
+
+    expect(await q.unblockSigning("mistake+x@example.org")).toBe(true);
+    const applied = await applyErasureLog(restored, await readErasureLog(db));
+    expect(applied[UNBLOCK_SIGNING]).toBe(1);
+    expect(await blockedIn(restored)).toBe(false);
+    // A second restore from the same backup is covered by the carried entry.
+    expect(
+      (await readErasureLog(restored)).map((entry) => entry.kind),
+    ).toContain(UNBLOCK_SIGNING);
+  });
+
+  test("a block set again after it was lifted survives a restore, in either order", async () => {
+    const mailbox = emailHmac("again@example.org");
+    const at = (minutesAgo) =>
+      new Date(Date.now() - minutesAgo * 60_000).toISOString();
+    const block = { email_hmac: mailbox, kind: BLOCK_SIGNING, at: at(1) };
+    const lifted = { email_hmac: mailbox, kind: UNBLOCK_SIGNING, at: at(5) };
+    for (const entries of [
+      [block, lifted],
+      [lifted, block],
+    ]) {
+      await restored.run("DELETE FROM erasure_log");
+      // The backup's own, older block.
+      await restored
+        .query("INSERT INTO erasure_log (email_hmac, kind, at) VALUES (?, ?, ?)")
+        .run(mailbox, BLOCK_SIGNING, at(60));
+      await applyErasureLog(restored, entries);
+      expect(
+        await restored
+          .query("SELECT at FROM erasure_log WHERE kind = ?")
+          .get(BLOCK_SIGNING),
+      ).toEqual({ at: block.at });
+    }
+
+    // The other way round: the replaced database still had an old block, the
+    // backup already knows it was lifted later.
+    await restored.run("DELETE FROM erasure_log");
+    await restored
+      .query("INSERT INTO erasure_log (email_hmac, kind, at) VALUES (?, ?, ?)")
+      .run(mailbox, UNBLOCK_SIGNING, at(5));
+    await applyErasureLog(restored, [{ ...block, at: at(60) }]);
+    expect(
+      await restored
+        .query("SELECT COUNT(*) AS blocks FROM erasure_log WHERE kind = ?")
+        .get(BLOCK_SIGNING),
+    ).toEqual({ blocks: 0 });
+  });
+
   test("old entries are purged", async () => {
     const s = await addVerifiedSigner();
     await q.createDeletionRequest(s.email, "t", future());
     await q.deleteByDeletionToken("t");
-    expect(await q.purgeOldErasureLog(new Date(Date.now() - 86400_000))).toBe(0);
-    expect(await q.purgeOldErasureLog(new Date(Date.now() + 1000))).toBe(1);
+    const yesterday = new Date(Date.now() - 86400_000);
+    expect(await q.purgeOldErasureLog(yesterday, yesterday)).toBe(0);
+    expect(await q.purgeOldErasureLog(new Date(Date.now() + 1000), yesterday)).toBe(1);
   });
 });

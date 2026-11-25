@@ -2,7 +2,7 @@ import { useEffect, useId, useRef } from "react";
 import { Input } from "@base-ui/react/input";
 import { Checkbox } from "@base-ui/react/checkbox";
 import { Button } from "@base-ui/react/button";
-import { SelectControl } from "./ui.jsx";
+import { Notice, SelectControl } from "./ui.jsx";
 import { AdminReadStatus } from "./admin-read.jsx";
 import { meetingDateForSave } from "./meeting-date.js";
 
@@ -21,6 +21,13 @@ const meetingValueLabel = (value) =>
 
 export default function MeetingSettings({ form, askConfirmation }) {
   const fieldId = useId();
+  let eventInPast = false;
+  try {
+    eventInPast =
+      Date.parse(
+        meetingDateForSave(form.values.eventAtInput, form.saved?.eventAt),
+      ) < Date.now();
+  } catch {}
   const conflictPanel = useRef(null);
   useEffect(() => {
     if (form.conflict) {
@@ -29,17 +36,13 @@ export default function MeetingSettings({ form, askConfirmation }) {
     }
   }, [form.conflict]);
   return (
-    <form
-      className="admin-card zoom-settings"
-      style={{ marginBottom: 20 }}
-      onSubmit={form.save}
-    >
-      <div className="admin-card-title">Termin und automatische E-Mails</div>
+    <form className="admin-card zoom-settings" onSubmit={form.save}>
+      <h2 className="admin-card-title">Termin und automatische E-Mails</h2>
       <AdminReadStatus resource={form.read} label="Termineinstellungen" />
       {form.dirty && (
-        <p role="status">
+        <Notice tone="warning">
           Ungespeicherte Eingaben bleiben beim Aktualisieren erhalten.
-        </p>
+        </Notice>
       )}
       <fieldset
         disabled={
@@ -55,7 +58,7 @@ export default function MeetingSettings({ form, askConfirmation }) {
             id={`${fieldId}-21`}
             type="text"
             placeholder="TT.MM.JJJJ, HH:MM"
-            pattern="[0-3][0-9][.][01][0-9][.][0-9]{4}, ([01][0-9]|2[0-3]):[0-5][0-9]"
+            pattern="[0-3]?[0-9][.][01]?[0-9][.][0-9]{4},? ?([01]?[0-9]|2[0-3]):[0-5][0-9]"
             title="Datum und Uhrzeit im Format TT.MM.JJJJ, HH:MM (24 Stunden)"
             required
             aria-describedby={`${fieldId}-meeting-date-help`}
@@ -76,6 +79,12 @@ export default function MeetingSettings({ form, askConfirmation }) {
             TT.MM.JJJJ, HH:MM · 24 Stunden ·{" "}
             {Intl.DateTimeFormat().resolvedOptions().timeZone}
           </small>
+          {eventInPast && (
+            <Notice tone="warning">
+              Dieser Termin liegt in der Vergangenheit. Link-E-Mail und
+              Erinnerung werden dafür nicht mehr gesendet.
+            </Notice>
+          )}
         </div>
         <div className="field">
           <label htmlFor={`${fieldId}-22`}>Zoom-Link</label>
@@ -120,7 +129,7 @@ export default function MeetingSettings({ form, askConfirmation }) {
           Erinnerung können dadurch erneut versendet werden.
         </p>
 
-        <div className="admin-card-title">Format & Anzeige</div>
+        <h3>Format & Anzeige</h3>
         <div className="field">
           <label htmlFor={`${fieldId}-25`}>Format des Treffens</label>
           <SelectControl
@@ -187,7 +196,7 @@ export default function MeetingSettings({ form, askConfirmation }) {
             />
           </div>
         </div>
-        <label className="check admin-check">
+        <label className="admin-check">
           <Checkbox.Root
             className="admin-checkbox"
             checked={form.values.showDelegierter}
@@ -206,7 +215,7 @@ export default function MeetingSettings({ form, askConfirmation }) {
         </p>
         <div className="admin-actions">
           <Button
-            className="cta"
+            className="admin-button admin-button--primary"
             type="submit"
             disabled={
               !form.values.eventAtInput ||
@@ -253,7 +262,12 @@ export default function MeetingSettings({ form, askConfirmation }) {
               onClick={async () => {
                 if (
                   await askConfirmation(
-                    "Deine ungespeicherten Termineingaben verwerfen und den aktuellen Termin übernehmen?",
+                    "Deine ungespeicherten Termineingaben gehen verloren. Danach siehst du den aktuell gespeicherten Termin.",
+                    {
+                      title: "Eingaben verwerfen?",
+                      confirmLabel: "Eingaben verwerfen",
+                      danger: true,
+                    },
                   )
                 ) {
                   form.acceptSaved();
@@ -272,16 +286,14 @@ export default function MeetingSettings({ form, askConfirmation }) {
           </div>
         </section>
       )}
-      {form.status === "ok" && (
-        <p className="admin-test-feedback admin-test-ok">Gespeichert</p>
-      )}
+      {form.status === "ok" && <Notice tone="success">Gespeichert</Notice>}
       {form.status === "ok-reset" && (
-        <p className="admin-test-feedback admin-test-ok">
+        <Notice tone="success">
           Gespeichert · Versandstatus zurückgesetzt
-        </p>
+        </Notice>
       )}
       {form.status && !["ok", "ok-reset", "saving"].includes(form.status) && (
-        <p className="admin-test-feedback admin-test-error">{form.status}</p>
+        <Notice tone="error">{form.status}</Notice>
       )}
     </form>
   );

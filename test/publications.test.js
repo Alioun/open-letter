@@ -6,7 +6,14 @@ import {
   createPublicationStore,
   configFromDocument,
   migrateDocument,
+  reconcileStoredDocument,
 } from "../server/publications.js";
+import {
+  adminLogPrivacy,
+  blockedAddressPrivacy,
+  handEntryPrivacy,
+  newsletterConsentPrivacy,
+} from "../config/privacy-content.jsx";
 import {
   validateLayout,
   defaultLayout,
@@ -299,4 +306,42 @@ test("stored version 1 FAQs migrate explicitly and missing localized fields reta
   expect(configFromDocument(cleanDocument(migrated), DEFAULT_LANG).navCta).toBe(
     cfg.navCta,
   );
+});
+
+test("a published privacy policy gains the block, Protokoll and hand-entry paragraphs and the newsletter consent mail once", () => {
+  const block = `<p>${blockedAddressPrivacy("{{signerRetentionYears}}")}</p>`;
+  const paragraph = `<p>${adminLogPrivacy("{{adminLogDays}}")}</p>`;
+  const current =
+    initialDocument().locales[DEFAULT_LANG].copy["legal.privacyHtml"];
+  expect(current).toContain(`${block}${paragraph}<p>${handEntryPrivacy}</p>`);
+  const withBlock = current
+    .replace(`<p>${handEntryPrivacy}</p>`, "")
+    .replace(paragraph, "")
+    .replace(newsletterConsentPrivacy.after, newsletterConsentPrivacy.before);
+  const published = withBlock.replace(block, "");
+  const stored = initialDocument();
+  stored.locales[DEFAULT_LANG].copy["legal.privacyHtml"] = published;
+
+  const once = reconcileStoredDocument(stored);
+  const html = once.locales[DEFAULT_LANG].copy["legal.privacyHtml"];
+  expect(html).toBe(current);
+  const twice = reconcileStoredDocument(once);
+  expect(twice.locales[DEFAULT_LANG].copy["legal.privacyHtml"]).toBe(current);
+  expect(() => cleanDocument(twice)).not.toThrow();
+  expect(renderPrivacy(configFromDocument(twice, DEFAULT_LANG))).toContain(
+    "nach 30 Tagen",
+  );
+
+  // A policy the team rewrote still gets the paragraph, at the end, so the
+  // website can be published again.
+  const rewritten = initialDocument();
+  rewritten.locales[DEFAULT_LANG].copy["legal.privacyHtml"] = withBlock.replace(
+    "deine Adresse zu Unrecht gesperrt ist, schreib uns.",
+    "melde dich bei uns.",
+  );
+  const fixed = reconcileStoredDocument(rewritten);
+  expect(fixed.locales[DEFAULT_LANG].copy["legal.privacyHtml"]).toEndWith(
+    `${paragraph}<p>${handEntryPrivacy}</p>`,
+  );
+  expect(() => cleanDocument(fixed)).not.toThrow();
 });

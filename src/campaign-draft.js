@@ -1,46 +1,62 @@
 import { useEffect, useState, useRef } from "react";
 
-export function campaignRequest(
-  body,
-  previous,
-  newKey = () => crypto.randomUUID(),
-) {
-  const signature = JSON.stringify({
-    ...body,
-    scheduled_at: body.send_now ? null : body.scheduled_at,
-  });
-  return previous?.signature === signature
-    ? previous
-    : { signature, key: newKey() };
+// One draft, one send order. The key is made when a draft is first submitted
+// and stays with it until the draft is reset, whatever is edited or however it
+// is sent (scheduled, then "now"). The server keeps one campaign per key, so a
+// draft cannot turn into two campaigns.
+export function campaignRequest(previous, newKey = () => crypto.randomUUID()) {
+  return previous?.key ? previous : { key: newKey() };
+}
+
+// What became of a draft's send order: the campaign and how it stands.
+export function submittedCampaign(campaign, immediate) {
+  return {
+    id: campaign.id,
+    outcome: ["cancelled", "sent"].includes(campaign.status)
+      ? campaign.status
+      : immediate
+        ? "due"
+        : "scheduled",
+  };
 }
 
 export function useCampaignSubmission(key) {
   const locked = useRef(false);
   const [pending, setPending] = useState(false);
+  const stored = () => {
+    try {
+      return JSON.parse(localStorage.getItem(key));
+    } catch {
+      return null;
+    }
+  };
+  // Kept with the key, so a reload still shows the draft as sent.
+  const [submitted, setSubmitted] = useState(() => stored()?.campaign || null);
   return {
     pending,
+    submitted,
     reset() {
       localStorage.removeItem(key);
+      setSubmitted(null);
     },
     async submit(api, body, confirm) {
-      if (locked.current) return null;
+      if (locked.current || submitted) return null;
       locked.current = true;
       setPending(true);
       let requested = false;
       try {
         if (!(await confirm())) return null;
-        let previous;
-        try {
-          previous = JSON.parse(localStorage.getItem(key));
-        } catch {}
-        const request = campaignRequest(body, previous);
-        try {
-          localStorage.setItem(key, JSON.stringify(request));
-        } catch {
-          throw new Error(
-            "Der Browser konnte die Kennung des Versandauftrags nicht speichern. Erlaube Browserspeicher und versuche es erneut.",
-          );
-        }
+        const request = campaignRequest(stored());
+        const save = (value) => {
+          try {
+            localStorage.setItem(key, JSON.stringify(value));
+          } catch {
+            throw new Error(
+              "Der Browser konnte die Kennung des Versandauftrags nicht speichern. Erlaube Browserspeicher und versuche es erneut.",
+            );
+          }
+        };
+        save(request);
         requested = true;
         const response = await api("/api/admin/campaigns", {
           method: "POST",
@@ -51,6 +67,11 @@ export function useCampaignSubmission(key) {
           throw new Error(
             result.error || "Der Versand konnte nicht beauftragt werden.",
           );
+        const campaign = submittedCampaign(result, body.send_now === true);
+        setSubmitted(campaign);
+        try {
+          save({ ...request, campaign });
+        } catch {}
         return result;
       } catch (error) {
         const message =

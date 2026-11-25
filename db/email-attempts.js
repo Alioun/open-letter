@@ -138,7 +138,9 @@ export async function ensureEmailAttemptSubjects(db, hmac = emailHmac) {
       ]) {
         if (!tables.has(table)) continue;
         const rows = await db
-          .query(`SELECT id,email,created_at FROM ${table}`)
+          .query(
+            `SELECT id,email,created_at FROM ${table} WHERE email IS NOT NULL`,
+          )
           .all();
         identities.set(field, new Map(rows.map((row) => [row.id, row])));
       }

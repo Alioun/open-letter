@@ -2,6 +2,7 @@ import { Button } from "@base-ui/react/button";
 import { Collapsible } from "@base-ui/react/collapsible";
 import { useState } from "react";
 import EmailFailure from "./EmailFailure.jsx";
+import { Notice } from "./ui.jsx";
 
 export default function ZoomMailingRecovery({
   mailing,
@@ -57,7 +58,7 @@ export default function ZoomMailingRecovery({
           Supportangaben kopieren
         </Button>
       </div>
-      {feedback && <p role="status">{feedback}</p>}
+      {feedback && <Notice>{feedback}</Notice>}
       <Collapsible.Root>
         <Collapsible.Trigger className="admin-disclosure-trigger">
           Supportangaben anzeigen

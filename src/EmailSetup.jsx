@@ -2,12 +2,15 @@ import { useEffect, useState, useId, useRef } from "react";
 import { Button } from "@base-ui/react/button";
 import { Input } from "@base-ui/react/input";
 import { Collapsible } from "@base-ui/react/collapsible";
-import { Choice } from "./ui.jsx";
+import { Choice, Notice } from "./ui.jsx";
 import EmailFailure from "./EmailFailure.jsx";
 import { emailProfileBlockers } from "../config/email-blockers.js";
 import { identifiedEmailTest } from "../config/email-test.js";
 import EmailTestReceipt from "./EmailTestReceipt.jsx";
 import EmailProfileReview from "./EmailProfileReview.jsx";
+import TechnicalReport from "./TechnicalReport.jsx";
+import { deliveryCounts } from "./DeliveryBanner.jsx";
+import { failedMailSummary } from "./delivery-advice.js";
 
 const initial = {
   provider: "mailbox.org",
@@ -54,7 +57,143 @@ function SetupStage({ title, available, prerequisite, children }) {
   );
 }
 
-export default function EmailSetup({ api, onDirty }) {
+const MESSAGE_STATUS = [
+  ["delivered", "Angenommen"],
+  ["retryable", "Wird erneut versucht"],
+  ["unresolved", "Ergebnis unklar"],
+];
+
+const messages = (n) =>
+  `${n.toLocaleString("de-DE")} ${n === 1 ? "Nachricht" : "Nachrichten"}`;
+
+export function DeliveryProblems({
+  state,
+  disabled,
+  onAction,
+  feedback,
+  confirm = async () => true,
+}) {
+  const { unclear, failed } = deliveryCounts(state);
+  if (!unclear && !failed) return null;
+  const summary = failedMailSummary(state.queue?.failedDetail, failed);
+  const confirmed = async (message, options, ...action) => {
+    if (await confirm(message, options)) onAction(...action);
+  };
+  return (
+    <div className="email-delivery-problems">
+      <h3>Zustellprobleme</h3>
+      {unclear > 0 && (
+        <section aria-labelledby="unclear-heading">
+          <h4 id="unclear-heading">
+            {messages(unclear)} mit unklarem Ergebnis
+          </h4>
+          <p>
+            Die Verbindung zum Anbieter brach ab, bevor er die Annahme bestätigt
+            hat. Ob diese Nachrichten angekommen sind, lässt sich nicht mehr
+            feststellen. Bestätigungsmails sendet die Seite inzwischen von
+            selbst erneut. Für die übrigen entscheidest du hier einmal für alle.
+          </p>
+          <div className="admin-actions">
+            <Button
+              className="admin-button"
+              disabled={disabled}
+              onClick={() =>
+                confirmed(
+                  `${messages(unclear)} werden noch einmal gesendet. Wer eine davon schon bekommen hat, erhält sie doppelt.`,
+                  {
+                    title: `${messages(unclear)} erneut senden?`,
+                    confirmLabel: "Erneut senden",
+                  },
+                  "reconcile-all",
+                  { resolution: "retryable" },
+                )
+              }
+            >
+              Alle erneut senden
+            </Button>
+            <Button
+              className="admin-button admin-button--danger-secondary"
+              disabled={disabled}
+              onClick={() =>
+                confirmed(
+                  `${messages(unclear)} gelten als angekommen und werden nicht noch einmal gesendet. Wer eine davon nicht bekommen hat, bekommt sie nie. Das lässt sich nicht rückgängig machen.`,
+                  {
+                    title: "Ohne erneuten Versand abschließen?",
+                    confirmLabel: "Ohne Versand abschließen",
+                    danger: true,
+                  },
+                  "reconcile-all",
+                  { resolution: "delivered" },
+                )
+              }
+            >
+              Ohne erneuten Versand abschließen
+            </Button>
+          </div>
+          <p className="admin-muted">
+            Erneut senden ist meist richtig. Einzelne Empfänger bekommen dann
+            eine Nachricht vielleicht doppelt, aber niemand bleibt ohne.
+          </p>
+          {feedback(["reconcile-all"])}
+        </section>
+      )}
+      {failed > 0 && (
+        <section aria-labelledby="failed-heading">
+          <h4 id="failed-heading">
+            {failed.toLocaleString("de-DE")}{" "}
+            {failed === 1 ? "E-Mail" : "E-Mails"} nicht angekommen
+          </h4>
+          <p>
+            Der Versand hat es bei diesen E-Mails mehrmals versucht und dann
+            aufgegeben:
+          </p>
+          <ul className="email-failed-kinds">
+            {summary.lines.map((line) => (
+              <li key={line}>{line}</li>
+            ))}
+          </ul>
+          {summary.effects.map((effect) => (
+            <p key={effect}>{effect}</p>
+          ))}
+          <p className="admin-muted">
+            {[summary.span, summary.retry].filter(Boolean).join(" ")} Wer
+            inzwischen bestätigt hat oder dessen Link abgelaufen ist, bekommt
+            nichts mehr.
+          </p>
+          {state.failure && (
+            <p>
+              <strong>
+                Behebe zuerst die Störung oben, sonst schlagen sie gleich wieder
+                fehl.
+              </strong>
+            </p>
+          )}
+          <div className="admin-actions">
+            <Button
+              className="admin-button"
+              disabled={disabled || summary.retryable === 0}
+              onClick={() =>
+                confirmed(
+                  `${summary.retry} Wer inzwischen bestätigt hat oder dessen Link abgelaufen ist, bekommt nichts mehr.`,
+                  {
+                    title: "Nicht angekommene E-Mails noch einmal senden?",
+                    confirmLabel: "Noch einmal senden",
+                  },
+                  "requeue-failed",
+                )
+              }
+            >
+              Noch einmal senden
+            </Button>
+          </div>
+          {feedback(["requeue-failed"])}
+        </section>
+      )}
+    </div>
+  );
+}
+
+export default function EmailSetup({ api, onDirty, askConfirmation }) {
   const [state, setState] = useState(null);
   const [profile, setProfile] = useState(initial);
   const [providerDrafts, setProviderDrafts] = useState({});
@@ -160,14 +299,14 @@ export default function EmailSetup({ api, onDirty }) {
   function feedback(keys) {
     if (!actionResult || !keys.includes(actionResult.key)) return null;
     return (
-      <p
+      <Notice
         ref={actionFeedback}
         tabIndex={-1}
-        role={actionResult.error ? "alert" : "status"}
-        className={`email-action-feedback${actionResult.error ? " is-error" : ""}`}
+        tone={actionResult.error ? "error" : "success"}
+        className="email-action-feedback"
       >
         {actionResult.message}
-      </p>
+      </Notice>
     );
   }
   async function action(action, extra = {}) {
@@ -181,6 +320,8 @@ export default function EmailSetup({ api, onDirty }) {
       receipt: "Empfang bestätigen",
       activate: "Automatischen Versand freigeben",
       reconcile: "Versand abgleichen",
+      "reconcile-all": "Unklare Nachrichten abgleichen",
+      "requeue-failed": "Nicht angekommene E-Mails noch einmal senden",
     }[action];
     setStatus("");
     setActionResult({ key, message: `${label}: Bitte warten…` });
@@ -220,15 +361,13 @@ export default function EmailSetup({ api, onDirty }) {
           ...(result.candidate || result.active),
           secret: "",
         });
-      const message =
-        result.setupFailure || result.failure
-          ? "Die Prüfung ist fehlgeschlagen. Folge den Hinweisen unten."
-          : `${label}: abgeschlossen.`;
-      setActionResult({
-        key,
-        message,
-        error: Boolean(result.setupFailure || result.failure),
-      });
+      const error = action === "test" && Boolean(result.setupFailure);
+      let message = `${label}: abgeschlossen.`;
+      if (error)
+        message = "Die Prüfung ist fehlgeschlagen. Folge den Hinweisen unten.";
+      else if (action === "save")
+        message = "Versandprofil gespeichert. Sende jetzt eine Testnachricht.";
+      setActionResult({ key, message, error });
       if (action === "takeover") setStatus(message);
     } catch (e) {
       const message =
@@ -297,34 +436,31 @@ export default function EmailSetup({ api, onDirty }) {
         </Button>
       </div>
     );
-  return (
-    <div className="admin-card email-setup">
-      <h2 id="settings-email-heading" tabIndex={-1}>
-        E-Mail-Versand
-      </h2>
-      {state.jobs?.ready === false && (
-        <p className="admin-error" role="alert">
-          Die Hintergrundverarbeitung ist ausgefallen. Neue Anmeldungen und
-          Kampagnen werden nicht angenommen. Auch automatische Löschläufe und
-          Sicherungen stehen still. Prüfe den Honker-Start im Serverprotokoll
-          und starte den Dienst danach neu.
+  // Typing in the folded form must not unfold it (that would remount the
+  // inputs), so only the saved state decides.
+  const activeIdle = state.ready && Boolean(state.active) && !state.candidate;
+  const lastSuccess = state.lastSuccess
+    ? new Date(state.lastSuccess).toLocaleString("de-DE", {
+        dateStyle: "medium",
+        timeStyle: "short",
+      })
+    : "noch keiner";
+  const steps = (
+    <>
+      <p className="email-intro">
+        Richte ein Postfach oder einen Versanddienst ein. In drei Schritten:
+        Zugangsdaten speichern, Testnachricht senden und ihren Empfang
+        bestätigen, dann den Versand freigeben.
+      </p>
+      {!activeIdle && (
+        <p role="status">
+          {state.ready ? "Versand aktiv" : "Versand pausiert"} ·{" "}
+          {state.source === "deployment"
+            ? "Profil aus den Servereinstellungen"
+            : "Profil hier verwaltet"}
         </p>
       )}
-      <p className="email-intro">
-        Richte ein Postfach oder einen Versanddienst ein. Ein Ersatzprofil
-        kannst du nach einem Test mit bestätigtem Empfang aktivieren.
-      </p>
-      <p role="status">
-        {state.ready
-          ? "Versand bereit"
-          : "Versand pausiert oder nicht verfügbar"}{" "}
-        ·{" "}
-        {state.source === "deployment"
-          ? "Servereinstellungen"
-          : "Hier verwaltet"}{" "}
-        · Revision {state.revision}
-      </p>
-      {status && (
+      {status && !activeIdle && (
         <p
           ref={generalFeedback}
           tabIndex={-1}
@@ -354,7 +490,7 @@ export default function EmailSetup({ api, onDirty }) {
             {state.source === "deployment"
               ? "Profil aus Servereinstellungen"
               : state.candidate
-                ? "Gespeichertes Ersatzprofil"
+                ? "Gespeichertes neues Profil"
                 : "Gespeichertes Versandprofil"}
             {saved?.provider ? ` (${saved.provider})` : ""}: Schritt 1 ist noch
             unvollständig
@@ -366,7 +502,7 @@ export default function EmailSetup({ api, onDirty }) {
           </ul>
           <p>
             {state.source === "admin" && profileDirty
-              ? `Diese Hinweise betreffen den gespeicherten Stand. Deine Eingaben für ${profile.provider} sind noch nicht gespeichert. Vervollständige und speichere das Ersatzprofil, bevor du es testest.`
+              ? `Diese Hinweise betreffen den gespeicherten Stand. Deine Eingaben für ${profile.provider} sind noch nicht gespeichert. Vervollständige und speichere das Profil, bevor du es testest.`
               : state.source === "deployment"
                 ? "Übernimm die Verwaltung hier und ergänze die fehlenden Angaben. Alternativ kann dein technischer Betrieb das Profil in den Servereinstellungen vervollständigen. Prüfe danach die Verbindung."
                 : "Ergänze Absender und Zugangsdaten in Schritt 1. Speichere das Profil, um die Verbindung zu testen."}
@@ -573,19 +709,21 @@ export default function EmailSetup({ api, onDirty }) {
               </label>
               <Button
                 type="submit"
+                className="admin-button admin-button--primary"
                 ref={profileSubmit}
                 disabled={actionsBlocked}
               >
-                Ersatzprofil speichern
+                {state.active
+                  ? "Neues Profil speichern"
+                  : "Versandprofil speichern"}
               </Button>
             </fieldset>
             {feedback(["save"])}
             {profileDirty && (
               <p role="status">
-                Speichere das Ersatzprofil vor dem Test. Das bisherige Profil
-                bleibt gespeichert.{" "}
+                Speichere das Profil vor dem Test.{" "}
                 {state.ready
-                  ? "Der Versand nutzt es bis zur Aktivierung des Ersatzprofils."
+                  ? "Bis zur Freigabe des neuen Profils versendet das bisherige weiter."
                   : "Der Versand bleibt bis zur geprüften Freigabe pausiert."}
               </p>
             )}
@@ -624,8 +762,8 @@ export default function EmailSetup({ api, onDirty }) {
                     ? "DNS-Prüfung erneut starten"
                     : "DNS-Einträge anzeigen und prüfen"}
               </Button>
-              {dnsStatus && <p role="status">{dnsStatus}</p>}
-              {dnsError && <p role="alert">{dnsError}</p>}
+              {dnsStatus && <Notice>{dnsStatus}</Notice>}
+              {dnsError && <Notice tone="error">{dnsError}</Notice>}
               {dns && (
                 <>
                   <p>{dns.notice}</p>
@@ -665,7 +803,7 @@ export default function EmailSetup({ api, onDirty }) {
             </>
           )}
         </>
-      )}{" "}
+      )}
       <SetupStage
         title="2. Testen und Empfang bestätigen"
         available={Boolean(saved) && !profileDirty && blockers.length === 0}
@@ -742,6 +880,7 @@ export default function EmailSetup({ api, onDirty }) {
             erneuten Versand.
           </p>
           <Button
+            className="admin-button admin-button--primary"
             aria-describedby="email-activation-impact"
             disabled={
               actionsBlocked ||
@@ -756,71 +895,89 @@ export default function EmailSetup({ api, onDirty }) {
           {feedback(["activate"])}
         </div>
       </SetupStage>
-      <p>
-        Vom Anbieter angenommen:{" "}
-        {state.validation?.accepted ? "ja" : "ungeprüft"}. Empfang bestätigt:{" "}
-        {state.validation?.received ? "ja" : "nein"}.
-      </p>
-      <p>Letzter erfolgreicher Versand: {state.lastSuccess || "noch keiner"}</p>
-      <EmailFailure failure={state.failure} title="Aktueller Versand" />
-      <EmailFailure failure={state.setupFailure} title="Einrichtungstest" />
-      {state.unresolved?.map((attempt) => (
-        <div key={attempt.scope}>
-          <p>
-            Abgleich erforderlich · {attempt.provider} revision{" "}
-            {attempt.profile_revision} · {attempt.correlation_id}
-          </p>
-          <p>
-            Suche diese Vorgangs-ID im Protokoll des Anbieters. Nach dem
-            Verbindungsabbruch ist unklar, ob er die Nachricht angenommen hat.
-          </p>
-          <div className="admin-actions">
-            <Button
-              disabled={actionsBlocked}
-              onClick={() =>
-                action("reconcile", {
-                  scope: attempt.scope,
-                  resolution: "delivered",
-                })
-              }
-            >
-              Anbieter bestätigt die Annahme
-            </Button>
-            <Button
-              disabled={actionsBlocked}
-              onClick={() =>
-                action("reconcile", {
-                  scope: attempt.scope,
-                  resolution: "retryable",
-                })
-              }
-            >
-              Anbieter bestätigt die Ablehnung, erneut versuchen
-            </Button>
-            {feedback([`reconcile:${attempt.scope}`])}
-          </div>
-        </div>
-      ))}
-      {actionResult?.key.startsWith("reconcile:") &&
-        !state.unresolved?.some(
-          (attempt) => actionResult.key === `reconcile:${attempt.scope}`,
-        ) &&
-        feedback([actionResult.key])}
-      {state.messages?.map((m) => (
-        <p key={m.status}>
-          {m.status}: {m.count}
-        </p>
-      ))}
-      <p>
-        Nachrichten in der Warteschlange:{" "}
+    </>
+  );
+  return (
+    <div className="admin-card email-setup">
+      <h2 id="settings-email-heading" tabIndex={-1}>
+        E-Mail-Versand
+      </h2>
+      {state.jobs?.ready === false && (
+        <Notice tone="error" title="Anmeldungen und Versand stehen still">
+          Neue Unterschriften und Kampagnen werden nicht angenommen, Löschläufe
+          und Sicherungen laufen nicht. Die Technik muss den Versanddienst neu
+          starten.
+          <TechnicalReport
+            lines={[
+              `Zeitpunkt: ${new Date().toISOString()}`,
+              "Hintergrundverarbeitung (Honker-Warteschlange) nicht bereit",
+              "Serverprotokoll beim Start prüfen, danach den Dienst neu starten",
+            ]}
+          />
+        </Notice>
+      )}
+      <EmailFailure
+        failure={state.failure}
+        title="Aktueller Versand"
+        profile={state.active}
+      />
+      <DeliveryProblems
+        state={state}
+        disabled={actionsBlocked}
+        onAction={action}
+        feedback={feedback}
+        confirm={askConfirmation}
+      />
+      {activeIdle ? (
+        <>
+          <Notice
+            tone={state.failure ? "warning" : "success"}
+            title={
+              state.failure
+                ? "Versand eingerichtet, aber gestört"
+                : "Versand aktiv"
+            }
+          >
+            {state.activatedAt
+              ? `Seit ${new Date(state.activatedAt).toLocaleString("de-DE", { dateStyle: "long", timeStyle: "short" })}`
+              : "Freigegeben"}
+            {state.active.from ? ` · Absender ${state.active.from}` : ""}
+            {state.active.provider ? ` · ${state.active.provider}` : ""}
+          </Notice>
+          {status && (
+            <p ref={generalFeedback} tabIndex={-1} role="status">
+              {status}
+            </p>
+          )}
+          <Collapsible.Root className="email-change-profile">
+            <Collapsible.Trigger className="admin-disclosure-trigger">
+              Profil ändern
+            </Collapsible.Trigger>
+            <Collapsible.Panel className="admin-disclosure-panel">
+              {steps}
+            </Collapsible.Panel>
+          </Collapsible.Root>
+        </>
+      ) : (
+        steps
+      )}
+      <p className="admin-muted">
+        Letzter erfolgreicher Versand: {lastSuccess} ·{" "}
+        {MESSAGE_STATUS.map(([status, label]) => {
+          const count =
+            state.messages?.find((m) => m.status === status)?.count || 0;
+          return `${label}: ${count}`;
+        }).join(" · ")}{" "}
+        · In der Warteschlange:{" "}
         {state.queue?.available === false
           ? "nicht verfügbar"
-          : state.queue?.queued || 0}{" "}
-        · Fehlgeschlagene Nachrichten:{" "}
-        {state.queue?.available === false
-          ? "nicht verfügbar"
-          : state.queue?.failed || 0}
+          : state.queue?.queued || 0}
       </p>
+      <EmailFailure
+        failure={state.setupFailure}
+        title="Einrichtungstest"
+        profile={state.candidate || state.active}
+      />
     </div>
   );
 }

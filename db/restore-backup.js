@@ -12,6 +12,8 @@
 //     re-keyed to DATABASE_ENCRYPTION_KEY (handles a distinct backup key).
 //   * Re-applies erasures and opt-outs from the replaced database's erasure log
 //     (db/erasure-log.js), so a restore doesn't bring deleted data back.
+//   * Ends every admin session, so a restore doesn't bring back sessions that
+//     were ended after the backup was taken.
 // Intended to run while the app is stopped.
 import { readdir, rename, unlink, mkdir } from "node:fs/promises";
 import { existsSync, createReadStream, createWriteStream } from "node:fs";
@@ -26,6 +28,7 @@ import {
 } from "../server/publications.js";
 import { openEncrypted, DB_PATH } from "./connection.js";
 import { readErasureLog, applyErasureLog } from "./erasure-log.js";
+import { endAdminSessions } from "../server/admin-sessions.js";
 
 const BACKUP_DIR = process.env.BACKUP_DIR || "/app/backups";
 const DB_KEY = process.env.DATABASE_ENCRYPTION_KEY || "";
@@ -47,8 +50,11 @@ const TABLES = [
   "kv_state_cache",
   "kv_not_typo",
   "occupation_not_typo",
+  "admin_merges",
+  "admin_actions",
   "publications",
   "publication_assets",
+  "first_signer_pins",
   "email_configuration",
   "email_attempts",
   "email_quota",
@@ -226,6 +232,7 @@ async function main() {
         "INSERT INTO app_settings (key,value) VALUES ('email:restored',?) ON CONFLICT(key) DO UPDATE SET value=excluded.value",
       )
       .run(new Date().toISOString());
+    await endAdminSessions(restored);
     const applied = await applyErasureLog(restored, erasures || []);
     console.log(
       `[restore] re-applied erasure log (${(erasures || []).length} entr${(erasures || []).length === 1 ? "y" : "ies"}):`,

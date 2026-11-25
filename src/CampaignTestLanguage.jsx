@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { Button } from "@base-ui/react/button";
-import { Choice } from "./ui.jsx";
+import { Choice, Notice } from "./ui.jsx";
 import { campaignText } from "../config/campaign-templates.js";
 import { LANGUAGES, DEFAULT_LANG } from "../config/letter.config.js";
 
@@ -107,7 +107,9 @@ export default function CampaignTestLanguage({
           />
         </div>
       )}
-      {error?.signature === signature && <p role="alert">{error.message}</p>}
+      {error?.signature === signature && (
+        <Notice tone="error">{error.message}</Notice>
+      )}
     </div>
   );
 }

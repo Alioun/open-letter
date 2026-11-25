@@ -90,6 +90,33 @@ export async function purgeDeadJobs(queue, olderThanS) {
   });
 }
 
+// Put dead jobs of `queue` created in the last `maxAgeS` seconds back in the
+// queue with a fresh attempt budget. Older ones stay dead. Returns the count.
+export async function requeueDeadJobs(queue, maxAgeS) {
+  return ignoreMissingTables(() =>
+    db.transaction(
+      async () => {
+        const dead = await db
+          .query(
+            "SELECT id, payload, max_attempts FROM _honker_dead WHERE queue = ? AND created_at > unixepoch() - ?",
+          )
+          .all(queue, maxAgeS);
+        for (const job of dead) {
+          await enqueue(queue, JSON.parse(job.payload), {
+            maxAttempts: job.max_attempts || 5,
+            expires: maxAgeS,
+          });
+          await db
+            .query("DELETE FROM _honker_dead /* public-neutral */ WHERE id = ?")
+            .run(job.id);
+        }
+        return dead.length;
+      },
+      { immediate: true },
+    ),
+  );
+}
+
 // Remove pending and dead jobs of `queue` whose JSON payload has `field` equal
 // to `value`. Used when the person a job is about gets erased.
 export async function deleteJobsByPayload(queue, field, value) {
@@ -102,6 +129,24 @@ export async function deleteJobsByPayload(queue, field, value) {
            WHERE queue = ? AND json_extract(payload, '$.' || ?) = ?`,
         )
         .run(queue, field, value);
+      removed += res?.changes ?? 0;
+    }
+    return removed;
+  });
+}
+
+// Remove pending and dead jobs of `queue` whose JSON payload has `field` at
+// all. Used when every subject of one kind is cleared at once.
+export async function deleteJobsWithPayload(queue, field) {
+  return ignoreMissingTables(async () => {
+    let removed = 0;
+    for (const table of ["_honker_live", "_honker_dead"]) {
+      const res = await db
+        .query(
+          `DELETE FROM ${table} /* public-neutral */
+           WHERE queue = ? AND json_extract(payload, '$.' || ?) IS NOT NULL`,
+        )
+        .run(queue, field);
       removed += res?.changes ?? 0;
     }
     return removed;

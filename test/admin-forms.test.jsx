@@ -10,7 +10,15 @@ import {
   useMeetingForm,
 } from "../src/meeting-form.js";
 import { useMilestoneForm } from "../src/milestone-form.js";
+import { useCampaignSubmission } from "../src/campaign-draft.js";
+import { loginFailure } from "../src/AdminLogin.jsx";
 import CampaignTestLanguage from "../src/CampaignTestLanguage.jsx";
+import EmailSetup, { DeliveryProblems } from "../src/EmailSetup.jsx";
+import SessionSettings from "../src/SessionSettings.jsx";
+import {
+  ZoomRegistrationList,
+  zoomRegistrationsPath,
+} from "../src/ZoomRegistrations.jsx";
 
 let root;
 let browser;
@@ -61,6 +69,76 @@ afterEach(async () => {
   await act(async () => root.unmount());
   await browser.happyDOM.close();
   restore();
+});
+
+test("saving a replacement reports success while active delivery is paused", async () => {
+  const active = { provider: "resend", from: "old@example.org" };
+  const candidate = {
+    provider: "mailbox.org",
+    from: "sender@example.org",
+    user: "main@example.org",
+    hasCredential: true,
+  };
+  const state = {
+    source: "admin",
+    revision: 2,
+    active,
+    candidate,
+    ready: false,
+    failure: { category: "authentication", protocol: 401 },
+  };
+  const api = async (path, options) => {
+    expect(path).toBe("/api/admin/email");
+    if (!options) return Response.json(state);
+    expect(JSON.parse(options.body).action).toBe("save");
+    return Response.json({ ...state, revision: 3 });
+  };
+  await act(async () => root.render(<EmailSetup api={api} />));
+  await act(async () => {
+    document
+      .querySelector("form")
+      .dispatchEvent(new Event("submit", { bubbles: true, cancelable: true }));
+  });
+  expect(
+    document.querySelector("form .email-action-feedback").textContent,
+  ).toBe("Versandprofil gespeichert. Sende jetzt eine Testnachricht.");
+  expect(document.body.textContent).toContain(
+    "Aktueller Versand: Anmeldung fehlgeschlagen",
+  );
+});
+
+test("closing unclear deliveries without resending waits for a confirmation that names the count", async () => {
+  const actions = [];
+  const questions = [];
+  let answer = false;
+  const confirm = async (message, options) => {
+    questions.push({ message, ...options });
+    return answer;
+  };
+  const state = {
+    messages: [{ status: "unresolved", count: 3 }],
+    queue: { available: true, failed: 0 },
+  };
+  await act(async () =>
+    root.render(
+      <DeliveryProblems
+        state={state}
+        onAction={(...action) => actions.push(action)}
+        feedback={() => null}
+        confirm={confirm}
+      />,
+    ),
+  );
+  const close = [...document.querySelectorAll("button")].find(
+    (button) => button.textContent === "Ohne erneuten Versand abschließen",
+  );
+  await act(async () => close.click());
+  expect(actions).toEqual([]);
+  expect(questions[0]).toMatchObject({ danger: true });
+  expect(questions[0].message).toContain("3 Nachrichten");
+  answer = true;
+  await act(async () => close.click());
+  expect(actions).toEqual([["reconcile-all", { resolution: "delivered" }]]);
 });
 
 async function mount(useForm) {
@@ -513,4 +591,233 @@ test("milestone authentication failures retain inputs and require an explicit la
   expect(writes).toBe(2);
   expect(current.status).toBe("ok");
   expect(current.dirty).toBe(false);
+});
+
+test("a draft that became a campaign cannot be sent a second time until a new message is started", async () => {
+  const key = "campaign-submission-fixture";
+  const requests = [];
+  const api = async (path, options) => {
+    requests.push(JSON.parse(options.body));
+    return Response.json({ id: 12, status: "scheduled" }, { status: 201 });
+  };
+  const body = {
+    template_id: "4",
+    subject: "Update",
+    scheduled_at: "2026-12-01T10:00:00.000Z",
+    send_now: false,
+    audience: "newsletter",
+  };
+  await mount(() => useCampaignSubmission(key));
+  expect(current.submitted).toBeNull();
+
+  expect(
+    (await change((form) => form.submit(api, body, async () => true))).id,
+  ).toBe(12);
+  expect(current.submitted).toEqual({ id: 12, outcome: "scheduled" });
+
+  // "Jetzt senden" on the untouched form used to create a second campaign.
+  expect(
+    await change((form) =>
+      form.submit(api, { ...body, send_now: true }, async () => true),
+    ),
+  ).toBeNull();
+  expect(requests).toHaveLength(1);
+
+  // A reload still knows the draft was sent.
+  await act(async () => root.unmount());
+  root = createRoot(document.body.appendChild(document.createElement("div")));
+  await mount(() => useCampaignSubmission(key));
+  expect(current.submitted).toEqual({ id: 12, outcome: "scheduled" });
+
+  await change((form) => form.reset());
+  expect(current.submitted).toBeNull();
+  await change((form) =>
+    form.submit(api, { ...body, subject: "Next" }, async () => true),
+  );
+  expect(requests).toHaveLength(2);
+  expect(requests[1].request_key).not.toBe(requests[0].request_key);
+});
+
+test("an unconfirmed send order keeps its key through every later attempt of the same draft", async () => {
+  const requests = [];
+  let online = false;
+  const api = async (path, options) => {
+    requests.push(JSON.parse(options.body));
+    if (!online) throw new TypeError("offline");
+    return Response.json({ id: 3, status: "scheduled" }, { status: 201 });
+  };
+  const body = { template_id: "4", subject: "Update", send_now: false };
+  await mount(() => useCampaignSubmission("campaign-retry-fixture"));
+
+  let failure;
+  await change((form) =>
+    form
+      .submit(api, body, async () => true)
+      .catch((error) => {
+        failure = error;
+      }),
+  );
+  expect(failure.message).toContain("Prüfe den Versandverlauf");
+  expect(current.submitted).toBeNull();
+
+  online = true;
+  await change((form) =>
+    form.submit(api, { ...body, send_now: true }, async () => true),
+  );
+  expect(requests.map((request) => request.request_key)).toEqual([
+    requests[0].request_key,
+    requests[0].request_key,
+  ]);
+  expect(current.submitted).toEqual({ id: 3, outcome: "due" });
+});
+
+test("a rate-limited login says how long to wait instead of blaming the password", () => {
+  const answer = (status, headers) =>
+    loginFailure(new Response("", { status, headers }));
+  expect(answer(401)).toContain("Prüfe dein Passwort");
+  expect(answer(429, { "Retry-After": "840" })).toBe(
+    "Zu viele Anmeldeversuche. Versuche es in 14 Minuten erneut.",
+  );
+  expect(answer(429, { "Retry-After": "45" })).toBe(
+    "Zu viele Anmeldeversuche. Versuche es in einer Minute erneut.",
+  );
+  expect(answer(429)).toBe(
+    "Zu viele Anmeldeversuche. Versuche es später erneut.",
+  );
+  expect(answer(500)).not.toContain("Passwort");
+});
+
+test("signing everyone out asks first, and only a confirmed request ends the session here", async () => {
+  const requests = [];
+  let answer = false;
+  let status = 503;
+  let done = 0;
+  const asked = [];
+  await act(async () =>
+    root.render(
+      <SessionSettings
+        api={async (path, options) => {
+          requests.push([path, options.method]);
+          return Response.json(
+            status === 200 ? { ok: true } : { error: "Gerade nicht möglich." },
+            { status },
+          );
+        }}
+        askConfirmation={async (message, options) => {
+          asked.push(options);
+          return answer;
+        }}
+        onDone={() => done++}
+      />,
+    ),
+  );
+  const press = () =>
+    act(async () =>
+      [...document.querySelectorAll("button")]
+        .find((button) => button.textContent === "Überall abmelden")
+        .click(),
+    );
+
+  await press();
+  expect(asked[0]).toMatchObject({
+    title: "Überall abmelden?",
+    confirmLabel: "Überall abmelden",
+    danger: true,
+  });
+  expect(requests).toEqual([]);
+
+  answer = true;
+  await press();
+  expect(requests).toEqual([["/api/admin/logout-everywhere", "POST"]]);
+  expect(document.querySelector('[role="alert"]').textContent).toBe(
+    "Gerade nicht möglich.",
+  );
+  expect(done).toBe(0);
+
+  status = 200;
+  await press();
+  expect(done).toBe(1);
+});
+
+test("a meeting registration is removed only after the danger confirmation, and the list reloads", async () => {
+  const people = [
+    {
+      id: 7,
+      name: "Falsch Angemeldet",
+      email: "falsch@example.org",
+      delegierter: false,
+      created_at: "2026-11-20T10:00:00.000Z",
+    },
+    {
+      id: 8,
+      name: "Bleibt Dabei",
+      email: "bleibt@example.org",
+      delegierter: false,
+      created_at: "2026-11-20T11:00:00.000Z",
+    },
+  ];
+  const requests = [];
+  const asked = [];
+  let answer = false;
+  let reloads = 0;
+  const list = () => (
+    <ZoomRegistrationList
+      api={async (path, options) => {
+        requests.push([path, options.method]);
+        return Response.json({ ok: true });
+      }}
+      askConfirmation={async (message, options) => {
+        asked.push({ message, ...options });
+        return answer;
+      }}
+      read={{
+        data: { registrations: people, total: 2, delegates: 0, matches: 2 },
+        error: false,
+        loading: false,
+        reload: () => reloads++,
+      }}
+      page={0}
+      onPage={() => {}}
+      search=""
+      onSearch={() => {}}
+      showDelegierter={false}
+      regionLabel={null}
+    />
+  );
+  await act(async () => root.render(list()));
+  const remove = () =>
+    act(async () =>
+      document
+        .querySelector(
+          'table button[aria-label="Anmeldung von Falsch Angemeldet entfernen"]',
+        )
+        .click(),
+    );
+
+  await remove();
+  expect(asked[0]).toMatchObject({
+    title: "Anmeldung entfernen?",
+    confirmLabel: "Anmeldung entfernen",
+    danger: true,
+  });
+  expect(asked[0].message).toContain("Falsch Angemeldet");
+  expect(asked[0].message).toContain("Unterschrift und Newsletter bleiben");
+  expect(requests).toEqual([]);
+
+  answer = true;
+  await remove();
+  expect(requests).toEqual([["/api/admin/zoom-registrations/7", "DELETE"]]);
+  expect(reloads).toBe(1);
+  expect(document.querySelector('[role="status"]').textContent).toBe(
+    "Die Anmeldung von Falsch Angemeldet wurde entfernt.",
+  );
+});
+
+test("the registration search travels in the page address, encoded", () => {
+  expect(zoomRegistrationsPath(2)).toBe(
+    "/api/admin/zoom-registrations?limit=100&offset=200",
+  );
+  expect(zoomRegistrationsPath(0, "müller & co")).toBe(
+    "/api/admin/zoom-registrations?limit=100&offset=0&search=m%C3%BCller%20%26%20co",
+  );
 });

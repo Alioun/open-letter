@@ -27,6 +27,7 @@ import { renderPrivacy } from "../config/public-privacy.js";
 import { resolvePrivacy } from "../config/privacy.js";
 import { resolveInvite } from "../config/invite.js";
 import { LetterArticle, FaqContent } from "../config/content.jsx";
+import { SIGNER_DETAIL_LIMIT } from "../config/signer-details.js";
 import { ZoomForm } from "./ZoomForm";
 import { KV_NONE, regionLabels } from "../config/region.js";
 import { fillText } from "../config/ui.js";
@@ -305,8 +306,8 @@ export default function App({
   const [showImpressum, setShowImpressum] = useState(false);
   const [showDatenschutz, setShowDatenschutz] = useState(false);
   const [showDeleted, setShowDeleted] = useState(false);
-  const [showOccupations, setShowOccupations] = useState(false);
-  const [occupationGroups, setOccupationGroups] = useState([]);
+  const [detailsView, setDetailsView] = useState(null);
+  const [detailGroups, setDetailGroups] = useState([]);
   const [showKreisverband, setShowKreisverband] = useState(false);
   const [showMap, setShowMap] = useState(false);
   const [kvGroups, setKvGroups] = useState([]);
@@ -524,6 +525,7 @@ export default function App({
 
   // "Accomplished" wind-down mode (config-driven, generic across letters).
   const successMode = Boolean(cfg.features?.successMode);
+  const signingPause = cfg.features.signingPaused ? cfg.ui.signForm : null;
   const zoomEnabled = Boolean(cfg.features?.zoomEvent);
   // Only link to the outcome once a real URL is set (hide the config placeholder).
   const antragUrl = cfg.success?.antragUrl || "";
@@ -550,7 +552,9 @@ export default function App({
     .filter(Boolean)
     .join(", ");
   const ctaToZoom = successMode && showZoomNav;
-  const ctaLabel = ctaToZoom ? cfg.success?.ctaZoom || zoomNavLabel : null;
+  const ctaLabel = ctaToZoom
+    ? cfg.success?.ctaZoom || zoomNavLabel
+    : signingPause?.pausedTitle;
   // Hide the header/menu CTA in success mode when there's nothing to sign up for
   // (form removed and Zoom not open); otherwise it would scroll to a gone anchor.
   const showCta = !successMode || ctaToZoom;
@@ -644,14 +648,31 @@ export default function App({
   }, [filter, search, fetchSigners]);
 
   useEffect(() => {
-    if (!showOccupations) return;
+    if (!detailsView) return;
+    let ignore = false;
+    setDetailGroups([]);
     (async () => {
       try {
-        const res = await apiFetch("/api/occupations");
-        if (res.ok) setOccupationGroups(await res.json());
+        const functions = detailsView === "functions";
+        const res = await apiFetch(
+          functions ? "/api/signer-functions" : "/api/occupations",
+        );
+        if (res.ok) {
+          const groups = await res.json();
+          if (!ignore)
+            setDetailGroups(
+              groups.map(({ occupation, label, count }) => ({
+                label: label ?? occupation,
+                count,
+              })),
+            );
+        }
       } catch {}
     })();
-  }, [showOccupations]);
+    return () => {
+      ignore = true;
+    };
+  }, [detailsView]);
 
   useEffect(() => {
     if (!showKreisverband && !showMap) return;
@@ -692,6 +713,7 @@ export default function App({
         occupation: data.occupation || "",
         newsletter: !!data.newsletter,
         agree: !!data.agree,
+        delayed: Boolean(result.emailDelayed),
       });
       return true;
     } catch {
@@ -883,17 +905,24 @@ export default function App({
           <p className="privacy">{cfg.sign.privacyNote}</p>
         </div>
 
-        <SignForm
-          onSubmit={handleSubmit}
-          serverError={
-            submitError ||
-            (!preview && boot?.email?.ready === false
-              ? cfg.ui.errors.emailUnavailable
-              : null)
-          }
-          kvNames={signFormKvNames}
-          occNames={signFormOccNames}
-        />
+        {signingPause ? (
+          <aside className="form-card" aria-labelledby="signing-pause-title">
+            <h3 id="signing-pause-title">{signingPause.pausedTitle}</h3>
+            <p>{signingPause.pausedMessage}</p>
+          </aside>
+        ) : (
+          <SignForm
+            onSubmit={handleSubmit}
+            serverError={submitError}
+            notice={
+              !preview && boot?.email?.ready === false
+                ? cfg.ui.signForm.emailDelayed
+                : null
+            }
+            kvNames={signFormKvNames}
+            occNames={signFormOccNames}
+          />
+        )}
       </div>
     </div>
   );
@@ -942,21 +971,15 @@ export default function App({
         <button
           className={
             "filter-chip " +
-            (!showOccupations &&
-            !showKreisverband &&
-            !showMap &&
-            filter === "alle"
+            (!detailsView && !showKreisverband && !showMap && filter === "alle"
               ? "active"
               : "")
           }
           aria-pressed={
-            !showOccupations &&
-            !showKreisverband &&
-            !showMap &&
-            filter === "alle"
+            !detailsView && !showKreisverband && !showMap && filter === "alle"
           }
           onClick={() => {
-            setShowOccupations(false);
+            setDetailsView(null);
             setShowKreisverband(false);
             setShowMap(false);
             setFilter("alle");
@@ -967,7 +990,7 @@ export default function App({
         <button
           className={
             "filter-chip " +
-            (!showOccupations &&
+            (!detailsView &&
             !showKreisverband &&
             !showMap &&
             filter === "neueste"
@@ -975,13 +998,13 @@ export default function App({
               : "")
           }
           aria-pressed={
-            !showOccupations &&
+            !detailsView &&
             !showKreisverband &&
             !showMap &&
             filter === "neueste"
           }
           onClick={() => {
-            setShowOccupations(false);
+            setDetailsView(null);
             setShowKreisverband(false);
             setShowMap(false);
             setFilter("neueste");
@@ -994,7 +1017,7 @@ export default function App({
             className={"filter-chip " + (showMap ? "active" : "")}
             aria-pressed={showMap}
             onClick={() => {
-              setShowOccupations(false);
+              setDetailsView(null);
               setShowKreisverband(false);
               setShowMap((v) => !v);
             }}
@@ -1006,7 +1029,7 @@ export default function App({
           <button
             className={"filter-chip " + (showKreisverband ? "active" : "")}
             onClick={() => {
-              setShowOccupations(false);
+              setDetailsView(null);
               setShowMap(false);
               setShowKreisverband((v) => !v);
             }}
@@ -1015,20 +1038,31 @@ export default function App({
             {region().plural}
           </button>
         )}
-        {cfg.features.occupationField && (
-          <button
-            className={"filter-chip " + (showOccupations ? "active" : "")}
-            onClick={() => {
-              setShowKreisverband(false);
-              setShowMap(false);
-              setShowOccupations((v) => !v);
-            }}
-            aria-pressed={showOccupations}
-          >
-            {cfg.ui.list.filterOccupations}
-          </button>
-        )}
-        {!showOccupations && !showKreisverband && !showMap && (
+        {[
+          [
+            "organisations",
+            cfg.features.occupationField && cfg.ui.list.filterOccupations,
+          ],
+          ["functions", cfg.sign.fields.signerFunction?.filterLabel],
+        ]
+          .filter(([, label]) => label)
+          .map(([view, label]) => (
+            <button
+              key={view}
+              className={
+                "filter-chip " + (detailsView === view ? "active" : "")
+              }
+              onClick={() => {
+                setShowKreisverband(false);
+                setShowMap(false);
+                setDetailsView((current) => (current === view ? null : view));
+              }}
+              aria-pressed={detailsView === view}
+            >
+              {label}
+            </button>
+          ))}
+        {!detailsView && !showKreisverband && !showMap && (
           <>
             <label htmlFor="signer-search" className="sr-only">
               {fillText(cfg.ui.list.searchLabel, { region: region().name })}
@@ -1075,14 +1109,18 @@ export default function App({
             ))}
           </div>
         )
-      ) : showOccupations ? (
-        occupationGroups.length === 0 ? (
-          <div className="empty-state">{cfg.ui.list.emptyOccupations}</div>
+      ) : detailsView ? (
+        detailGroups.length === 0 ? (
+          <div className="empty-state">
+            {detailsView === "functions"
+              ? cfg.sign.fields.signerFunction.emptyLabel
+              : cfg.ui.list.emptyOccupations}
+          </div>
         ) : (
           <div className="occupation-grid">
-            {occupationGroups.map((g) => (
-              <div key={g.occupation} className="occupation-chip">
-                <span className="occupation-name">{g.occupation}</span>
+            {detailGroups.map((g) => (
+              <div key={g.label} className="occupation-chip">
+                <span className="occupation-name">{g.label}</span>
                 <span className="occupation-count">{g.count}</span>
               </div>
             ))}
@@ -1098,6 +1136,9 @@ export default function App({
                 key={signerKey(s)}
                 name={s.name}
                 kreisverband={s.kreisverband}
+                signerFunction={s.signerFunction}
+                organisation={s.organisation}
+                firstSigner={s.firstSigner}
                 createdAt={s.created_at}
                 isNew={s._isNew}
               />
@@ -1213,8 +1254,7 @@ export default function App({
               className="cta topbar-cta"
               onClick={() => scrollTo(ctaToZoom ? "zoom" : "unterzeichnen")}
             >
-              {ctaToZoom ? ctaLabel : cfg.navCta}{" "}
-              <span aria-hidden="true">→</span>
+              {ctaLabel || cfg.navCta} <span aria-hidden="true">→</span>
             </button>
           )}
           <Popover.Trigger
@@ -1276,7 +1316,7 @@ export default function App({
                     scrollTo(ctaToZoom ? "zoom" : "unterzeichnen");
                   }}
                 >
-                  {ctaToZoom ? ctaLabel : cfg.hero.ctaPrimary}{" "}
+                  {ctaLabel || cfg.hero.ctaPrimary}{" "}
                   <span aria-hidden="true">→</span>
                 </a>
               )}
@@ -1350,7 +1390,23 @@ export default function App({
               </div>
             ) : (
               <>
+                {cfg.hero.kicker && (
+                  <p className="hero-kicker">{cfg.hero.kicker}</p>
+                )}
                 <Headline lines={cfg.hero.headlineLines} />
+                {cfg.hero.description && (
+                  <p className="hero-description">{cfg.hero.description}</p>
+                )}
+                {cfg.hero.artwork && (
+                  <figure className="hero-artwork">
+                    <img
+                      src={cfg.hero.artwork.src}
+                      alt={cfg.hero.artwork.alt}
+                      width={cfg.hero.artwork.width}
+                      height={cfg.hero.artwork.height}
+                    />
+                  </figure>
+                )}
 
                 <div className="hero-row">
                   <div className="counter-wrap">
@@ -1431,7 +1487,8 @@ export default function App({
                       className="scrollcta"
                       onClick={() => scrollTo("unterzeichnen")}
                     >
-                      {cfg.hero.ctaPrimary} <span aria-hidden="true">→</span>
+                      {ctaLabel || cfg.hero.ctaPrimary}{" "}
+                      <span aria-hidden="true">→</span>
                     </button>
                     <button
                       className="scrollcta scrollcta--secondary"
@@ -1560,38 +1617,57 @@ export default function App({
               onClick={(e) => e.stopPropagation()}
             >
               <div className="modal-head">
-                <h3 id="email-modal-title">{cfg.ui.emailModal.title}</h3>
+                <h3 id="email-modal-title">
+                  {emailModal.delayed
+                    ? cfg.ui.emailModal.delayedTitle
+                    : cfg.ui.emailModal.title}
+                </h3>
                 <button onClick={closeModal} aria-label={cfg.ui.chrome.close}>
                   ×
                 </button>
               </div>
               <div className="modal-body">
                 <p>
-                  {fillText(cfg.ui.emailModal.sent, { name: emailModal.name })}
+                  {fillText(
+                    emailModal.delayed
+                      ? cfg.ui.emailModal.delayedSent
+                      : cfg.ui.emailModal.sent,
+                    { name: emailModal.name },
+                  )}
                 </p>
                 <div className="email-pill">{emailModal.email}</div>
 
                 <p>{cfg.ui.emailModal.explain}</p>
-                <p className="hint">{cfg.ui.emailModal.spamHint}</p>
-                <p className="hint">{cfg.ui.emailModal.delayHint}</p>
-                {resendError && (
-                  <p className="hint hint--error">{resendError}</p>
+                {emailModal.delayed ? (
+                  <p className="hint">
+                    {fillText(cfg.ui.emailModal.delayedHint, {
+                      hours: resolvePrivacy(cfg).confirmationLinkHours,
+                    })}
+                  </p>
+                ) : (
+                  <>
+                    <p className="hint">{cfg.ui.emailModal.spamHint}</p>
+                    <p className="hint">{cfg.ui.emailModal.delayHint}</p>
+                    {resendError && (
+                      <p className="hint hint--error">{resendError}</p>
+                    )}
+                    <button
+                      className="resend-btn"
+                      onClick={handleResend}
+                      disabled={resendCooldown > 0}
+                    >
+                      {resendSent && resendCooldown > 0
+                        ? fillText(cfg.ui.emailModal.resendSent, {
+                            seconds: resendCooldown,
+                          })
+                        : resendCooldown > 0
+                          ? fillText(cfg.ui.emailModal.resendWait, {
+                              seconds: resendCooldown,
+                            })
+                          : cfg.ui.emailModal.resend}
+                    </button>
+                  </>
                 )}
-                <button
-                  className="resend-btn"
-                  onClick={handleResend}
-                  disabled={resendCooldown > 0}
-                >
-                  {resendSent && resendCooldown > 0
-                    ? fillText(cfg.ui.emailModal.resendSent, {
-                        seconds: resendCooldown,
-                      })
-                    : resendCooldown > 0
-                      ? fillText(cfg.ui.emailModal.resendWait, {
-                          seconds: resendCooldown,
-                        })
-                      : cfg.ui.emailModal.resend}
-                </button>
                 <button className="confirm-btn" onClick={closeModal}>
                   {cfg.ui.emailModal.ok}
                 </button>
@@ -1723,17 +1799,44 @@ export default function App({
 const SignerRow = memo(function SignerRow({
   name,
   kreisverband,
+  signerFunction,
+  organisation,
+  firstSigner,
   createdAt,
   isNew,
 }) {
+  const cfg = useCampaignConfig();
+  const region = regionLabels(cfg);
+  const showsDetails =
+    cfg.features.publicFirstSignerDetails || cfg.features.publicSignerDetails;
+  const details = showsDetails
+    ? [signerFunction, organisation].filter(Boolean).join(" · ")
+    : "";
+  // On a letter that shows function and organisation, a row without them
+  // names the region only if the letter asks for one.
+  const regionLine =
+    cfg.features.kreisverbandField || !showsDetails
+      ? kreisverband
+        ? region.rowPrefix + kreisverband
+        : region.none
+      : "";
+  const subtitle = details || regionLine;
+  const kvClass = details ? "kv kv-details" : "kv";
   return (
     <div className={"signer" + (isNew ? " new" : "")}>
       <div className="avatar">{initials(name)}</div>
       <div className="info">
         <div className="name">{name}</div>
-        <div className="kv">
-          {kreisverband ? region().rowPrefix + kreisverband : region().none}
-        </div>
+        {firstSigner ? (
+          <div className={kvClass}>
+            <span className="first-signer-label">
+              {cfg.ui.list.firstSigner}
+            </span>
+            {subtitle && ` · ${subtitle}`}
+          </div>
+        ) : (
+          subtitle && <div className={kvClass}>{subtitle}</div>
+        )}
       </div>
       <div className="time">{relTime(createdAt)}</div>
     </div>
@@ -1743,6 +1846,7 @@ const SignerRow = memo(function SignerRow({
 const SignForm = memo(function SignForm({
   onSubmit,
   serverError,
+  notice,
   kvNames,
   occNames,
 }) {
@@ -1753,7 +1857,9 @@ const SignForm = memo(function SignForm({
   const [email, setEmail] = useState("");
   const [kv, setKv] = useState("");
   const [occupation, setOccupation] = useState("");
-  const [agree, setAgree] = useState(false);
+  const [signerFunction, setSignerFunction] = useState("");
+  const functionField = cfg.sign.fields.signerFunction;
+  const [visibility, setVisibility] = useState("private");
   const [newsletter, setNewsletter] = useState(false);
   const [inviteShowName, setInviteShowName] = useState(false);
   const [errors, setErrors] = useState({});
@@ -1763,7 +1869,9 @@ const SignForm = memo(function SignForm({
 
   const visibilityFields = [
     cfg.features.kreisverbandField && cfg.sign.fields.kreisverband.label,
-    cfg.features.occupationField && cfg.sign.fields.occupation.label,
+    cfg.features.occupationField &&
+      !functionField &&
+      cfg.sign.fields.occupation.label,
   ].filter(Boolean);
   const visibilityExtra = visibilityFields.length
     ? fillText(cfg.ui.signForm.publicFieldsExtra, {
@@ -1791,8 +1899,12 @@ const SignForm = memo(function SignForm({
       email: email.trim(),
       kv: kv.trim().replace(/^KV\s*/i, ""),
       occupation: occupation.trim(),
+      ...(functionField && { signerFunction: signerFunction.trim() }),
       newsletter,
-      agree,
+      agree: visibility !== "private",
+      ...(cfg.features.publicSignerDetails && {
+        showSignerDetails: visibility === "details",
+      }),
       ...(INVITES && { inviteShowName }),
     });
     setSubmitting(false);
@@ -1801,7 +1913,8 @@ const SignForm = memo(function SignForm({
     setEmail("");
     setKv("");
     setOccupation("");
-    setAgree(false);
+    setSignerFunction("");
+    setVisibility("private");
     setNewsletter(false);
     setInviteShowName(false);
     setErrors({});
@@ -1816,6 +1929,11 @@ const SignForm = memo(function SignForm({
           "Felder ausfüllen, bestätigen per E-Mail. Fertig."}
       </div>
 
+      {notice && (
+        <div className="form-notice" role="status">
+          {notice}
+        </div>
+      )}
       {serverError && (
         <div className="err" role="alert">
           {serverError}
@@ -1825,7 +1943,9 @@ const SignForm = memo(function SignForm({
       <div className="field">
         <label htmlFor="sign-name">
           {cfg.ui.signForm.nameLabel}{" "}
-          <span className="opt"> {cfg.ui.signForm.nameHint}</span>
+          {!cfg.features.publicSignerDetails && (
+            <span className="opt"> {cfg.ui.signForm.nameHint}</span>
+          )}
         </label>
         <input
           id="sign-name"
@@ -1914,22 +2034,66 @@ const SignForm = memo(function SignForm({
             onChange={setOccupation}
             items={occNames}
             placeholder={cfg.sign.fields.occupation.placeholder}
+            maxLength={functionField ? SIGNER_DETAIL_LIMIT : undefined}
+          />
+        </div>
+      )}
+
+      {functionField && (
+        <div className="field">
+          <label htmlFor="sign-function">
+            {functionField.label}{" "}
+            <span className="opt">{functionField.optionalLabel}</span>
+          </label>
+          <input
+            id="sign-function"
+            type="text"
+            value={signerFunction}
+            onChange={(event) => setSignerFunction(event.target.value)}
+            placeholder={functionField.placeholder}
+            maxLength={SIGNER_DETAIL_LIMIT}
           />
         </div>
       )}
 
       <div className="checks">
-        <label className="check">
-          <input
-            type="checkbox"
-            checked={agree}
-            onChange={(e) => setAgree(e.target.checked)}
-          />
-          <span>
-            {fillText(cfg.ui.signForm.publicLabel, { fields: visibilityExtra })}{" "}
-            <span className="opt">{cfg.ui.signForm.optional}</span>
-          </span>
-        </label>
+        {cfg.features.publicSignerDetails ? (
+          <fieldset className="sign-visibility">
+            <legend>{cfg.ui.signForm.visibilityLegend}</legend>
+            {[
+              ["private", cfg.ui.signForm.visibilityPrivate],
+              ["name", cfg.ui.signForm.visibilityName],
+              ["details", cfg.sign.publicDetailsLabel],
+            ].map(([value, label]) => (
+              <label key={value}>
+                <input
+                  type="radio"
+                  name="sign-visibility"
+                  value={value}
+                  checked={visibility === value}
+                  onChange={() => setVisibility(value)}
+                />
+                <span>{label}</span>
+              </label>
+            ))}
+          </fieldset>
+        ) : (
+          <label className="check">
+            <input
+              type="checkbox"
+              checked={visibility === "name"}
+              onChange={(e) =>
+                setVisibility(e.target.checked ? "name" : "private")
+              }
+            />
+            <span>
+              {fillText(cfg.ui.signForm.publicLabel, {
+                fields: visibilityExtra,
+              })}{" "}
+              <span className="opt">{cfg.ui.signForm.optional}</span>
+            </span>
+          </label>
+        )}
         <label className="check">
           <input
             type="checkbox"

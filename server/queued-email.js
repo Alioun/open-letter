@@ -146,6 +146,9 @@ export async function prepareQueuedEmail(payload) {
       return null;
   } else if (kind === "already-signed") {
     if (!signer.verified) return null;
+  } else if (kind === "newsletter-optin") {
+    // Subscribed meanwhile (the settings page does that too): nothing to ask.
+    if (!signer.verified || signer.newsletter) return null;
   } else if (kind === "invite") {
     if (!signer.verified || !signer.invite_code) return null;
     if (!payload.statsToken || !payload.inviteCode)
@@ -163,6 +166,10 @@ export async function prepareQueuedEmail(payload) {
     baseUrl,
     lang: signer.lang,
     ...(kind === "verification" && { token: signer.verification_token }),
+    // The settings token: it already lets its holder switch the newsletter on.
+    ...(kind === "newsletter-optin" && {
+      optInToken: await issueUnsubscribeToken(signer.id),
+    }),
     ...(kind === "invite" && {
       inviteCode: payload.inviteCode,
       statsToken: payload.statsToken,

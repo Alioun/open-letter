@@ -1,12 +1,12 @@
 // Export a consistent SQLCipher snapshot with sqlcipher_export().
 // The attached destination uses the backup key. Optionally gzip the encrypted
 // file, then delete snapshots older than BACKUP_KEEP hours.
-import { mkdir, readdir, unlink, rename } from "node:fs/promises";
+import { mkdir, readdir, unlink, rename, stat } from "node:fs/promises";
 import { createReadStream, createWriteStream } from "node:fs";
 import { join, dirname, basename } from "node:path";
 import { createGzip } from "node:zlib";
 import { pipeline } from "node:stream/promises";
-import { openEncrypted, DB_PATH } from "../db/connection.js";
+import { db, openEncrypted, DB_PATH } from "../db/connection.js";
 import cfg from "../config/letter.config.js";
 import { resolvePrivacy, backupKeepHours } from "../config/privacy.js";
 
@@ -63,11 +63,51 @@ export async function exportEncrypted(destPath) {
   }
 }
 
+const STATUS_KEY = "backup:status";
+
+// What the admin is shown about backups: the last one that worked, the failure
+// since (null once one works again), and `expiredRestorePoint`, the time of
+// the newest backup when it is being kept past the retention the privacy
+// policy states because nothing newer could be written.
+export async function backupStatus() {
+  const row = await db
+    .query("SELECT value FROM app_settings WHERE key = ?")
+    .get(STATUS_KEY);
+  return {
+    lastSuccessAt: null,
+    lastSuccessBytes: null,
+    lastError: null,
+    lastErrorAt: null,
+    expiredRestorePoint: null,
+    ...(row && JSON.parse(row.value)),
+    retentionHours: BACKUP_KEEP,
+  };
+}
+
+async function saveStatus(change) {
+  const { retentionHours, ...status } = await backupStatus();
+  await db
+    .query(
+      `INSERT INTO app_settings /* public-neutral */ (key, value, updated_at)
+       VALUES (?, ?, ?)
+       ON CONFLICT (key) DO UPDATE
+         SET value = excluded.value, updated_at = excluded.updated_at`,
+    )
+    .run(
+      STATUS_KEY,
+      JSON.stringify({ ...status, ...change }),
+      new Date().toISOString(),
+    );
+}
+
+// Rejects when no backup was written, so the job that ran it fails with it.
 export async function runBackup() {
   const ts = new Date().toISOString().replace(/[:.]/g, "-").slice(0, 19);
   const base = join(BACKUP_DIR, `backup-${ts}.sqlite`);
   const tmp = `${base}.tmp`;
   const finalPath = BACKUP_GZIP ? `${base}.gz` : base;
+  const status = {};
+  let failure;
 
   try {
     await mkdir(BACKUP_DIR, { recursive: true });
@@ -92,25 +132,42 @@ export async function runBackup() {
 
     console.log(`[backup] saved ${finalPath}`);
     await pruneToCount(BACKUP_KEEP);
+    Object.assign(status, {
+      lastSuccessAt: new Date().toISOString(),
+      lastSuccessBytes: (await stat(finalPath)).size,
+      lastError: null,
+      lastErrorAt: null,
+    });
   } catch (err) {
+    failure = err;
     console.error(`[backup] failed: ${err.message}`);
     for (const f of [tmp, finalPath]) {
       try {
         await unlink(f);
       } catch {}
     }
-  } finally {
-    // Retention is enforced whether or not this run succeeded: the privacy
-    // policy promises deleted data is gone from backups after BACKUP_KEEP (48)
-    // hours, and a run of failed backups must not quietly suspend that.
-    try {
-      await pruneExpired();
-      await prunePreRestore();
-      await pruneStaleTmp();
-    } catch (err) {
-      console.error(`[backup] prune failed: ${err.message}`);
-    }
+    Object.assign(status, {
+      lastError: String(err.message).slice(0, 300),
+      lastErrorAt: new Date().toISOString(),
+    });
   }
+
+  // Retention is enforced whether or not this run succeeded: the privacy
+  // policy promises deleted data is gone from backups after BACKUP_KEEP (48)
+  // hours, and a run of failed backups must not quietly suspend that.
+  try {
+    status.expiredRestorePoint = await pruneExpired();
+    await prunePreRestore();
+    await pruneStaleTmp();
+  } catch (err) {
+    console.error(`[backup] prune failed: ${err.message}`);
+  }
+  try {
+    await saveStatus(status);
+  } catch (err) {
+    console.error(`[backup] status not saved: ${err.message}`);
+  }
+  if (failure) throw failure;
 }
 
 // Timestamp embedded in backup and pre-restore file names:
@@ -147,15 +204,15 @@ async function pruneToCount(keep) {
 // Delete backups older than BACKUP_KEEP hours, except the newest one. While
 // backups are succeeding that exception never applies (the newest is at most
 // an hour old). If they keep failing, the last good backup is kept so there is
-// still something to restore from, and this logs an error every run so the
-// failure (and the fact that this copy is past the promised retention) gets
-// noticed rather than silently resolved by deleting it.
+// still something to restore from. That copy is then past the promised
+// retention, so its time is returned for the admin's backup state (null
+// otherwise) and logged every run rather than silently resolved by deleting it.
 async function pruneExpired() {
   let files;
   try {
     files = await listBackups();
   } catch {
-    return;
+    return null;
   }
   const cutoff = Date.now() - BACKUP_KEEP * ONE_HOUR;
   const [newest, ...older] = files;
@@ -166,11 +223,11 @@ async function pruneExpired() {
     console.log(`[backup] pruned ${f} (older than ${BACKUP_KEEP}h)`);
   }
   const newestAt = newest ? nameTime(newest.slice("backup-".length)) : NaN;
-  if (!Number.isNaN(newestAt) && newestAt < cutoff) {
-    console.error(
-      `[backup] newest backup ${newest} is older than ${BACKUP_KEEP}h: backups are failing; kept as the only restore point, past the stated retention`,
-    );
-  }
+  if (Number.isNaN(newestAt) || newestAt >= cutoff) return null;
+  console.error(
+    `[backup] newest backup ${newest} is older than ${BACKUP_KEEP}h: backups are failing; kept as the only restore point, past the stated retention`,
+  );
+  return new Date(newestAt).toISOString();
 }
 
 // A `.sqlite.tmp` is only ever the in-flight export of one run. If the process

@@ -86,6 +86,7 @@ export default function FaqField({
             aria-label={`Frage ${i + 1} anordnen`}
           >
             <Button
+              className="admin-button admin-button--small"
               aria-label={`Frage ${i + 1} nach oben verschieben`}
               disabled={i === 0}
               onClick={() => move(i, -1)}
@@ -93,6 +94,7 @@ export default function FaqField({
               Nach oben
             </Button>
             <Button
+              className="admin-button admin-button--small"
               aria-label={`Frage ${i + 1} nach unten verschieben`}
               disabled={i === value.items.length - 1}
               onClick={() => move(i, 1)}
@@ -100,7 +102,7 @@ export default function FaqField({
               Nach unten
             </Button>
             <Button
-              className="publication-faq-remove"
+              className="admin-button admin-button--danger-secondary admin-button--small publication-faq-remove"
               aria-label={`Frage ${i + 1} entfernen`}
               onClick={() => {
                 const nextId = value.items[i + 1]?.id || value.items[i - 1]?.id;
@@ -118,7 +120,7 @@ export default function FaqField({
         </Collapsible.Root>
       ))}
       <Button
-        className="publication-faq-add"
+        className="admin-button admin-button--block publication-faq-add"
         ref={addButton}
         onClick={() => {
           const id = `question-${crypto.randomUUID()}`;

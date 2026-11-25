@@ -8,6 +8,11 @@ export const fixtureBoot = {
   },
 };
 export async function fixtureFetch(path, options = {}) {
+  if (path.startsWith("/api/signer-functions"))
+    return Response.json([
+      { label: "Sprecher*in", count: 3 },
+      { label: "Mitglied", count: 2 },
+    ]);
   let body = {};
   try {
     body = JSON.parse(options.body || "{}");

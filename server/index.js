@@ -10,7 +10,12 @@ import {
   publicationFields,
   configFromDocument,
 } from "./publications.js";
-import { buildFrontend, documentHtml, adminHtml } from "./frontend.js";
+import {
+  buildFrontend,
+  documentHtml,
+  adminHtml,
+  SIGNING_PAUSED,
+} from "./frontend.js";
 import { normalizeImage, generateOg, assetPath } from "./assets.js";
 import { createAssetLifecycle } from "./asset-lifecycle.js";
 import { sanitizeRich } from "./rich-content.js";
@@ -20,7 +25,11 @@ import {
   memoryTemplates,
 } from "./template-snapshot.js";
 import { createEmailManager, deliveryContext } from "./email-setup.js";
-import { checkMailboxDns, ownershipToken } from "./mailbox-dns.js";
+import {
+  checkMailboxDns,
+  dnsInstructions,
+  ownershipToken,
+} from "./mailbox-dns.js";
 import { createStatistics, eligibleRequest } from "./statistics.js";
 import { createMeetingService } from "./meeting-service.js";
 import { timingSafeEqual, createHash } from "node:crypto";
@@ -44,12 +53,11 @@ import {
 import { regionLabels } from "../config/region.js";
 import { resolvePrivacy, retentionCutoff } from "../config/privacy.js";
 import { resolveInvite, statsDisplay } from "../config/invite.js";
-import {
-  editableFields,
-  cleanValue,
-  GROUPS as EDITABLE_GROUPS,
-} from "../config/editable.js";
+import { editableFields } from "../config/editable.js";
 import { fillText } from "../config/ui.js";
+import { SIGNER_DETAIL_LIMIT } from "../config/signer-details.js";
+import { GERMAN_STATES } from "../config/states.js";
+import { SELECTION_LIMIT } from "../config/selection.js";
 
 // The config as deployed, before admin overrides ("Texte & Modus") are applied
 // onto `cfg` below. Taken first, so it never contains an override.
@@ -62,12 +70,14 @@ import {
   setMilestones,
   getNewsletterStats,
   getOccupations,
+  getSignerFunctions,
   getKreisverbandStats,
   insertSigner,
   insertZoomRegistration,
   getSignerForZoomInvite,
   getZoomRegistrationCount,
   listZoomRegistrations,
+  removeZoomRegistration,
   getZoomCounts,
   getZoomRecipients,
   issueZoomUnsubscribeToken,
@@ -115,15 +125,19 @@ import {
   getEmailTemplate,
   listCampaigns,
   getCampaignById,
+  getPendingCampaignsUsing,
   getCampaignRecipients,
   createCampaign,
   cancelCampaign,
+  stopCampaign,
   claimCampaignById,
   deferCampaign,
   getDueCampaignIds,
   markCampaignSent,
   markCampaignFailed,
   setCampaignProgress,
+  getSignatureActivity,
+  getExpiredUnmailedSignups,
   retryAbortedCampaign,
   getDeliveredEmails,
   markDelivered,
@@ -134,6 +148,24 @@ import {
   getNewsletterNotZoomRecipients,
   getNewsletterRecipientsByIds,
   listNewsletterSigners,
+  listSigners,
+  removeAndBlockSigner,
+  removeAndBlockSigners,
+  eraseSigner,
+  updateSignerByAdmin,
+  getSignerForAdmin,
+  lookupSignups,
+  listSigningBlocks,
+  exportPublicSigners,
+  exportMeetingRegistrations,
+  recordAdminAction,
+  lastAdminActionAt,
+  listAdminActions,
+  purgeOldAdminActions,
+  getNewsletterOptIn,
+  confirmNewsletterOptIn,
+  extendPendingConfirmation,
+  unblockSigning,
   selectedNewsletterSigners,
   listNewsletterSignerIds,
   getNewsletterSignerFilters,
@@ -157,18 +189,33 @@ import {
   getStateResolutionStats,
   getDistinctKreisverbands,
   mergeKreisverband,
+  assignKvState,
+  undoMerge,
+  deleteExpiredMerges,
   insertKvNotTypo,
   loadKvNotTypo,
   getUnresolvedKvs,
   clearEmptyKvCacheEntries,
-  upsertKvStateCache,
-  bulkUpdateSignerStateByKv,
   getDistinctOccupations,
   mergeOccupation,
   insertOccNotTypo,
   loadOccNotTypo,
   normalizeOccupation,
+  isSigningBlocked,
 } from "./db.js";
+import {
+  addByHand,
+  applyImport,
+  duplicatesOf,
+  linkDuplicate,
+  listFirstSigners,
+  planImport,
+  readImportFile,
+  replaceOrder,
+  setMark,
+  setPosition,
+} from "./first-signers.js";
+import { withoutEmailAddresses } from "../db/admin-actions.js";
 import {
   installEmailManager,
   sendVerificationEmail,
@@ -184,6 +231,7 @@ import {
   interpolateTemplate,
   renderTemplateBySlug,
   sendAlreadySignedEmail,
+  sendNewsletterOptInEmail,
   sendInviteEmail,
   zoomCalendarButton,
   langLocale,
@@ -198,11 +246,15 @@ import {
   firstNameHtml,
   escapeHtml,
   pageCopy,
+  newsletterOptInCopy,
   fill,
 } from "./pages.js";
-import { checkRateLimit } from "./ratelimit.js";
+import { checkRateLimit, releaseRateLimit } from "./ratelimit.js";
+import { clientIp } from "./client-ip.js";
+import { createAdminSessions } from "./admin-sessions.js";
 import { stopCache } from "./cache.js";
-import { runBackup } from "./backup.js";
+import { runBackup, backupStatus } from "./backup.js";
+import { operationsHealth } from "./health.js";
 import {
   initJobs,
   enqueue as enqueueJob,
@@ -210,8 +262,9 @@ import {
   startWorker,
   stopWorker,
   purgeDeadJobs,
+  requeueDeadJobs,
 } from "../db/jobs.js";
-import { createDurableWork } from "./durable-work.js";
+import { createDurableWork, JobsUnavailable } from "./durable-work.js";
 import {
   prepareQueuedEmail,
   normalizeQueuedEmailPayload,
@@ -420,6 +473,15 @@ if (!ADMIN_PATH || !ADMIN_PASSWORD || !ADMIN_JWT_SECRET) {
 if (ADMIN_JWT_SECRET.length < 32) {
   throw new Error("ADMIN_JWT_SECRET must be at least 32 characters long.");
 }
+// Optional. It ends up in the settings of an uptime monitor, so it must not be
+// a secret that opens anything else.
+const HEALTH_TOKEN = process.env.HEALTH_TOKEN || "";
+if (HEALTH_TOKEN && HEALTH_TOKEN.length < 16) {
+  throw new Error("HEALTH_TOKEN must be at least 16 characters long.");
+}
+if (HEALTH_TOKEN && HEALTH_TOKEN === ADMIN_PASSWORD) {
+  throw new Error("HEALTH_TOKEN must not equal ADMIN_PASSWORD.");
+}
 if (!isDev && ADMIN_PASSWORD.length < 16) {
   throw new Error(
     "ADMIN_PASSWORD must be at least 16 characters long in production.",
@@ -460,11 +522,17 @@ const admin = () =>
       "Content-Type": "text/html; charset=utf-8",
       ...securityHeaders,
       "Cache-Control": "no-store",
+      // The path is a secret of sorts, so robots.txt must not name it; this
+      // keeps a crawler that finds it anyway from listing it.
+      "X-Robots-Tag": "noindex",
     },
   });
 
 const adminRoute = `/${ADMIN_PATH}`;
-const jwtSecret = new TextEncoder().encode(ADMIN_JWT_SECRET);
+const adminSessions = await createAdminSessions(sqlDb, {
+  password: ADMIN_PASSWORD,
+  secret: ADMIN_JWT_SECRET,
+});
 
 // Public-API session tokens. The public frontend fetches a short-lived signed
 // token from /api/session and sends it on every public API call, so the
@@ -580,31 +648,20 @@ const securityHeaders = {
 };
 
 function getClientIp(req) {
-  if (TRUST_PROXY) {
-    // When behind a single trusted reverse proxy, prefer X-Real-IP first.
-    // Fall back to the right-most X-Forwarded-For address (the proxy-added hop)
-    // to avoid trusting a client-supplied left-most value.
-    const real = req.headers.get("x-real-ip");
-    if (real) return real.trim();
-    const xff = req.headers.get("x-forwarded-for");
-    if (xff) {
-      const parts = xff
-        .split(",")
-        .map((s) => s.trim())
-        .filter(Boolean);
-      const last = parts[parts.length - 1];
-      if (last) return last;
-    }
-    // Proxy sent no forwarding headers; fall through to the socket address.
-  }
-  // Not behind a trusted proxy (or none of the forwarding headers were set):
-  // use the real TCP peer address. Forwarding headers are client-controlled,
-  // so trusting them without TRUST_PROXY lets an attacker rotate X-Real-IP to
-  // dodge every per-IP rate limit (incl. admin-login brute-force protection).
-  return server.requestIP(req)?.address || "unknown";
+  return clientIp(req.headers, server.requestIP(req)?.address, TRUST_PROXY);
 }
 
+// Sign-in attempts allowed per window: from one address, and failed ones from
+// all addresses together. The second stops a guess spread over many addresses.
+// It also lets whoever keeps failing that often hold the team out for the
+// window, which the 16-character minimum on ADMIN_PASSWORD makes a nuisance
+// rather than a way in.
+const LOGIN_WINDOW_MS = 15 * 60 * 1000;
+const LOGIN_ATTEMPTS_PER_ADDRESS = 5;
+const LOGIN_FAILURES_OVERALL = 30;
+
 const MAX_BODY_BYTES = 128 * 1024;
+const MAX_IMAGE_BYTES = 8 * 1024 * 1024;
 function bodyTooLarge(req) {
   const len = parseInt(req.headers.get("content-length") || "0", 10);
   return len > MAX_BODY_BYTES;
@@ -628,10 +685,118 @@ function normalizeKv(raw, keep = "") {
   return KV_OPTIONS.find(same) ?? (keep && same(keep) ? keep : "");
 }
 const OCCUPATION_ENABLED = Boolean(cfg.features.occupationField);
+const SIGNER_FUNCTION_ENABLED = Boolean(cfg.sign.fields.signerFunction);
+const OCCUPATION_LIMIT = SIGNER_FUNCTION_ENABLED ? SIGNER_DETAIL_LIMIT : 100;
 const INVITES_ENABLED = Boolean(cfg.features.inviteLinks);
+
+// A merge target is stored as if it had been typed into the sign-up form, so
+// it has to come through that form's cleaning unchanged. null otherwise.
+function mergeTarget(raw, clean) {
+  const value = String(raw ?? "").trim();
+  return value && clean(value) === value ? value : null;
+}
 
 function featureOff() {
   return new Response("Not found", { status: 404 });
+}
+
+// Whether a signature's function and organisation can be public at all.
+const SIGNER_DETAILS_PUBLIC = Boolean(
+  cfg.features.publicSignerDetails || cfg.features.publicFirstSignerDetails,
+);
+
+const invalidSigner = () =>
+  Object.assign(new Error("Ungültige Unterschrift."), { status: 400 });
+
+const HAND_ENTRY_HAS_NO_ADDRESS =
+  "Dieser Eintrag wurde von Hand angelegt und hat keine E-Mail-Adresse. Er bekommt keine E-Mails und hat keine Adresse zum Sperren.";
+
+// The import file is CSV text inside the JSON body, at most 1 MiB.
+const IMPORT_BODY_BYTES = 1536 * 1024;
+function importRows(csv) {
+  if (typeof csv !== "string" || csv.length > 1024 * 1024)
+    throw Object.assign(
+      new Error("Die Datei muss eine CSV-Datei mit höchstens 1 MB sein."),
+      { status: 400 },
+    );
+  return readImportFile(csv).map((row) => ({
+    ...row,
+    organisation: OCCUPATION_ENABLED ? row.organisation : "",
+    signerFunction: SIGNER_FUNCTION_ENABLED ? row.signerFunction : "",
+  }));
+}
+
+function signerId(req) {
+  const id = Number(req.params.id);
+  if (!Number.isInteger(id) || id < 1) throw invalidSigner();
+  return id;
+}
+
+// Told to the admin after queueing a mail while sending is down.
+// The log entry for a merge: the id it can be taken back by, and how many
+// signatures it changed.
+function mergeEntry(merged) {
+  return { targetId: merged.undoId ?? null, count: merged.updated ?? null };
+}
+
+function mailDelay() {
+  return emailManager.status.ready ? {} : { emailDelayed: true };
+}
+
+// A mail the team sends one person by hand: never to a blocked mailbox, and
+// at most once per ADMIN_MAIL_PAUSE_MS, so repeated clicks cannot flood
+// anyone's inbox.
+const ADMIN_MAIL_PAUSE_MS = 10 * 60 * 1000;
+async function adminMailRefused(signer, action, id) {
+  if (await isSigningBlocked(signer.email))
+    return json(
+      { error: "Diese Adresse ist gesperrt. Es wird keine E-Mail gesendet." },
+      409,
+    );
+  const last = await lastAdminActionAt(action, id);
+  const wait = last ? Date.parse(last) + ADMIN_MAIL_PAUSE_MS - Date.now() : 0;
+  if (wait <= 0) return null;
+  const minutes = Math.ceil(wait / 60000);
+  return json(
+    {
+      error: `Diese E-Mail wurde gerade erst gesendet. Versuche es in ${minutes === 1 ? "einer Minute" : `${minutes} Minuten`} erneut.`,
+    },
+    429,
+    { "Retry-After": String(Math.ceil(wait / 1000)) },
+  );
+}
+
+const csvDate = (value) =>
+  new Date(value).toLocaleString("de-DE", {
+    timeZone: "Europe/Berlin",
+    dateStyle: "short",
+    timeStyle: "short",
+  });
+
+// A spreadsheet runs a cell that starts like a formula, so those get a
+// leading apostrophe. Semicolons and a byte order mark are what a German
+// Excel opens without an import dialog.
+function csvCell(value) {
+  let text = String(value ?? "");
+  if (/^[=+\-@\t\r]/.test(text)) text = `'${text}`;
+  return /[";\n\r]/.test(text) ? `"${text.replaceAll('"', '""')}"` : text;
+}
+
+// columns: [heading, (row) => value]; falsy entries are left out.
+function csvDownload(name, columns, rows) {
+  const shown = columns.filter(Boolean);
+  const lines = [
+    shown.map(([heading]) => heading),
+    ...rows.map((row) => shown.map(([, value]) => value(row))),
+  ].map((cells) => cells.map(csvCell).join(";"));
+  return new Response(`\uFEFF${lines.join("\r\n")}\r\n`, {
+    headers: {
+      ...securityHeaders,
+      "Content-Type": "text/csv; charset=utf-8",
+      "Content-Disposition": `attachment; filename="${name}-${new Date().toISOString().slice(0, 10)}.csv"`,
+      "Cache-Control": "no-store",
+    },
+  });
 }
 
 function concatUint8Arrays(chunks) {
@@ -646,10 +811,21 @@ function concatUint8Arrays(chunks) {
   return result;
 }
 
+const payloadTooLarge = () =>
+  Object.assign(new Error("Die Anfrage ist zu groß."), { status: 413 });
+
+// Every handler reads fields off the body, so anything but a JSON object
+// (`null`, a list, a bare string) is refused here instead of crashing there.
+function jsonObject(text) {
+  const body = JSON.parse(text);
+  if (!body || typeof body !== "object" || Array.isArray(body))
+    throw Object.assign(new Error("Ungültige Anfrage."), { status: 400 });
+  return body;
+}
+
 async function parseJsonBody(req, limit = MAX_BODY_BYTES) {
   const len = parseInt(req.headers.get("content-length") || "0", 10);
-  if (len > limit)
-    throw Object.assign(new Error("Payload too large"), { status: 413 });
+  if (len > limit) throw payloadTooLarge();
 
   const bodyStream = req.body;
   if (bodyStream && typeof bodyStream.getReader === "function") {
@@ -661,23 +837,21 @@ async function parseJsonBody(req, limit = MAX_BODY_BYTES) {
       if (done) break;
       if (value) {
         size += value.byteLength || value.length || 0;
-        if (size > limit)
-          throw Object.assign(new Error("Payload too large"), { status: 413 });
+        if (size > limit) throw payloadTooLarge();
         chunks.push(value);
       }
     }
-    const text = new TextDecoder().decode(concatUint8Arrays(chunks));
-    return JSON.parse(text);
+    return jsonObject(new TextDecoder().decode(concatUint8Arrays(chunks)));
   }
 
   // No readable stream body (the content-length cap above still applies).
-  return await req.json();
+  return jsonObject(await req.text());
 }
 
-async function constantTimePasswordMatches(submitted) {
+async function constantTimeSecretMatches(submitted, secret) {
   const [left, right] = await Promise.all([
     sha256Hex(String(submitted || "")),
-    sha256Hex(ADMIN_PASSWORD),
+    sha256Hex(secret),
   ]);
   const leftBuffer = Buffer.from(left, "hex");
   const rightBuffer = Buffer.from(right, "hex");
@@ -687,28 +861,14 @@ async function constantTimePasswordMatches(submitted) {
   );
 }
 
-async function createAdminToken() {
-  return await new SignJWT({ scope: "admin" })
-    .setProtectedHeader({ alg: "HS256" })
-    .setSubject("admin")
-    .setIssuedAt()
-    // Short TTL limits the blast radius of a leaked admin token (no revocation
-    // list exists; rotating ADMIN_JWT_SECRET is the only hard kill switch).
-    .setExpirationTime("2h")
-    .sign(jwtSecret);
-}
+const constantTimePasswordMatches = (submitted) =>
+  constantTimeSecretMatches(submitted, ADMIN_PASSWORD);
 
-async function requireAdmin(req) {
+function requireAdmin(req) {
   const auth = req.headers.get("authorization") || "";
-  const token = auth.startsWith("Bearer ") ? auth.slice(7).trim() : "";
-  if (!token) return false;
-
-  try {
-    const { payload } = await jwtVerify(token, jwtSecret);
-    return payload.sub === "admin" && payload.scope === "admin";
-  } catch {
-    return false;
-  }
+  return adminSessions.verify(
+    auth.startsWith("Bearer ") ? auth.slice(7).trim() : "",
+  );
 }
 
 async function createPublicToken() {
@@ -761,18 +921,6 @@ function reqUi(req) {
   return configFor(reqLang(req)).ui;
 }
 
-// The language an admin copy request works on (?lang= or the body's `lang`):
-// one of the letter's languages, the default when absent, null when unknown.
-function adminCopyLang(req, bodyLang) {
-  let q = null;
-  try {
-    q = new URL(req.url).searchParams.get("lang");
-  } catch {}
-  const l = bodyLang ?? q;
-  if (l == null || l === "") return DEFAULT_LANG;
-  return LANGUAGES.includes(l) ? l : null;
-}
-
 function denyRate(req, bucket, max, windowMs) {
   const { allowed, retryAfter } = checkRateLimit(
     getClientIp(req),
@@ -801,21 +949,19 @@ async function adminJson(req, handler) {
   try {
     return await handler();
   } catch (err) {
-    if (err.status === 413) return json({ error: err.message }, 413);
-    if (err instanceof SyntaxError) return json({ error: "Invalid JSON" }, 400);
+    if (err instanceof SyntaxError)
+      return json({ error: "Ungültige Anfrage." }, 400);
     if (err.status === 409)
       return json({ error: err.message, revision: err.revision }, 409);
-    if (err.status === 400) return json({ error: err.message }, 400);
+    if (err.status === 400 || err.status === 413)
+      return json({ error: err.message }, err.status);
+    // Only this 503 carries a text written for the admin; a mail provider's
+    // 503 has a status too and must stay behind the generic answer.
+    if (err instanceof JobsUnavailable)
+      return json({ error: err.message }, 503);
     console.error("Admin API error:", err);
     return json({ error: "Internal server error" }, 500);
   }
-}
-
-function maskEmail(email) {
-  const [local = "", domain = ""] = String(email || "").split("@");
-  const maskedLocal =
-    local.length <= 2 ? `${local[0] || ""}*` : `${local.slice(0, 2)}***`;
-  return `${maskedLocal}@${domain}`;
 }
 
 async function sleep(ms) {
@@ -1037,6 +1183,9 @@ const privacy = resolvePrivacy(cfg);
 const TREFFEN_RETENTION_MS = privacy.treffenRetentionMs;
 const confirmationExpiry = () =>
   new Date(Date.now() + privacy.confirmationLinkMs);
+// The admin log is kept as long as the delivery log unless the letter sets
+// privacy.adminLogDays.
+const ADMIN_LOG_DAYS = privacy.adminLogDays;
 
 async function queuedCredentials(kind, args) {
   if (kind === "invite") {
@@ -1132,6 +1281,34 @@ function rebuildHtml(snapshot) {
 }
 publications = await createPublicationStore(publicationConnection, {
   assets: assetLifecycle,
+  // A removed template stays in email_templates, where a campaign created
+  // earlier would still find and send it.
+  async beforeCommit(document, previous, connection) {
+    const kept = new Set(document.templates.map((t) => t.id));
+    const removed = (previous?.templates || []).filter((t) => !kept.has(t.id));
+    if (!removed.length) return;
+    const [campaign, ...more] = await getPendingCampaignsUsing(
+      removed.map((t) => t.id),
+      connection,
+    );
+    if (!campaign) return;
+    const state =
+      campaign.status === "scheduled"
+        ? `geplant für ${new Intl.DateTimeFormat("de-DE", {
+            dateStyle: "medium",
+            timeStyle: "short",
+            timeZone: "Europe/Berlin",
+          }).format(new Date(campaign.scheduled_at))}`
+        : campaign.status === "sending"
+          ? "wird gerade gesendet"
+          : "wird nach einem Fehler erneut versucht";
+    throw Object.assign(
+      new Error(
+        `${removed.length === 1 ? `Die Vorlage „${removed[0].name}“ wird` : "Diese Vorlagen werden"} noch für Kampagne #${campaign.id} „${campaign.subject}“ gebraucht (${state})${more.length ? ` und für ${more.length} weitere` : ""}. Sage den Versand im Versandverlauf ab oder warte ihn ab, bevor du die Vorlage entfernst.`,
+      ),
+      { status: 409 },
+    );
+  },
   async prepare(document, { mode }) {
     const configs = {};
     const generatedAssets = [];
@@ -1268,6 +1445,20 @@ const para = (html) => `<p>${html}</p>`;
 const heading = (html) => `<h1>${html}</h1>`;
 const postButton = (label) =>
   `<form method="post"><button type="submit">${label}</button></form>`;
+
+function signingPausedApi(req) {
+  return json({ error: reqUi(req).signForm.pausedMessage }, 503);
+}
+
+function signingPausedPage(req) {
+  const lang = reqLang(req);
+  const { pausedTitle, pausedMessage } = configFor(lang).ui.signForm;
+  return htmlPage(
+    heading(escapeHtml(pausedTitle)) + para(escapeHtml(pausedMessage)),
+    503,
+    lang,
+  );
+}
 
 function treffenLinkExpired(lang) {
   const copy = pagesIn(lang);
@@ -1612,14 +1803,14 @@ const server = Bun.serve(
         PUT(req) {
           return adminJson(req, async () => {
             const body = await parseJsonBody(req, 2100000);
-            return json(
-              publicationResponse(
-                await publications.publish(
-                  body.document,
-                  body.expectedRevision,
-                ),
-              ),
+            const published = await publications.publish(
+              body.document,
+              body.expectedRevision,
             );
+            await recordAdminAction("website.publish", {
+              targetId: published.revision,
+            });
+            return json(publicationResponse(published));
           });
         },
       },
@@ -1678,9 +1869,12 @@ const server = Bun.serve(
       "/api/admin/publication/assets": {
         POST(req) {
           return adminJson(req, async () => {
-            if (Number(req.headers.get("content-length")) > 8 * 1024 * 1024)
-              return json({ error: "Image exceeds 8 MB" }, 413);
+            const tooLarge = () => json({ error: "Image exceeds 8 MB" }, 413);
+            if (Number(req.headers.get("content-length")) > MAX_IMAGE_BYTES)
+              return tooLarge();
+            // A chunked upload announces no length; count what arrived.
             const bytes = Buffer.from(await req.arrayBuffer());
+            if (bytes.length > MAX_IMAGE_BYTES) return tooLarge();
             const asset = await normalizeImage(bytes);
             const url = await assetLifecycle.upload(asset);
             return json({ url, width: asset.width, height: asset.height });
@@ -1698,7 +1892,7 @@ const server = Bun.serve(
         },
         POST(req) {
           return adminJson(req, async () => {
-            const body = await req.json();
+            const body = await parseJsonBody(req);
             let result;
             if (body.action === "takeover")
               result = await emailManager.save(
@@ -1729,7 +1923,23 @@ const server = Bun.serve(
                 body.resolution,
                 body.expectedRevision,
               );
-            else return json({ error: "Unknown action" }, 400);
+            else if (body.action === "reconcile-all")
+              result = await emailManager.reconcileAll(
+                body.resolution,
+                body.expectedRevision,
+              );
+            else if (body.action === "requeue-failed") {
+              // The job handler skips mail that went out meanwhile or whose
+              // signature is already confirmed or expired.
+              await requeueDeadJobs("emails", EMAIL_JOB_TTL_S);
+              result = await emailManager.diagnostics();
+            } else return json({ error: "Unknown action" }, 400);
+            if (["save", "takeover", "activate"].includes(body.action))
+              await recordAdminAction("settings.email");
+            else if (["reconcile", "reconcile-all"].includes(body.action))
+              await recordAdminAction("email.reconcile");
+            else if (body.action === "requeue-failed")
+              await recordAdminAction("email.requeue-failed");
             refreshEmailFacts();
             return json(result);
           });
@@ -1738,7 +1948,12 @@ const server = Bun.serve(
       "/api/admin/email/dns": {
         POST(req) {
           return adminJson(req, async () => {
-            const { domain } = await req.json();
+            const body = await parseJsonBody(req);
+            const domain = String(body.domain ?? "")
+              .trim()
+              .toLowerCase();
+            // Validates the name before a token is stored under it.
+            dnsInstructions(domain, "");
             const key = `mailbox-dns:${domain}`;
             let row = await sqlDb
               .query("SELECT value FROM app_settings WHERE key=?")
@@ -1750,10 +1965,13 @@ const server = Bun.serve(
                   "INSERT INTO app_settings /* public-neutral */ (key,value) VALUES (?,?) ON CONFLICT(key) DO NOTHING",
                 )
                 .run(key, token);
-            return json(
-              await checkMailboxDns(String(domain).toLowerCase(), token),
-            );
+            return json(await checkMailboxDns(domain, token));
           });
+        },
+      },
+      "/api/admin/backup": {
+        GET(req) {
+          return adminJson(req, async () => json(await backupStatus()));
         },
       },
       "/api/admin/statistics": {
@@ -1770,15 +1988,16 @@ const server = Bun.serve(
         },
         PUT(req) {
           return adminJson(req, async () => {
-            const body = await req.json();
+            const body = await parseJsonBody(req);
             const document = structuredClone(publications.current.document);
             if (body.mode === "builtin" && !statistics)
               return json(
-                { error: "Statistics are currently unavailable" },
+                { error: "Die Statistik ist derzeit nicht verfügbar." },
                 503,
               );
             document.analytics = { mode: body.mode };
             await publications.publish(document, body.expectedRevision);
+            await recordAdminAction("settings.statistics");
             return json({ ok: true });
           });
         },
@@ -1828,7 +2047,6 @@ const server = Bun.serve(
             "Allow: /",
             "",
             "Disallow: /api/",
-            `Disallow: /${ADMIN_PATH}`,
             "",
             `Sitemap: ${BASE_URL}/sitemap.xml`,
           ].join("\n");
@@ -1871,6 +2089,46 @@ const server = Bun.serve(
             },
             db && durableWork.status.ready ? 200 : 503,
           );
+        },
+      },
+
+      // For an uptime monitor: 503 as soon as mail, the mail queue or the
+      // backups need a person. /api/health above stays the container's own
+      // check, which must not fail a deploy over a paused mail profile.
+      "/api/health/operations": {
+        async GET(req) {
+          const blocked = denyRate(req, "health-operations", 30, 60 * 1000);
+          if (blocked) return blocked;
+          const bearer = /^Bearer (.+)$/.exec(
+            req.headers.get("authorization") || "",
+          )?.[1];
+          if (
+            bearer &&
+            !(
+              HEALTH_TOKEN &&
+              (await constantTimeSecretMatches(bearer, HEALTH_TOKEN))
+            )
+          )
+            return json({ error: "Unauthorized" }, 401);
+          let health;
+          try {
+            health = operationsHealth({
+              db: await healthCheck(),
+              jobs: durableWork.status,
+              mail: await emailManager.diagnostics(),
+              backup: await backupStatus(),
+              uptimeMs: process.uptime() * 1000,
+            });
+          } catch (error) {
+            console.error("GET /api/health/operations error:", error);
+            return json({ ok: false, checks: { app: "down" } }, 503, {
+              "Cache-Control": "no-store",
+            });
+          }
+          const { details, ...open } = health;
+          return json(bearer ? health : open, health.ok ? 200 : 503, {
+            "Cache-Control": "no-store",
+          });
         },
       },
 
@@ -2004,6 +2262,15 @@ const server = Bun.serve(
         },
       },
 
+      "/api/signer-functions": {
+        async GET(req) {
+          if (!SIGNER_FUNCTION_ENABLED) return featureOff();
+          const blocked = await denyPublic(req, "public-read", 120, 60 * 1000);
+          if (blocked) return blocked;
+          return json(await getSignerFunctions());
+        },
+      },
+
       "/api/kreisverband-stats": {
         async GET(req) {
           if (!KV_ENABLED) return featureOff();
@@ -2061,7 +2328,10 @@ const server = Bun.serve(
 
       "/api/sign": {
         async POST(req) {
-          if (!durableWork.status.ready || !emailManager.status.ready)
+          if (SIGNING_PAUSED) return signingPausedApi(req);
+          // Mail being down doesn't stop signing: the confirmation mail
+          // waits in the queue and goes out once sending works again.
+          if (!durableWork.status.ready)
             return json(
               {
                 error:
@@ -2092,10 +2362,16 @@ const server = Bun.serve(
             const email = sanitizeEmail(body.email);
             const kv = KV_ENABLED ? normalizeKv(body.kv) : "";
             const occupation = OCCUPATION_ENABLED
-              ? sanitize(body.occupation || "")
+              ? sanitize(body.occupation || "", OCCUPATION_LIMIT)
+              : "";
+            const signerFunction = SIGNER_FUNCTION_ENABLED
+              ? sanitize(body.signerFunction || "", SIGNER_DETAIL_LIMIT)
               : "";
             const newsletter = Boolean(body.newsletter);
             const showPublicly = body.agree === true;
+            const showSignerDetails =
+              cfg.features.publicSignerDetails &&
+              body.showSignerDetails === true;
             // Unknown codes are dropped at confirm (nothing matches them); a
             // malformed one isn't stored at all.
             const inviteRef =
@@ -2113,14 +2389,19 @@ const server = Bun.serve(
             const token = crypto.randomUUID();
             const expiresAt = confirmationExpiry();
 
+            const delivery = emailManager.status.ready
+              ? {}
+              : { emailDelayed: true };
             return await durableWork.run(async () => {
-              const { ok, alreadyVerified } = await insertSigner({
+              const { ok, alreadyVerified, blocked } = await insertSigner({
                 name,
                 email,
                 kv,
                 occupation,
+                signerFunction,
                 newsletter,
                 showPublicly,
+                showSignerDetails,
                 token,
                 expiresAt,
                 inviteRef,
@@ -2128,6 +2409,9 @@ const server = Bun.serve(
                 // The page's language, for this person's mails and link pages.
                 lang: storedLang(cfg, reqLang(req)),
               });
+
+              // Same answer as any sign-up, so a blocked address can't tell.
+              if (blocked) return json({ ok: true, ...delivery });
 
               const signerId = await getSignerIdByEmail(email);
               if (!ok && alreadyVerified) {
@@ -2137,7 +2421,7 @@ const server = Bun.serve(
                     baseUrl: getBaseUrl(req),
                   });
                 }
-                return json({ ok: true });
+                return json({ ok: true, ...delivery });
               }
 
               await queueEmail("verification", {
@@ -2145,7 +2429,7 @@ const server = Bun.serve(
                 baseUrl: getBaseUrl(req),
               });
 
-              return json({ ok: true });
+              return json({ ok: true, ...delivery });
             });
           } catch (err) {
             console.error("POST /api/sign error:", err);
@@ -2277,7 +2561,10 @@ const server = Bun.serve(
 
       "/api/resend-verification": {
         async POST(req) {
-          if (!durableWork.status.ready || !emailManager.status.ready)
+          if (SIGNING_PAUSED) return signingPausedApi(req);
+          // Mail being down doesn't refuse the request either: the mail
+          // waits in the queue and goes out once sending works again.
+          if (!durableWork.status.ready)
             return json(
               {
                 error:
@@ -2323,7 +2610,10 @@ const server = Bun.serve(
                 });
               }
 
-              return json({ ok: true });
+              return json({
+                ok: true,
+                ...(emailManager.status.ready ? {} : { emailDelayed: true }),
+              });
             });
           } catch (err) {
             console.error("POST /api/resend-verification error:", err);
@@ -2337,6 +2627,7 @@ const server = Bun.serve(
       // link can't confirm a sign-up somebody else submitted for this address.
       "/api/confirm/:token": {
         async GET(req) {
+          if (SIGNING_PAUSED) return signingPausedPage(req);
           const blocked = denyRate(req, "token-link", 120, 15 * 60 * 1000);
           if (blocked) return blocked;
           try {
@@ -2357,7 +2648,12 @@ const server = Bun.serve(
                 `${escapeHtml(fields?.kreisverband?.label || "Kreisverband")}: ${escapeHtml(pending.kreisverband)}`,
               pending.occupation &&
                 `${escapeHtml(fields?.occupation?.label || "Beruf")}: ${escapeHtml(pending.occupation)}`,
+              fields?.signerFunction &&
+                pending.signerFunction &&
+                `${escapeHtml(fields.signerFunction.label)}: ${escapeHtml(pending.signerFunction)}`,
               `${copy.publicLabel}: ${yesNo(pending.show_publicly)}`,
+              cfg.features.publicSignerDetails &&
+                `${escapeHtml(configFor(lang).sign.publicDetailsLabel)}: ${yesNo(pending.show_signer_details)}`,
               `${copy.newsletterLabel}: ${yesNo(pending.newsletter)}`,
               INVITES_ENABLED &&
                 `${copy.inviteNameLabel}: ${
@@ -2384,6 +2680,7 @@ const server = Bun.serve(
           }
         },
         async POST(req) {
+          if (SIGNING_PAUSED) return signingPausedPage(req);
           if (!durableWork.status.ready)
             return json(
               {
@@ -2677,10 +2974,21 @@ const server = Bun.serve(
               ? normalizeKv(body.kv, await getSignerKreisverband(email))
               : "";
             const occupation = OCCUPATION_ENABLED
-              ? sanitize(body.occupation || "")
+              ? sanitize(body.occupation || "", OCCUPATION_LIMIT)
               : "";
+            const signerFunction =
+              SIGNER_FUNCTION_ENABLED && body.signerFunction !== undefined
+                ? sanitize(body.signerFunction || "", SIGNER_DETAIL_LIMIT)
+                : undefined;
             const newsletter = Boolean(body.newsletter);
-            const showPublicly = Boolean(body.showPublicly);
+            const showPublicly = body.showPublicly === true;
+            const showSignerDetails = cfg.features.publicSignerDetails
+              ? !showPublicly
+                ? false
+                : typeof body.showSignerDetails === "boolean"
+                  ? body.showSignerDetails
+                  : undefined
+              : undefined;
             // Only honor the delegate flag while the field is enabled.
             const delegierter =
               (await getShowDelegierter()) && Boolean(body.delegierter);
@@ -2693,8 +3001,10 @@ const server = Bun.serve(
               name,
               kreisverband: kv,
               occupation,
+              signerFunction,
               newsletter,
               showPublicly,
+              showSignerDetails,
               inviteShowName: INVITES_ENABLED
                 ? Boolean(body.inviteShowName)
                 : undefined,
@@ -2885,33 +3195,127 @@ const server = Bun.serve(
         },
       },
 
+      // The link in the "Newsletter-Einwilligung" mail. GET only shows the
+      // button; subscribing happens on its POST, so a mail scanner that opens
+      // the link subscribes nobody.
+      "/api/newsletter-einwilligung/:token": {
+        async GET(req) {
+          const blocked = denyRate(req, "token-link", 120, 15 * 60 * 1000);
+          if (blocked) return blocked;
+          try {
+            const signer = await getNewsletterOptIn(req.params.token);
+            const lang = linkLang(req, signer?.lang);
+            const copy = newsletterOptInCopy(lang);
+            if (!signer)
+              return htmlPage(
+                heading(copy.expiredHeading) + para(copy.expiredText),
+                404,
+                lang,
+              );
+            if (signer.newsletter)
+              return htmlPage(
+                heading(copy.doneHeading) + para(copy.doneText),
+                200,
+                lang,
+              );
+            return htmlPage(
+              heading(copy.heading) +
+                para(
+                  fill(copy.intro, { firstName: firstNameHtml(signer.name) }),
+                ) +
+                postButton(copy.button) +
+                para(copy.note),
+              200,
+              lang,
+            );
+          } catch (err) {
+            console.error("GET /api/newsletter-einwilligung error:", err);
+            return htmlPage(
+              heading(pages.error.heading) + para(pages.error.text),
+              500,
+            );
+          }
+        },
+        async POST(req) {
+          const blocked = denyRate(req, "token-link", 120, 15 * 60 * 1000);
+          if (blocked) return blocked;
+          try {
+            const signer = await confirmNewsletterOptIn(req.params.token);
+            const lang = linkLang(req, signer?.lang);
+            const copy = newsletterOptInCopy(lang);
+            return signer
+              ? htmlPage(
+                  heading(copy.doneHeading) + para(copy.doneText),
+                  200,
+                  lang,
+                )
+              : htmlPage(
+                  heading(copy.expiredHeading) + para(copy.expiredText),
+                  404,
+                  lang,
+                );
+          } catch (err) {
+            console.error("POST /api/newsletter-einwilligung error:", err);
+            return htmlPage(
+              heading(pages.error.heading) + para(pages.error.text),
+              500,
+            );
+          }
+        },
+      },
+
       "/api/admin/login": {
         async POST(req) {
           try {
-            const ip = getClientIp(req);
-            const { allowed, retryAfter } = checkRateLimit(
-              ip,
-              "admin-login",
-              5,
-              15 * 60 * 1000,
-            );
-            if (!allowed) {
-              return json({ error: "Zu viele Anmeldeversuche." }, 429, {
+            const tooMany = ({ retryAfter }) =>
+              json({ error: "Zu viele Anmeldeversuche." }, 429, {
                 "Retry-After": String(retryAfter),
               });
-            }
+            const perAddress = checkRateLimit(
+              getClientIp(req),
+              "admin-login",
+              LOGIN_ATTEMPTS_PER_ADDRESS,
+              LOGIN_WINDOW_MS,
+            );
+            if (!perAddress.allowed) return tooMany(perAddress);
+            // Every attempt holds a slot of the shared budget until it turns
+            // out to be a sign-in, so a burst cannot slip past the ceiling.
+            const overall = checkRateLimit(
+              "all",
+              "admin-login-failures",
+              LOGIN_FAILURES_OVERALL,
+              LOGIN_WINDOW_MS,
+            );
+            if (!overall.allowed) return tooMany(overall);
 
-            if (bodyTooLarge(req))
-              return json({ error: "Die Anfrage ist zu groß." }, 413);
             const body = await parseJsonBody(req);
-            const ok = await constantTimePasswordMatches(body.password);
-            if (!ok) return json({ error: "Unauthorized" }, 401);
-
-            return json({ token: await createAdminToken() });
+            if (!(await constantTimePasswordMatches(body.password))) {
+              // The address only: what was typed must never reach a log.
+              console.warn(`[admin] failed login from ${getClientIp(req)}`);
+              return json({ error: "Unauthorized" }, 401);
+            }
+            releaseRateLimit("all", "admin-login-failures");
+            return json({ token: await adminSessions.issue() });
           } catch (err) {
+            if (err.status === 413 || err.status === 400)
+              return json({ error: err.message }, err.status);
+            if (err instanceof SyntaxError)
+              return json({ error: "Ungültige Anfrage." }, 400);
             console.error("POST /api/admin/login error:", err);
             return json({ error: "Internal server error" }, 500);
           }
+        },
+      },
+
+      // Ends every admin session at once, the caller's included.
+      "/api/admin/logout-everywhere": {
+        POST(req) {
+          return adminJson(req, async () => {
+            await adminSessions.revokeAll();
+            await recordAdminAction("session.logout-everywhere");
+            console.info("[admin] every session ended");
+            return json({ ok: true });
+          });
         },
       },
 
@@ -2951,6 +3355,7 @@ const server = Bun.serve(
               document,
               body.expectedRevision,
             );
+            await recordAdminAction("template.create", { targetId: id });
             return json({ ...template, revision: published.revision }, 201);
           });
         },
@@ -2987,12 +3392,15 @@ const server = Bun.serve(
               document,
               body.expectedRevision,
             );
+            await recordAdminAction("template.update", {
+              targetId: template.id,
+            });
             return json({ ...template, revision: published.revision });
           });
         },
         async DELETE(req) {
           return adminJson(req, async () => {
-            const body = await req.json();
+            const body = await parseJsonBody(req);
             const document = structuredClone(publications.current.document);
             document.templates = document.templates.filter(
               (t) => t.id !== Number(req.params.id),
@@ -3001,6 +3409,9 @@ const server = Bun.serve(
               document,
               body.expectedRevision,
             );
+            await recordAdminAction("template.delete", {
+              targetId: Number(req.params.id),
+            });
             return json({ ok: true, revision: published.revision });
           });
         },
@@ -3068,9 +3479,9 @@ const server = Bun.serve(
               if (recipientIds.length === 0) {
                 return json({ error: "Keine Empfänger*innen ausgewählt" }, 400);
               }
-              if (recipientIds.length > 20000) {
+              if (recipientIds.length > SELECTION_LIMIT) {
                 return json(
-                  { error: "Zu viele Empfänger*innen (max. 20000)" },
+                  { error: "Zu viele Empfänger*innen (max. 20.000)" },
                   400,
                 );
               }
@@ -3113,6 +3524,11 @@ const server = Bun.serve(
                   );
               }
               // Durable send job, delivered at the scheduled time.
+              if (!campaign.replayed)
+                await recordAdminAction("campaign.create", {
+                  targetId: campaign.id,
+                  count: campaign.recipient_count ?? null,
+                });
               if (!campaign.replayed)
                 await enqueueJob(
                   "campaigns",
@@ -3169,7 +3585,32 @@ const server = Bun.serve(
                 },
                 400,
               );
+            await recordAdminAction("campaign.cancel", {
+              targetId: parseInt(req.params.id, 10),
+            });
             return json({ ok: true });
+          });
+        },
+      },
+
+      "/api/admin/campaigns/:id/stop": {
+        POST(req) {
+          return adminJson(req, async () => {
+            const id = parseInt(req.params.id, 10);
+            const reached = await stopCampaign(id);
+            if (reached === null)
+              return json(
+                {
+                  error:
+                    "Dieser Versand läuft nicht mehr. Lade den Verlauf erneut.",
+                },
+                409,
+              );
+            await recordAdminAction("campaign.stop", {
+              targetId: id,
+              count: reached,
+            });
+            return json({ ok: true, reached });
           });
         },
       },
@@ -3250,11 +3691,7 @@ const server = Bun.serve(
         },
         async POST(req) {
           return adminJson(req, async () => {
-            if (!durableWork.status.ready)
-              throw Object.assign(
-                new Error("Hintergrundverarbeitung ist nicht bereit."),
-                { status: 503 },
-              );
+            if (!durableWork.status.ready) throw new JobsUnavailable();
             const ok = await retryAbortedCampaign(parseInt(req.params.id, 10));
             if (!ok) {
               return json(
@@ -3265,7 +3702,541 @@ const server = Bun.serve(
                 400,
               );
             }
+            await recordAdminAction("campaign.retry", {
+              targetId: parseInt(req.params.id, 10),
+            });
             return json({ ok: true });
+          });
+        },
+      },
+
+      "/api/admin/signers": {
+        async GET(req) {
+          return adminJson(req, async () => {
+            const params = new URL(req.url).searchParams;
+            const limit = parseInt(params.get("limit") || "50", 10);
+            const offset = parseInt(params.get("offset") || "0", 10);
+            const { search, dateFrom, dateTo } = parseSignerFilters(req);
+            return json(
+              await listSigners({
+                search,
+                dateFrom,
+                dateTo,
+                visibility: params.get("public") || "",
+                limit: Number.isNaN(limit) ? 50 : limit,
+                offset: Number.isNaN(offset) ? 0 : offset,
+              }),
+            );
+          });
+        },
+      },
+
+      // "Ausgewählte entfernen und sperren", and the other sign-ups of a
+      // mailbox after one of them was removed.
+      "/api/admin/signers/remove": {
+        async POST(req) {
+          return adminJson(req, async () => {
+            const body = await parseJsonBody(req);
+            if (
+              !Array.isArray(body.ids) ||
+              !body.ids.length ||
+              body.ids.length > 100 ||
+              body.ids.some((id) => !Number.isInteger(id) || id < 1)
+            )
+              return json(
+                { error: "Wähle höchstens 100 Unterschriften aus." },
+                400,
+              );
+            const result = await removeAndBlockSigners([...new Set(body.ids)]);
+            console.info(
+              `[admin] ${result.removed} signature(s) removed and addresses blocked`,
+            );
+            return json({ ok: true, ...result });
+          });
+        },
+      },
+
+      "/api/admin/signers/blocks": {
+        async GET(req) {
+          return adminJson(req, async () => {
+            const offset = parseInt(
+              new URL(req.url).searchParams.get("offset") || "0",
+              10,
+            );
+            return json(
+              await listSigningBlocks({
+                offset: Number.isNaN(offset) ? 0 : offset,
+              }),
+            );
+          });
+        },
+      },
+
+      // POST, so the address is in the body and in no access log.
+      "/api/admin/signers/lookup": {
+        async POST(req) {
+          return adminJson(req, async () => {
+            const body = await parseJsonBody(req);
+            const email = sanitizeEmail(body.email);
+            if (!isValidEmail(email))
+              return json({ error: "Ungültige E-Mail-Adresse." }, 400);
+            const found = await lookupSignups(email);
+            if (!ZOOM_ENABLED) delete found.meeting;
+            return json({ email, ...found });
+          });
+        },
+      },
+
+      "/api/admin/signers/:id": {
+        async GET(req) {
+          return adminJson(req, async () => {
+            const signer = await getSignerForAdmin(signerId(req));
+            if (!signer)
+              return json({ error: "Unterschrift nicht gefunden." }, 404);
+            return json(signer);
+          });
+        },
+        // The edit panel. Fields the request leaves out stay as they are.
+        async PATCH(req) {
+          return adminJson(req, async () => {
+            const id = signerId(req);
+            const body = await parseJsonBody(req);
+            const current = await getSignerForAdmin(id);
+            if (!current)
+              return json({ error: "Unterschrift nicht gefunden." }, 404);
+            const patch = {};
+            if (body.name !== undefined) {
+              patch.name = sanitize(body.name);
+              if (patch.name.length < 2)
+                return json({ error: cfg.ui.errors.nameTooShort }, 400);
+            }
+            if (KV_ENABLED && body.kreisverband !== undefined)
+              patch.kreisverband = normalizeKv(
+                body.kreisverband,
+                current.kreisverband,
+              );
+            if (OCCUPATION_ENABLED && body.occupation !== undefined)
+              patch.occupation = sanitize(body.occupation, OCCUPATION_LIMIT);
+            if (SIGNER_FUNCTION_ENABLED && body.signerFunction !== undefined)
+              patch.signerFunction = sanitize(
+                body.signerFunction,
+                SIGNER_DETAIL_LIMIT,
+              );
+            if (LANGUAGES.length > 1 && body.lang !== undefined) {
+              if (!LANGUAGES.includes(body.lang))
+                return json({ error: "Diese Sprache gibt es nicht." }, 400);
+              patch.lang = storedLang(cfg, body.lang);
+            }
+            if (typeof body.showPublicly === "boolean")
+              patch.showPublicly = body.showPublicly;
+            if (
+              SIGNER_DETAILS_PUBLIC &&
+              typeof body.showSignerDetails === "boolean"
+            )
+              patch.showSignerDetails = body.showSignerDetails;
+            if (body.newsletter === false) patch.newsletter = false;
+            else if (body.newsletter === true && !current.newsletter)
+              return json(
+                {
+                  error:
+                    "Den Newsletter kann nur die Person selbst bestätigen. Nutze „Newsletter-Einwilligung anfragen“.",
+                },
+                400,
+              );
+            const updated = await updateSignerByAdmin(id, patch, {
+              consent: body.consent === true,
+              consentNote: withoutEmailAddresses(
+                sanitize(body.consentNote, 300),
+              ),
+            });
+            if (!updated)
+              return json({ error: "Unterschrift nicht gefunden." }, 404);
+            if (
+              updated.regionChanged &&
+              cfg.features.stateResolution &&
+              updated.signer.kreisverband
+            )
+              enqueueStateResolution(id, updated.signer.kreisverband);
+            return json({
+              ok: true,
+              changed: Object.keys(updated.changes),
+              signer: updated.signer,
+            });
+          });
+        },
+      },
+
+      "/api/admin/signers/:id/remove": {
+        async POST(req) {
+          return adminJson(req, async () => {
+            const id = signerId(req);
+            if ((await getSignerForAdmin(id))?.handAdded)
+              return json({ error: HAND_ENTRY_HAS_NO_ADDRESS }, 409);
+            const removed = await removeAndBlockSigner(id);
+            if (!removed)
+              return json({ error: "Unterschrift nicht gefunden." }, 404);
+            console.info(`[admin] signature ${id} removed and address blocked`);
+            return json({ ok: true, ...removed });
+          });
+        },
+      },
+
+      "/api/admin/signers/:id/erase": {
+        async POST(req) {
+          return adminJson(req, async () => {
+            const id = signerId(req);
+            if (!(await eraseSigner(id)))
+              return json({ error: "Unterschrift nicht gefunden." }, 404);
+            console.info(`[admin] signature ${id} erased`);
+            return json({ ok: true });
+          });
+        },
+      },
+
+      // A sign-up still waiting for its click gets a fresh link, like the
+      // person's own "send again" on the letter page.
+      "/api/admin/signers/:id/resend-confirmation": {
+        async POST(req) {
+          return adminJson(req, async () => {
+            const id = signerId(req);
+            return durableWork.run(async () => {
+              const signer = await getSignerForMail(id);
+              if (!signer)
+                return json({ error: "Eintrag nicht gefunden." }, 404);
+              if (signer.verified)
+                return json(
+                  { error: "Diese Unterschrift ist bereits bestätigt." },
+                  409,
+                );
+              const refused = await adminMailRefused(
+                signer,
+                "signer.resend-confirmation",
+                id,
+              );
+              if (refused) return refused;
+              await refreshVerificationToken(
+                signer.email,
+                crypto.randomUUID(),
+                confirmationExpiry(),
+              );
+              await queueEmail("verification", {
+                signerId: id,
+                baseUrl: BASE_URL,
+              });
+              await recordAdminAction("signer.resend-confirmation", {
+                targetId: id,
+              });
+              return json({ ok: true, ...mailDelay() });
+            });
+          });
+        },
+      },
+
+      // The newsletter is never switched on from the admin: the person gets
+      // a mail and subscribes with their own click on its link.
+      "/api/admin/signers/:id/newsletter-request": {
+        async POST(req) {
+          return adminJson(req, async () => {
+            const id = signerId(req);
+            return durableWork.run(async () => {
+              if ((await getSignerForAdmin(id))?.handAdded)
+                return json({ error: HAND_ENTRY_HAS_NO_ADDRESS }, 409);
+              const signer = await getSignerForMail(id);
+              if (!signer?.verified)
+                return json({ error: "Unterschrift nicht gefunden." }, 404);
+              if (signer.newsletter)
+                return json(
+                  { error: "Diese Person erhält den Newsletter bereits." },
+                  409,
+                );
+              const refused = await adminMailRefused(
+                signer,
+                "signer.newsletter-request",
+                id,
+              );
+              if (refused) return refused;
+              await queueEmail("newsletter-optin", {
+                signerId: id,
+                baseUrl: BASE_URL,
+              });
+              await recordAdminAction("signer.newsletter-request", {
+                targetId: id,
+              });
+              return json({ ok: true, ...mailDelay() });
+            });
+          });
+        },
+      },
+
+      // "Nach oben anheften" and the "Position" field: { position } is a
+      // number (1 = top, past the end = last), "last", or null to take the
+      // position away.
+      "/api/admin/signers/:id/position": {
+        async POST(req) {
+          return adminJson(req, async () => {
+            const { position } = await parseJsonBody(req);
+            if (
+              position !== null &&
+              position !== "last" &&
+              !(Number.isInteger(position) && position >= 1)
+            )
+              return json(
+                { error: "Die Position muss eine Zahl ab 1 sein." },
+                400,
+              );
+            const result = await setPosition(
+              signerId(req),
+              position === "last" ? Number.MAX_SAFE_INTEGER : position,
+            );
+            if (!result)
+              return json({ error: "Unterschrift nicht gefunden." }, 404);
+            return json({ ok: true, ...result });
+          });
+        },
+      },
+
+      "/api/admin/signers/:id/first-signer": {
+        async POST(req) {
+          return adminJson(req, async () => {
+            const { marked } = await parseJsonBody(req);
+            if (typeof marked !== "boolean")
+              return json({ error: "Ungültige Anfrage." }, 400);
+            const result = await setMark(signerId(req), marked);
+            if (!result)
+              return json({ error: "Unterschrift nicht gefunden." }, 404);
+            return json({ ok: true, ...result });
+          });
+        },
+      },
+
+      "/api/admin/signers/:id/duplicates": {
+        async GET(req) {
+          return adminJson(req, async () => {
+            const duplicates = await duplicatesOf(signerId(req));
+            if (!duplicates)
+              return json({ error: "Unterschrift nicht gefunden." }, 404);
+            return json({ duplicates });
+          });
+        },
+      },
+
+      "/api/admin/first-signers": {
+        async GET(req) {
+          return adminJson(req, async () => json(await listFirstSigners()));
+        },
+        // A first signer the team adds by hand: no address, never mailed.
+        async POST(req) {
+          return adminJson(req, async () => {
+            const body = await parseJsonBody(req);
+            const name = sanitize(body.name);
+            if (name.length < 2)
+              return json({ error: cfg.ui.errors.nameTooShort }, 400);
+            if (body.consent !== true)
+              return json(
+                {
+                  error:
+                    "Bestätige, dass die Person zugestimmt hat, öffentlich als Erstunterzeichner*in genannt zu werden.",
+                },
+                400,
+              );
+            const signer = await addByHand({
+              name,
+              kreisverband: KV_ENABLED ? normalizeKv(body.kreisverband) : "",
+              organisation: OCCUPATION_ENABLED
+                ? sanitize(body.occupation, OCCUPATION_LIMIT)
+                : "",
+              signerFunction: SIGNER_FUNCTION_ENABLED
+                ? sanitize(body.signerFunction, SIGNER_DETAIL_LIMIT)
+                : "",
+              showSignerDetails:
+                SIGNER_DETAILS_PUBLIC && body.showSignerDetails === true,
+              consentNote: withoutEmailAddresses(
+                sanitize(body.consentNote, 300),
+              ),
+              pin: body.pin === true,
+            });
+            if (cfg.features.stateResolution && signer.kreisverband)
+              enqueueStateResolution(signer.id, signer.kreisverband);
+            return json({ ok: true, signer });
+          });
+        },
+      },
+
+      // "Reihenfolge speichern": the whole order at once, refused with 409
+      // when it changed since it was loaded.
+      "/api/admin/first-signers/order": {
+        async PUT(req) {
+          return adminJson(req, async () => {
+            const { ids, revision } = await parseJsonBody(req);
+            await replaceOrder(ids, revision);
+            return json({ ok: true, ...(await listFirstSigners()) });
+          });
+        },
+      },
+
+      "/api/admin/first-signers/link": {
+        async POST(req) {
+          return adminJson(req, async () => {
+            const { handId, signerId: realId } = await parseJsonBody(req);
+            if (!Number.isInteger(handId) || !Number.isInteger(realId))
+              return json({ error: "Ungültige Anfrage." }, 400);
+            const signer = await linkDuplicate(handId, realId);
+            return json({ ok: true, signer });
+          });
+        },
+      },
+
+      "/api/admin/first-signers/import/preview": {
+        async POST(req) {
+          return adminJson(req, async () => {
+            const body = await parseJsonBody(req, IMPORT_BODY_BYTES);
+            return json(
+              await planImport(importRows(body.csv), {
+                order: body.order !== false,
+              }),
+            );
+          });
+        },
+      },
+
+      // Applies a previewed import. A backup is written first; without one
+      // nothing is imported.
+      "/api/admin/first-signers/import": {
+        async POST(req) {
+          return adminJson(req, async () => {
+            const body = await parseJsonBody(req, IMPORT_BODY_BYTES);
+            if (body.consent !== true)
+              return json(
+                {
+                  error:
+                    "Bestätige, dass alle Personen in der Datei zugestimmt haben, öffentlich genannt zu werden.",
+                },
+                400,
+              );
+            let backupFailed = false;
+            try {
+              const counts = await applyImport(
+                importRows(body.csv),
+                {
+                  plan: String(body.plan || ""),
+                  order: body.order !== false,
+                  showSignerDetails:
+                    SIGNER_DETAILS_PUBLIC && body.showSignerDetails === true,
+                  consentNote: withoutEmailAddresses(
+                    sanitize(body.consentNote, 300),
+                  ),
+                },
+                async () => {
+                  try {
+                    await runBackup();
+                  } catch (err) {
+                    backupFailed = true;
+                    throw err;
+                  }
+                },
+              );
+              return json({ ok: true, ...counts });
+            } catch (err) {
+              if (backupFailed)
+                return json(
+                  {
+                    error:
+                      "Die Sicherung vor dem Import ist fehlgeschlagen. Es wurde nichts geändert. Versuche es später noch einmal oder sag der Technik Bescheid.",
+                  },
+                  503,
+                );
+              throw err;
+            }
+          });
+        },
+      },
+
+      "/api/admin/signers/unblock": {
+        async POST(req) {
+          return adminJson(req, async () => {
+            const body = await parseJsonBody(req);
+            const email = sanitizeEmail(body.email);
+            if (!isValidEmail(email))
+              return json({ error: "Ungültige E-Mail-Adresse." }, 400);
+            const unblocked = await unblockSigning(email);
+            if (unblocked) console.info("[admin] signing block lifted");
+            return json({ ok: true, unblocked });
+          });
+        },
+      },
+
+      // Exports never hold an email address.
+      "/api/admin/export/signers.csv": {
+        async GET(req) {
+          return adminJson(req, async () => {
+            const detailColumns = SIGNER_DETAILS_PUBLIC
+              ? [
+                  SIGNER_FUNCTION_ENABLED && [
+                    cfg.sign.fields.signerFunction.label,
+                    (row) => row.signerFunction,
+                  ],
+                  OCCUPATION_ENABLED && [
+                    cfg.sign.fields.occupation.label,
+                    (row) => row.organisation,
+                  ],
+                ]
+              : [];
+            return csvDownload(
+              "unterschriften-oeffentlich",
+              [
+                ["Name", (row) => row.name],
+                KV_ENABLED && [
+                  regionLabels(cfg).name,
+                  (row) => row.kreisverband,
+                ],
+                cfg.features.stateResolution && [
+                  "Bundesland",
+                  (row) => row.state,
+                ],
+                ...detailColumns,
+                ["Unterschrieben am", (row) => csvDate(row.createdAt)],
+              ],
+              await exportPublicSigners(),
+            );
+          });
+        },
+      },
+
+      "/api/admin/export/meeting-registrations.csv": {
+        async GET(req) {
+          if (!ZOOM_ENABLED) return featureOff();
+          return adminJson(req, async () =>
+            csvDownload(
+              "treffen-anmeldungen",
+              [
+                ["Name", (row) => row.name],
+                [regionLabels(cfg).name, (row) => row.kreisverband],
+                (await getShowDelegierter()) && [
+                  "Delegierte*r",
+                  (row) => (row.delegierter ? "Ja" : "Nein"),
+                ],
+                ["Angemeldet am", (row) => csvDate(row.createdAt)],
+              ],
+              await exportMeetingRegistrations(),
+            ),
+          );
+        },
+      },
+
+      "/api/admin/actions": {
+        async GET(req) {
+          return adminJson(req, async () => {
+            const offset = parseInt(
+              new URL(req.url).searchParams.get("offset") || "0",
+              10,
+            );
+            return json({
+              ...(await listAdminActions({
+                limit: 50,
+                offset: Number.isNaN(offset) ? 0 : offset,
+              })),
+              retentionDays: ADMIN_LOG_DAYS,
+            });
           });
         },
       },
@@ -3298,7 +4269,7 @@ const server = Bun.serve(
             const body = await parseJsonBody(req, 300000);
             if (
               !Array.isArray(body.ids) ||
-              body.ids.length > 20000 ||
+              body.ids.length > SELECTION_LIMIT ||
               body.ids.some((id) => !Number.isInteger(id) || id < 1)
             )
               return json(
@@ -3331,8 +4302,7 @@ const server = Bun.serve(
       "/api/admin/newsletter-signer-ids": {
         async GET(req) {
           return adminJson(req, async () => {
-            const ids = await listNewsletterSignerIds(parseSignerFilters(req));
-            return json({ ids });
+            return json(await listNewsletterSignerIds(parseSignerFilters(req)));
           });
         },
       },
@@ -3377,11 +4347,58 @@ const server = Bun.serve(
         },
       },
 
+      "/api/admin/overview": {
+        async GET(req) {
+          return adminJson(req, async () => {
+            const raw = new URL(req.url).searchParams.get("since");
+            const since = new Date(raw || Date.now() - 86400000);
+            if (Number.isNaN(since.getTime()))
+              return json({ error: "Ungültiger Zeitpunkt." }, 400);
+            return json({
+              ...(await getSignatureActivity(
+                since,
+                new Date(Date.now() + 6 * 3600000),
+              )),
+              expiredUnmailed: await getExpiredUnmailedSignups(),
+            });
+          });
+        },
+      },
+
       "/api/admin/zoom-registrations": {
         async GET(req) {
-          return adminJson(req, async () =>
-            json(await listZoomRegistrations()),
-          );
+          return adminJson(req, async () => {
+            const params = new URL(req.url).searchParams;
+            const number = (name, fallback) => {
+              const value = parseInt(params.get(name) ?? "", 10);
+              return Number.isNaN(value) ? fallback : value;
+            };
+            return json(
+              await listZoomRegistrations({
+                limit: number("limit", 100),
+                offset: number("offset", 0),
+                search: (params.get("search") || "").slice(0, 200),
+              }),
+            );
+          });
+        },
+      },
+
+      "/api/admin/zoom-registrations/:id": {
+        async DELETE(req) {
+          return adminJson(req, async () => {
+            const id = Number(req.params.id);
+            if (!Number.isInteger(id) || !(await removeZoomRegistration(id)))
+              return json(
+                {
+                  error:
+                    "Diese Anmeldung gibt es nicht mehr. Lade die Liste erneut.",
+                },
+                404,
+              );
+            await recordAdminAction("meeting.remove", { targetId: id });
+            return json({ ok: true });
+          });
         },
       },
 
@@ -3389,6 +4406,7 @@ const server = Bun.serve(
         async POST(req) {
           return adminJson(req, async () => {
             const removed = await clearZoomRegistrations();
+            await recordAdminAction("meeting.clear", { count: removed });
             return json({ ok: true, removed });
           });
         },
@@ -3422,11 +4440,7 @@ const server = Bun.serve(
       "/api/admin/zoom-settings": {
         async POST(req) {
           return adminJson(req, async () => {
-            if (!durableWork.status.ready)
-              throw Object.assign(
-                new Error("Hintergrundverarbeitung ist nicht bereit."),
-                { status: 503 },
-              );
+            if (!durableWork.status.ready) throw new JobsUnavailable();
             if (bodyTooLarge(req))
               return json({ error: "Die Anfrage ist zu groß." }, 413);
             const body = await parseJsonBody(req);
@@ -3487,6 +4501,7 @@ const server = Bun.serve(
               body.expectedRevision,
               { resetMailings: body.resetMailings === true },
             );
+            await recordAdminAction("meeting.settings");
             const cfg = await getZoomConfig();
             return json({
               ok: true,
@@ -3507,80 +4522,6 @@ const server = Bun.serve(
         },
       },
 
-      // "Texte & Modus": every editable field with its default and override.
-      "/api/admin/copy": {
-        async GET(req) {
-          return adminJson(req, async () => {
-            const lang = adminCopyLang(req);
-            if (!lang)
-              return json(
-                { error: "Die gewählte Sprache ist nicht verfügbar." },
-                400,
-              );
-            const overrides = publications.current.document.locales[lang].copy;
-            return json({
-              groups: EDITABLE_GROUPS,
-              languages: LANGUAGES,
-              lang,
-              fields: EDITABLE_BY_LANG[lang].fields.map((f) => ({
-                ...f,
-                overridden: Object.prototype.hasOwnProperty.call(
-                  overrides,
-                  f.path,
-                ),
-                value: overrides[f.path] ?? f.default,
-              })),
-            });
-          });
-        },
-        // { changes: { path: value | null }, lang? }; null restores the default
-        // for that language only.
-        async POST(req) {
-          return adminJson(req, async () => {
-            if (bodyTooLarge(req))
-              return json({ error: "Die Anfrage ist zu groß." }, 413);
-            const body = await parseJsonBody(req);
-            const changes = body?.changes;
-            if (
-              !changes ||
-              typeof changes !== "object" ||
-              Array.isArray(changes)
-            ) {
-              return json(
-                { error: "Die Anfrage enthält keine Änderungen." },
-                400,
-              );
-            }
-            const lang = adminCopyLang(req, body?.lang);
-            if (!lang)
-              return json(
-                { error: "Die gewählte Sprache ist nicht verfügbar." },
-                400,
-              );
-            const { byPath } = EDITABLE_BY_LANG[lang];
-            const clean = {};
-            try {
-              for (const [path, value] of Object.entries(changes)) {
-                const field = byPath.get(path);
-                if (!field) throw new Error(`${path}: nicht editierbar`);
-                clean[path] = value === null ? null : cleanValue(field, value);
-              }
-            } catch (e) {
-              return json({ error: e.message }, 400);
-            }
-            const document = structuredClone(publications.current.document);
-            for (const [path, value] of Object.entries(clean))
-              document.locales[lang].copy[path] =
-                value === null ? byPath.get(path).default : value;
-            const published = await publications.publish(
-              document,
-              body.expectedRevision,
-            );
-            return json({ ok: true, revision: published.revision });
-          });
-        },
-      },
-
       "/api/admin/milestones": {
         async GET(req) {
           return adminJson(req, async () =>
@@ -3597,6 +4538,9 @@ const server = Bun.serve(
             }
             try {
               const milestones = await setMilestones(body.milestones);
+              await recordAdminAction("settings.milestones", {
+                count: milestones.length,
+              });
               return json({ ok: true, milestones });
             } catch (e) {
               return json(
@@ -3843,17 +4787,16 @@ const server = Bun.serve(
       "/api/admin/merge-kv": {
         async POST(req) {
           return adminJson(req, async () => {
-            if (bodyTooLarge(req))
-              return json({ error: "Die Anfrage ist zu groß." }, 413);
             const body = await parseJsonBody(req);
             const from = String(body.from || "").trim();
-            const to = String(body.to || "").trim();
+            const to = mergeTarget(body.to, normalizeKv);
             if (!from || !to || from === to) {
               return json({ error: "Ungültige Kreisverbände" }, 400);
             }
-            const updated = await mergeKreisverband(from, to);
+            const merged = await mergeKreisverband(from, to);
+            await recordAdminAction("merge.kreisverband", mergeEntry(merged));
             await triggerBackfill();
-            return json({ ok: true, updated });
+            return json({ ok: true, ...merged });
           });
         },
       },
@@ -3895,23 +4838,17 @@ const server = Bun.serve(
       "/api/admin/assign-kv-state": {
         async POST(req) {
           return adminJson(req, async () => {
-            if (bodyTooLarge(req))
-              return json({ error: "Die Anfrage ist zu groß." }, 413);
             const body = await parseJsonBody(req);
-            const kreisverband = String(body.kreisverband || "").trim();
-            const state = String(body.state || "").trim();
-            if (!kreisverband || !state) {
+            const kreisverband = mergeTarget(body.kreisverband, sanitize);
+            if (!kreisverband || !GERMAN_STATES.includes(body.state)) {
               return json(
                 { error: "Wähle einen Kreisverband und ein Bundesland." },
                 400,
               );
             }
-            await upsertKvStateCache(kreisverband, state, "manual");
-            const updated = await bulkUpdateSignerStateByKv(
-              kreisverband,
-              state,
-            );
-            return json({ ok: true, updated });
+            const assigned = await assignKvState(kreisverband, body.state);
+            await recordAdminAction("merge.state", mergeEntry(assigned));
+            return json({ ok: true, ...assigned });
           });
         },
       },
@@ -3947,16 +4884,48 @@ const server = Bun.serve(
       "/api/admin/merge-occupation": {
         async POST(req) {
           return adminJson(req, async () => {
-            if (bodyTooLarge(req))
-              return json({ error: "Die Anfrage ist zu groß." }, 413);
             const body = await parseJsonBody(req);
             const from = String(body.from || "").trim();
-            const to = String(body.to || "").trim();
+            const to = mergeTarget(body.to, (value) =>
+              sanitize(value, OCCUPATION_LIMIT),
+            );
             if (!from || !to || from === to) {
               return json({ error: "Ungültige Berufe" }, 400);
             }
-            const updated = await mergeOccupation(from, to);
-            return json({ ok: true, updated });
+            const merged = await mergeOccupation(from, to);
+            await recordAdminAction("merge.occupation", mergeEntry(merged));
+            return json({ ok: true, ...merged });
+          });
+        },
+      },
+
+      // Takes back a merge or Land assignment by the `undoId` it returned.
+      "/api/admin/merges/:id/undo": {
+        async POST(req) {
+          return adminJson(req, async () => {
+            const undone = await undoMerge(Number(req.params.id));
+            if (!undone)
+              return json(
+                {
+                  error:
+                    "Diese Zusammenführung ist nicht mehr gespeichert und lässt sich nicht zurücknehmen.",
+                },
+                404,
+              );
+            if (undone === "undone")
+              return json(
+                {
+                  error: "Diese Zusammenführung wurde bereits zurückgenommen.",
+                },
+                409,
+              );
+            // A Kreisverband merge had cleared the Land of the merged rows.
+            if (undone.kind === "kreisverband") await triggerBackfill();
+            await recordAdminAction("merge.undo", {
+              targetId: Number(req.params.id),
+              count: undone.restored,
+            });
+            return json({ ok: true, restored: undone.restored });
           });
         },
       },
@@ -4058,6 +5027,8 @@ async function sendQueuedEmail(payload, job) {
   }
   const args = await prepareQueuedEmail(payload);
   if (!args) return; // row gone, already confirmed or link expired
+  if (args.kind === "verification")
+    await extendPendingConfirmation(payload.signerId, confirmationExpiry());
   return deliveryContext.run(
     {
       ...deliveryContext.getStore(),
@@ -4074,6 +5045,8 @@ async function sendQueuedEmail(payload, job) {
           return await sendVerificationEmail(args);
         case "already-signed":
           return await sendAlreadySignedEmail(args);
+        case "newsletter-optin":
+          return await sendNewsletterOptInEmail(args);
         case "invite":
           return await sendInviteEmail(args);
         case "deletion":
@@ -4129,13 +5102,22 @@ async function handleMaintenanceJob({ task }) {
     await emailManager.purge();
     if (statistics) await statistics.purge();
     await deleteExpiredZoomPending();
-    await purgeOldErasureLog(new Date(Date.now() - privacy.erasureLogMs));
+    await purgeOldErasureLog(
+      new Date(Date.now() - privacy.erasureLogMs),
+      retentionCutoff(privacy),
+    );
+    await purgeOldAdminActions(
+      new Date(Date.now() - ADMIN_LOG_DAYS * 24 * 60 * 60 * 1000),
+    );
   } else if (task === "purge-dead-emails") {
+    // A backup that fails ends up here too, one job per failed hour.
+    await purgeDeadJobs("maintenance", EMAIL_JOB_TTL_S);
     const removed = await purgeDeadJobs("emails", EMAIL_JOB_TTL_S);
     if (removed > 0) {
       console.log(`[purge] deleted ${removed} dead-lettered email job(s)`);
     }
   } else if (task === "purge-by-age") {
+    await deleteExpiredMerges();
     const removed = await deleteExpiredByAge(retentionCutoff(privacy));
     if (removed > 0) {
       console.log(

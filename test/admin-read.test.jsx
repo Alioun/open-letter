@@ -148,10 +148,10 @@ test("restored receipt approval identifies its test and older tests require a ne
   for (const text of [
     "admin@example.invalid",
     "8.11.2026",
-    "Revision 4",
-    "Campaign email setup test",
+    "Testnachricht für den E-Mail-Versand",
   ])
     expect(html).toContain(text);
+  expect(html).not.toContain("Revision");
   const legacy = renderToStaticMarkup(
     <EmailTestReceipt
       validation={{ accepted: true, checkedAt: "2026-11-08T12:00:00Z" }}

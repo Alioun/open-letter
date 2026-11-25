@@ -1,4 +1,7 @@
-import { identifiedEmailTest } from "../config/email-test.js";
+import {
+  EMAIL_TEST_SUBJECT,
+  identifiedEmailTest,
+} from "../config/email-test.js";
 
 export default function EmailTestReceipt({ validation }) {
   if (!validation?.accepted) return null;
@@ -24,7 +27,7 @@ export default function EmailTestReceipt({ validation }) {
         </div>
         <div>
           <dt>Betreff</dt>
-          <dd>Campaign email setup test</dd>
+          <dd>{EMAIL_TEST_SUBJECT}</dd>
         </div>
         <div>
           <dt>Vom Anbieter angenommen</dt>
@@ -33,10 +36,6 @@ export default function EmailTestReceipt({ validation }) {
               hour12: false,
             })}
           </dd>
-        </div>
-        <div>
-          <dt>Versandprofil</dt>
-          <dd>Revision {validation.profileRevision}</dd>
         </div>
       </dl>
       <p>

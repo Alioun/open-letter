@@ -1,4 +1,4 @@
-import { describe, test, expect, beforeEach } from "bun:test";
+import { describe, test, expect, beforeAll, beforeEach } from "bun:test";
 import {
   resetDb,
   addZoomRegistration,
@@ -7,6 +7,7 @@ import {
 } from "./helpers.js";
 import * as q from "../server/db.js";
 import { prepareQueuedEmail } from "../server/queued-email.js";
+import { initJobs, enqueue } from "../db/jobs.js";
 
 beforeEach(resetDb);
 
@@ -194,5 +195,122 @@ describe("Treffen sign-up with double opt-in", () => {
         baseUrl: "https://example.org",
       }),
     ).toBeNull();
+  });
+});
+
+describe("clearing meeting registrations", () => {
+  beforeAll(() => initJobs());
+
+  test("takes unconfirmed sign-ups and their queued mail along, so no link registers afterwards", async () => {
+    await addZoomRegistration();
+    const signer = await addVerifiedSigner();
+    const pending = await q.insertZoomPending({
+      name: "Tina Treffen",
+      email: "tina@example.org",
+      kv: "",
+      delegierter: false,
+      token: "still-open",
+      expiresAt: future(),
+    });
+    await enqueue("emails", {
+      kind: "treffen-verification",
+      pendingId: pending.id,
+    });
+    await enqueue("emails", { kind: "meeting-signup", registrationId: 1 });
+    await enqueue("emails", { kind: "verification", signerId: signer.id });
+
+    expect(await q.clearZoomRegistrations()).toBe(1);
+
+    expect(await q.getZoomPendingByToken("still-open")).toBeNull();
+    expect(
+      await db.transaction(() => q.confirmZoomPending("still-open")),
+    ).toBeNull();
+    expect((await q.getZoomCounts()).zoomCount).toBe(0);
+    expect(
+      (
+        await db
+          .query("SELECT payload FROM _honker_live WHERE queue = 'emails'")
+          .all()
+      ).map((job) => JSON.parse(job.payload).kind),
+    ).toEqual(["verification"]);
+  });
+});
+
+describe("the admin's list of meeting registrations", () => {
+  beforeAll(() => initJobs());
+
+  test("search finds people by part of the name or address and leaves the totals alone", async () => {
+    await addZoomRegistration({
+      name: "Jörg Müller",
+      email: "j.mueller@example.org",
+      delegierter: 1,
+    });
+    await addZoomRegistration({
+      name: "Anna Schmidt",
+      email: "anna@verein.de",
+    });
+    await addZoomRegistration({ name: "100% Fan", email: "fan@example.org" });
+    const names = async (search) =>
+      (await q.listZoomRegistrations({ search })).registrations
+        .map((person) => person.name)
+        .sort();
+
+    expect(await names("müll")).toEqual(["Jörg Müller"]);
+    expect(await names("JÖRG")).toEqual(["Jörg Müller"]);
+    expect(await names("  verein.de ")).toEqual(["Anna Schmidt"]);
+    expect(await names("example.org")).toEqual(["100% Fan", "Jörg Müller"]);
+    // A wildcard typed into the box is searched for, not obeyed.
+    expect(await names("%")).toEqual(["100% Fan"]);
+    expect(await names("nobody")).toEqual([]);
+    expect(await q.listZoomRegistrations({ search: "anna" })).toMatchObject({
+      total: 3,
+      delegates: 1,
+      matches: 1,
+    });
+    expect(await q.listZoomRegistrations()).toMatchObject({
+      total: 3,
+      matches: 3,
+    });
+  });
+
+  test("removing one registration takes its queued mail, keeps the signature, and survives a restore", async () => {
+    const signer = await addVerifiedSigner({ email: "both@example.org" });
+    const gone = await addZoomRegistration({ email: "both@example.org" });
+    const stays = await addZoomRegistration();
+    await enqueue("emails", {
+      kind: "meeting-signup",
+      registrationId: gone.id,
+    });
+    await enqueue("emails", {
+      kind: "meeting-signup",
+      registrationId: stays.id,
+    });
+    await enqueue("emails", { kind: "invite", signerId: signer.id });
+
+    expect(await q.removeZoomRegistration(gone.id)).toBe(true);
+    expect(await q.removeZoomRegistration(gone.id)).toBe(false);
+
+    expect(
+      (await q.listZoomRegistrations()).registrations.map(
+        (person) => person.id,
+      ),
+    ).toEqual([stays.id]);
+    expect(await count("signers")).toBe(1);
+    expect(
+      (
+        await db
+          .query("SELECT payload FROM _honker_live WHERE queue = 'emails'")
+          .all()
+      )
+        .map((job) => JSON.parse(job.payload))
+        .map((job) => job.registrationId ?? `signer ${job.signerId}`)
+        .sort(),
+    ).toEqual([stays.id, `signer ${signer.id}`].sort());
+    // What a restore replays: the same record the person's own opt-out leaves.
+    expect(
+      (await db.query("SELECT kind FROM erasure_log").all()).map(
+        (entry) => entry.kind,
+      ),
+    ).toEqual(["treffen-opt-out"]);
   });
 });

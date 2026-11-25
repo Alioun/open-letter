@@ -10,7 +10,7 @@ export default function AdminCrashRecovery() {
           Entwürfe, die der Browser bereits gespeichert hat, bleiben erhalten.
         </p>
         <Button
-          className="cta"
+          className="admin-button admin-button--primary"
           onClick={() => window.location.reload()}
           autoFocus
         >

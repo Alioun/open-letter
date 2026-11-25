@@ -32,6 +32,9 @@ export const PRIVACY_DEFAULTS = {
   // deleted this many days after sending, and an aborted campaign can only be
   // retried within that window (after it the log that prevents repeats is gone).
   deliveryLogDays: 30,
+  // The admin's Protokoll keeps what the team changed (with old and new values
+  // of signature edits, never an address) this many days.
+  adminLogDays: 30,
 };
 
 // Backup retention in effect: BACKUP_KEEP from the environment when set,

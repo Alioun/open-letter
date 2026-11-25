@@ -43,11 +43,11 @@ export default function EmailProfileReview({
       aria-labelledby="email-profile-review-heading"
     >
       <h3 id="email-profile-review-heading" tabIndex={-1} ref={heading}>
-        Versandprofile vergleichen · Revision {revision}
+        Versandprofile vergleichen
       </h3>
       <p>
-        Vergleiche das gespeicherte Profil mit deinen Eingaben, bevor du ein
-        Ersatzprofil speicherst.
+        Vergleiche das gespeicherte Profil mit deinen Eingaben, bevor du sie
+        speicherst.
       </p>
       {differences.length ? (
         differences.map(([key, label]) => (
@@ -82,7 +82,7 @@ export default function EmailProfileReview({
         Mit meinen Eingaben weiterarbeiten
       </Button>
       <p className="admin-muted">
-        Deine Eingaben werden erst mit "Ersatzprofil speichern" gespeichert.
+        Deine Eingaben werden erst beim Speichern des Profils übernommen.
       </p>
     </section>
   );

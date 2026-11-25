@@ -10,3 +10,7 @@ export function identifiedEmailTest(test) {
     Number.isFinite(new Date(test.checkedAt).getTime()),
   );
 }
+
+// Shared by the server that sends the setup test and the admin that asks the
+// team to look for it in their inbox.
+export const EMAIL_TEST_SUBJECT = "Testnachricht für den E-Mail-Versand";
