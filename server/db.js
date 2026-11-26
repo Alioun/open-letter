@@ -231,6 +231,40 @@ function publicSignerDetailsCondition() {
   return "(0)";
 }
 
+// The region next to a public name, and the state resolved from it. Where
+// the form offers "only my name" or "my name with my details"
+// (publicSignerDetails), the region is one of the details. Every other letter
+// shows it with the name, as its one checkbox says.
+function publicRegionColumns() {
+  if (!cfg.features.publicSignerDetails)
+    return { region: "s.kreisverband", state: "s.state" };
+  const shown = "s.show_signer_details = 1";
+  return {
+    region: `CASE WHEN ${shown} THEN s.kreisverband ELSE '' END`,
+    state: `CASE WHEN ${shown} THEN s.state ELSE '' END`,
+  };
+}
+
+// Whom a public count of roles, organisations, regions or states covers.
+// Where the form offers "only my name", a count of 1 names the one signer
+// who has that value, so only signers who chose their details are counted.
+// Every other letter counts everyone with a public name, as its one checkbox
+// and its policy say.
+function publicDetailCountCondition() {
+  return cfg.features.publicSignerDetails ? "show_signer_details = 1" : "1";
+}
+
+// Whose own choice the condition above reads, and who is therefore asked on
+// their settings page: everyone on a letter with publicSignerDetails, marked
+// first signers on one with only publicFirstSignerDetails. Nobody else's
+// stored choice is shown or changed there.
+function choosesPublicSignerDetails(signer) {
+  return Boolean(
+    cfg.features.publicSignerDetails ||
+    (cfg.features.publicFirstSignerDetails && signer?.first_signer === 1),
+  );
+}
+
 async function querySigners({ filter, search, limit, offset, sort }) {
   limit = Math.min(Math.max(1, limit), 100);
   offset = Math.max(0, offset);
@@ -238,13 +272,14 @@ async function querySigners({ filter, search, limit, offset, sort }) {
   const searchClean = search.trim().toLowerCase();
   const sortDir = sort === "asc" ? "ASC" : "DESC";
 
+  const publicRegion = publicRegionColumns();
   const conds = ["s.verified = 1", "s.show_publicly = 1"];
   const params = [];
   if (filter === "heute") {
     conds.push("s.created_at > ?");
     params.push(isoAgo(DAY));
   } else if (filter === "kv") {
-    conds.push("s.kreisverband != ''");
+    conds.push(`${publicRegion.region} != ''`);
   }
   const whereSql = conds.join(" AND ");
 
@@ -254,7 +289,8 @@ async function querySigners({ filter, search, limit, offset, sort }) {
       ? `, CASE WHEN ${detailsAllowed} THEN s.signer_function END AS signerFunction,
          CASE WHEN ${detailsAllowed} THEN s.occupation END AS organisation`
       : "";
-  const signerColumns = `s.name, s.kreisverband, s.state, s.created_at,
+  const signerColumns = `s.name, ${publicRegion.region} AS kreisverband,
+    ${publicRegion.state} AS state, s.created_at,
     s.first_signer = 1 AS firstSigner${details}`;
 
   if (!searchClean) {
@@ -307,8 +343,8 @@ async function querySigners({ filter, search, limit, offset, sort }) {
     ? caselessGlob(searchClean)
     : `%${searchClean.replace(/[\\%_]/g, "\\$&")}%`;
   const substrWhere = nonAscii
-    ? `${whereSql} AND (s.name GLOB ? OR s.kreisverband GLOB ?)`
-    : `${whereSql} AND (lower(s.name) LIKE ? ESCAPE '\\' OR lower(s.kreisverband) LIKE ? ESCAPE '\\')`;
+    ? `${whereSql} AND (s.name GLOB ? OR ${publicRegion.region} GLOB ?)`
+    : `${whereSql} AND (lower(s.name) LIKE ? ESCAPE '\\' OR lower(${publicRegion.region}) LIKE ? ESCAPE '\\')`;
 
   const { total: substrTotal } = await db
     .query(`SELECT COUNT(*) AS total FROM signers s WHERE ${substrWhere}`)
@@ -771,17 +807,32 @@ async function queryNewsletterStats() {
     .get();
 }
 
+// An unconfirmed sign-up has two clocks. token_expires_at says until when the
+// link in a confirmation mail that went out works, and is empty until the
+// mail service has taken a mail with the current token. mail_wait_until says
+// until when the sign-up waits for a mail that was asked for and has not gone
+// out. Asking for the mail again moves only the second, so it cannot make a
+// link that went out valid for longer.
+//
+// Until a mail went out, the link works while the sign-up waits for one.
+const LINK_VALID_UNTIL = "COALESCE(token_expires_at, mail_wait_until)";
+// The sign-up ends when both clocks have run out. NULL for a row with
+// neither, which then compares as neither ended nor running.
+const signupEndsAt = (table = "") =>
+  `MAX(COALESCE(${table}token_expires_at, ${table}mail_wait_until),
+       COALESCE(${table}mail_wait_until, ${table}token_expires_at))`;
+
 // Start page of the admin: confirmed sign-ups since `since`, and unconfirmed
-// ones whose link still works, with those running out before `soon`.
+// ones that have not run out, with those running out before `soon`.
 export async function getSignatureActivity(since, soon) {
   const now = nowIso();
   return await db
     .query(
       `SELECT
         COUNT(*) FILTER (WHERE verified AND created_at >= ?) AS "signedSince",
-        COUNT(*) FILTER (WHERE NOT verified AND token_expires_at > ?) AS "pending",
+        COUNT(*) FILTER (WHERE NOT verified AND ${signupEndsAt()} > ?) AS "pending",
         COUNT(*) FILTER (
-          WHERE NOT verified AND token_expires_at > ? AND token_expires_at <= ?
+          WHERE NOT verified AND ${signupEndsAt()} > ? AND ${signupEndsAt()} <= ?
         ) AS "pendingExpiringSoon"
       FROM signers`,
     )
@@ -850,15 +901,16 @@ export async function insertSigner({
 }) {
   if (await isSigningBlocked(email))
     return { ok: false, alreadyVerified: false, blocked: true };
-  // A pending (unconfirmed) sign-up is only replaced once its link expired.
+  // A pending (unconfirmed) sign-up is only replaced once it has run out.
   // Before that, a second request for the same address, which proves nothing
   // about who sent it, must not change the name, public display or newsletter
   // choice the real person is about to confirm; the caller re-sends the
-  // original confirmation instead.
+  // original confirmation instead. `expiresAt` is until when the sign-up
+  // waits for its confirmation mail.
   const row = await db
     .query(
       `INSERT INTO signers /* public-neutral */
-         (name, email, kreisverband, occupation, signer_function, newsletter, show_publicly, show_signer_details, verification_token, token_expires_at, pending_ref, invite_show_name, lang)
+         (name, email, kreisverband, occupation, signer_function, newsletter, show_publicly, show_signer_details, verification_token, mail_wait_until, pending_ref, invite_show_name, lang)
        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
        ON CONFLICT (email) DO UPDATE
          SET name = excluded.name,
@@ -869,12 +921,13 @@ export async function insertSigner({
              show_publicly = excluded.show_publicly,
              show_signer_details = excluded.show_signer_details,
              verification_token = excluded.verification_token,
-             token_expires_at = excluded.token_expires_at,
+             token_expires_at = NULL,
+             mail_wait_until = excluded.mail_wait_until,
              pending_ref = excluded.pending_ref,
              invite_show_name = excluded.invite_show_name,
              lang = excluded.lang,
              created_at = strftime('%Y-%m-%dT%H:%M:%fZ','now')
-         WHERE signers.verified = 0 AND signers.token_expires_at <= ?
+         WHERE signers.verified = 0 AND ${signupEndsAt("signers.")} <= ?
        RETURNING id, verified`,
     )
     .get(
@@ -898,11 +951,12 @@ export async function insertSigner({
     .query(`SELECT verified FROM signers WHERE email = ?`)
     .get(email);
   if (existing?.verified) return { ok: false, alreadyVerified: true };
-  // The original confirmation is mailed again and says it is valid for the full
-  // period, so the kept link gets that period from now. The entered values stay.
+  // The original confirmation is mailed again, so the kept sign-up waits for
+  // that mail from now. The entered values stay, and so does the validity of
+  // a link that already went out.
   await db
     .query(
-      `UPDATE signers /* public-neutral */ SET token_expires_at = ?
+      `UPDATE signers /* public-neutral */ SET mail_wait_until = ?
        WHERE email = ? AND verified = 0`,
     )
     .run(iso(expiresAt), email);
@@ -917,23 +971,32 @@ export async function getPendingSignerByToken(token) {
       .query(
         `SELECT name, kreisverband, occupation, signer_function AS signerFunction, newsletter, show_publicly, show_signer_details, invite_show_name, lang
          FROM signers
-         WHERE verification_token = ? AND verified = 0 AND token_expires_at > ?`,
+         WHERE verification_token = ? AND verified = 0 AND ${LINK_VALID_UNTIL} > ?`,
       )
       .get(token, nowIso())) || null,
     ["newsletter", "show_publicly", "invite_show_name"],
   );
 }
 
-// A confirmation mail held back while sending was down still promises its full
-// validity, so the link's clock starts when the mail goes out. Expired or
-// confirmed sign-ups are left alone.
-export async function extendPendingConfirmation(id, expiresAt) {
+// A confirmation mail says how long its link is valid, so the link counts
+// from when the mail service took the mail that carries it. Until then the
+// sign-up only waits for that mail (see mailWaitExpiry in server/index.js),
+// and with the mail out that wait is over. A mail that carries a token since
+// replaced starts nothing.
+//
+// The same mail can be recorded twice, and an earlier mail after a later one,
+// when a job is run again. So the link's time only ever moves forward:
+// recording a mail again changes nothing.
+export async function startConfirmationWindow(id, token, expiresAt) {
+  const until = iso(expiresAt);
   await db
     .query(
-      `UPDATE signers /* public-neutral */ SET token_expires_at = ?
-       WHERE id = ? AND verified = 0 AND token_expires_at > ? AND token_expires_at < ?`,
+      `UPDATE signers /* public-neutral */
+       SET token_expires_at = ?, mail_wait_until = NULL
+       WHERE id = ? AND verified = 0 AND verification_token = ?
+         AND (token_expires_at IS NULL OR token_expires_at < ?)`,
     )
-    .run(iso(expiresAt), id, nowIso(), iso(expiresAt));
+    .run(until, id, token, until);
 }
 
 export async function getVerifiedSignerName(email) {
@@ -946,7 +1009,8 @@ export async function getVerifiedSignerName(email) {
 export async function refreshVerificationToken(email, token, expiresAt) {
   const row = await db
     .query(
-      `UPDATE signers /* public-neutral */ SET verification_token = ?, token_expires_at = ?
+      `UPDATE signers /* public-neutral */
+       SET verification_token = ?, token_expires_at = NULL, mail_wait_until = ?
        WHERE email = ? AND verified = 0 RETURNING name`,
     )
     .get(token, iso(expiresAt), email);
@@ -995,8 +1059,9 @@ export async function confirmSigner(token) {
     .query(
       `UPDATE signers
        SET verified = 1, verification_token = NULL, token_expires_at = NULL,
+           mail_wait_until = NULL,
            invite_code = COALESCE(invite_code, ?), pending_ref = NULL
-       WHERE verification_token = ? AND verified = 0 AND token_expires_at > ?
+       WHERE verification_token = ? AND verified = 0 AND ${LINK_VALID_UNTIL} > ?
        RETURNING id, kreisverband, invite_code, lang`,
     )
     .get(
@@ -1389,7 +1454,7 @@ export async function lookupSignups(email) {
     await mailboxSignups(
       canonicalMailbox(email),
       `${ADMIN_SIGNER_COLUMNS}, s.verified,
-       CASE WHEN s.verified = 0 THEN s.token_expires_at END AS confirmationExpiresAt`,
+       CASE WHEN s.verified = 0 THEN ${LINK_VALID_UNTIL} END AS confirmationExpiresAt`,
     ),
     [...ADMIN_SIGNER_FLAGS, "verified"],
   );
@@ -1439,12 +1504,15 @@ export async function lookupSignups(email) {
 // ---- admin: exports and log ---------------------------------------------------
 
 // What the public list shows about each signature, and nothing else: function
-// and organisation only where the person agreed to them being public.
+// and organisation only where the person agreed to them being public, and the
+// region as the list shows it.
 export async function exportPublicSigners() {
   const detailsAllowed = publicSignerDetailsCondition();
+  const publicRegion = publicRegionColumns();
   const rows = await db
     .query(
-      `SELECT s.name, s.kreisverband, s.state, s.created_at AS createdAt,
+      `SELECT s.name, ${publicRegion.region} AS kreisverband,
+              ${publicRegion.state} AS state, s.created_at AS createdAt,
               CASE WHEN ${detailsAllowed} THEN s.signer_function ELSE '' END AS signerFunction,
               CASE WHEN ${detailsAllowed} THEN s.occupation ELSE '' END AS organisation
        FROM signers s WHERE s.verified = 1 AND s.show_publicly = 1
@@ -1535,7 +1603,8 @@ export async function getSignerForMail(id) {
   return (
     (await db
       .query(
-        `SELECT id, name, email, verified, newsletter, verification_token, token_expires_at, invite_code, lang, created_at
+        `SELECT id, name, email, verified, newsletter, verification_token,
+                ${signupEndsAt()} AS signup_ends_at, invite_code, lang, created_at
          FROM signers WHERE id = ? AND email IS NOT NULL`,
       )
       .get(id)) || null
@@ -2670,7 +2739,7 @@ export async function authorizeRecipient(
     } else return false;
   } else if (kind === "verification") {
     if (recipient.source !== "signer" || !token) return false;
-    consent = "verified=0 AND verification_token=? AND token_expires_at>?";
+    consent = `verified=0 AND verification_token=? AND ${signupEndsAt()}>?`;
     extra.push(token, nowIso());
   } else if (
     recipient.source === "pending" ||
@@ -2927,8 +2996,9 @@ export async function deleteSignerByUnsubscribeToken(token, source) {
   );
 }
 
-// Sign-ups that ran out without a confirmation mail ever being accepted by the
-// mail service: the person did everything right and their signature was lost.
+// Sign-ups that ran out without the mail service ever taking a confirmation
+// mail with their link: the person did everything right and their signature
+// was lost. A link that was replaced by a new one counts like no link.
 // Only how many per UTC day, never who, as JSON {"2026-11-22": 3} under this
 // app_settings key, for the last UNMAILED_DAYS days.
 const UNMAILED_KEY = "signups_expired_unmailed";
@@ -2958,44 +3028,31 @@ export async function getExpiredUnmailedSignups(now = new Date()) {
   };
 }
 
-// Whether the mail service accepted any mail to this address since `since`.
-async function mailAcceptedSince(email, since) {
-  const row = await db
-    .query(
-      `SELECT 1 FROM email_attempts
-       WHERE subject_hmac = ? AND status = 'delivered' AND updated_at >= ? LIMIT 1`,
-    )
-    .get(emailHmac(email), since);
-  return Boolean(row);
-}
-
 // DSGVO data minimisation: drop sign-ups that were never email-confirmed once
-// their verification token has expired (token TTL is 24h). Confirmed rows
-// (verified = 1, token cleared) are never touched. Returns the number deleted.
+// they have run out: their link has expired and no mail is awaited. Confirmed
+// rows (verified = 1, token cleared) are never touched. Returns the number
+// deleted.
 // This is the only place an unconfirmed sign-up ends without the person or the
 // team asking for it, so it is where the lost ones are counted.
 export async function deleteExpiredUnverifiedSigners(now = new Date()) {
   return db.transaction(
     async () => {
+      // No mail with the current link ever went out for a sign-up whose
+      // link never started to count. Other mail to the address says nothing
+      // about that.
       const expired = await db
         .query(
-          `SELECT email, created_at FROM signers WHERE verified = 0 AND token_expires_at < ?`,
+          `SELECT token_expires_at IS NULL AS unmailed FROM signers
+           WHERE verified = 0 AND ${signupEndsAt()} < ?`,
         )
         .all(iso(now));
       if (!expired.length) return 0;
-      const hasAttempts = (await erasureTables(db)).has("email_attempts");
-      let unmailed = 0;
-      for (const signup of expired)
-        if (
-          !hasAttempts ||
-          !(await mailAcceptedSince(signup.email, signup.created_at))
-        )
-          unmailed++;
+      const unmailed = expired.filter((signup) => signup.unmailed).length;
       await db
         .query(
           // Only ever removes unverified rows, which no public read counts, so it
           // must not drop the read cache every five minutes.
-          `DELETE FROM signers /* public-neutral */ WHERE verified = 0 AND token_expires_at < ?`,
+          `DELETE FROM signers /* public-neutral */ WHERE verified = 0 AND ${signupEndsAt()} < ?`,
         )
         .run(iso(now));
       if (unmailed) {
@@ -3092,7 +3149,7 @@ export async function getUnifiedUnsubscribeState(token, source) {
   const signer = await db
     .query(
       `SELECT name, kreisverband, occupation, signer_function AS signerFunction, newsletter, show_publicly,
-              ${publicSignerDetailsCondition()} AS showSignerDetails, invite_show_name, invite_code, verified
+              ${publicSignerDetailsCondition()} AS showSignerDetails, first_signer, invite_show_name, invite_code, verified
          FROM signers s WHERE email = ?`,
     )
     .get(email);
@@ -3130,7 +3187,8 @@ export async function getUnifiedUnsubscribeState(token, source) {
     ...(cfg.sign.fields.signerFunction && {
       signerFunction: signer?.signerFunction ?? "",
     }),
-    ...(cfg.features.publicSignerDetails && {
+    // Present only for a signer who has this choice; the page asks then.
+    ...(choosesPublicSignerDetails(signer) && {
       showSignerDetails: Boolean(
         signer?.show_publicly && signer?.showSignerDetails,
       ),
@@ -3166,18 +3224,21 @@ export async function updateSignerByEmail(
 ) {
   // inviteShowName is undefined when invite links are off: left unchanged.
   const inviteName = inviteShowName === undefined ? null : B(inviteShowName);
-  const visibleDetails =
-    showSignerDetails === undefined
-      ? null
-      : B(showPublicly && showSignerDetails);
   return db.transaction(
     async () => {
       const before = await db
         .query(
-          `SELECT occupation, signer_function AS signerFunction
+          `SELECT occupation, signer_function AS signerFunction, first_signer
            FROM signers WHERE email = ?`,
         )
         .get(email);
+      // Hiding the name hides the details with it. Left unchanged for a
+      // signer who has no such choice, and when the request names none.
+      const detailsChoice = showPublicly ? showSignerDetails : false;
+      const visibleDetails =
+        choosesPublicSignerDetails(before) && detailsChoice !== undefined
+          ? B(detailsChoice)
+          : null;
       const row = await db
         .query(
           `UPDATE signers SET
@@ -3324,6 +3385,7 @@ export async function getSignerFunctions() {
       .query(
         `SELECT signer_function AS label, COUNT(*) AS count FROM signers
        WHERE verified = 1 AND show_publicly = 1 AND signer_function != ''
+         AND ${publicDetailCountCondition()}
        GROUP BY signer_function ORDER BY count DESC, signer_function ASC`,
       )
       .all(),
@@ -3335,6 +3397,7 @@ async function queryOccupations() {
     .query(
       `SELECT occupation, COUNT(*) AS count FROM signers
        WHERE verified = 1 AND occupation != '' AND show_publicly = 1
+         AND ${publicDetailCountCondition()}
        GROUP BY occupation ORDER BY count DESC, occupation ASC`,
     )
     .all();
@@ -3422,6 +3485,7 @@ async function queryKreisverbandStats() {
         COUNT(*) AS count
       FROM signers
       WHERE verified = 1 AND show_publicly = 1
+        AND ${publicDetailCountCondition()}
       GROUP BY 1, 2
       ORDER BY count DESC, kreisverband ASC`,
     )
@@ -3634,6 +3698,7 @@ async function queryStateStats() {
         COUNT(*) AS count
       FROM signers
       WHERE verified = 1 AND show_publicly = 1
+        AND ${publicDetailCountCondition()}
       GROUP BY 1 ORDER BY count DESC, state ASC`,
     )
     .all();

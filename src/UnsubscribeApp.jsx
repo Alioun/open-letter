@@ -423,7 +423,7 @@ export default function UnsubscribeApp() {
                             />
                             <span>{cfg.ui.settings.showPublicly}</span>
                           </label>
-                          {cfg.features.publicSignerDetails &&
+                          {d.showSignerDetails !== undefined &&
                             form.showPublicly && (
                               <label className="check">
                                 <input
@@ -436,7 +436,10 @@ export default function UnsubscribeApp() {
                                     }))
                                   }
                                 />
-                                <span>{cfg.sign.publicDetailsLabel}</span>
+                                <span>
+                                  {cfg.sign.publicDetailsLabel ||
+                                    cfg.ui.settings.showSignerDetails}
+                                </span>
                               </label>
                             )}
                           {cfg.features.inviteLinks && d.hasInviteCode && (

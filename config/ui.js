@@ -132,7 +132,7 @@ export const UI_DEFAULTS = {
     errEmail: "Bitte gib eine gültige E-Mail-Adresse an.",
     pausedTitle: "Unterzeichnen pausiert",
     pausedMessage:
-      "Der Versand der Bestätigungs-E-Mails ist vorübergehend gestört. Wir arbeiten daran, damit du bald wieder unterzeichnen kannst. Wir bitten um etwas Geduld und danken für dein Verständnis!",
+      "Im Moment nehmen wir keine neuen Unterschriften an. Bitte versuche es später erneut.",
   },
   // "Bitte E-Mail bestätigen" after submitting.
   emailModal: {
@@ -151,7 +151,7 @@ export const UI_DEFAULTS = {
     delayedSent:
       "Danke, {name}. Deine Unterschrift ist gespeichert. Der E-Mail-Versand ist gerade eingeschränkt, deshalb kommt der Bestätigungslink etwas später an:",
     delayedHint:
-      "Du musst nichts weiter tun. Die E-Mail kommt automatisch, sobald der Versand wieder läuft, und der Link ist ab dann {hours} Stunden gültig.",
+      "Du musst nichts weiter tun. Die E-Mail kommt automatisch, sobald der Versand wieder läuft, und der Link ist ab dann {hours} Stunden gültig. Klappt der Versand nicht innerhalb von {waitHours} Stunden, verfällt deine Unterschrift. Trag dich dann bitte noch einmal ein.",
   },
   // After confirming.
   successModal: {
@@ -210,6 +210,7 @@ export const UI_DEFAULTS = {
     optional: "optional",
     occupationLabel: "Beruf",
     showPublicly: "Meinen Namen öffentlich anzeigen",
+    showSignerDetails: "Meine Angaben neben meinem Namen öffentlich anzeigen",
     inviteShowName: "Meinen Vornamen auf meinem Einladungslink zeigen",
     newsletter: "Newsletter erhalten",
     delegierter: "Ich bin Delegierte*r zum Parteitag.",
@@ -408,7 +409,7 @@ const UI_EN = {
     errEmail: "Please enter a valid email address.",
     pausedTitle: "Signing paused",
     pausedMessage:
-      "Confirmation emails are temporarily unavailable. We’re working to restore them so you can sign again soon.",
+      "We’re not taking new signatures at the moment. Please try again later.",
   },
   emailModal: {
     title: "Please confirm your email",
@@ -425,7 +426,7 @@ const UI_EN = {
     delayedSent:
       "Thank you, {name}. Your signature is saved. Email delivery is limited right now, so the confirmation link will arrive a little later at:",
     delayedHint:
-      "There's nothing else to do. The email arrives automatically once delivery works again, and the link is valid for {hours} hours from then.",
+      "There's nothing else to do. The email arrives automatically once delivery works again, and the link is valid for {hours} hours from then. If it can't be sent within {waitHours} hours, your signature expires. Please sign again then.",
   },
   successModal: {
     title: "Signature counted",
@@ -480,6 +481,7 @@ const UI_EN = {
     optional: "optional",
     occupationLabel: "Occupation",
     showPublicly: "Show my name publicly",
+    showSignerDetails: "Show my details next to my name publicly",
     inviteShowName: "Show my first name on my invite link",
     newsletter: "Get newsletter updates",
     delegierter: "I'm a delegate to the party conference.",
@@ -550,6 +552,30 @@ const UI_EN = {
 
 // Per-language tables besides the German UI_DEFAULTS.
 export const UI_TRANSLATIONS = { en: UI_EN };
+
+// What a default above said before, by table and copy path. A site stores
+// its copy, so a text stored while one of these was the default is the old
+// default and not the team's: it moves on to the current one. Only a site
+// from before defaults were recorded needs this list (server/publications.js);
+// add an entry when a default changes while such sites may still exist.
+export const PREVIOUS_UI_DEFAULTS = {
+  de: {
+    "ui.signForm.pausedMessage": [
+      "Der Versand der Bestätigungs-E-Mails ist vorübergehend gestört. Wir arbeiten daran, damit du bald wieder unterzeichnen kannst. Wir bitten um etwas Geduld und danken für dein Verständnis!",
+    ],
+    "ui.emailModal.delayedHint": [
+      "Du musst nichts weiter tun. Die E-Mail kommt automatisch, sobald der Versand wieder läuft, und der Link ist ab dann {hours} Stunden gültig.",
+    ],
+  },
+  en: {
+    "ui.signForm.pausedMessage": [
+      "Confirmation emails are temporarily unavailable. We’re working to restore them so you can sign again soon.",
+    ],
+    "ui.emailModal.delayedHint": [
+      "There's nothing else to do. The email arrives automatically once delivery works again, and the link is valid for {hours} hours from then.",
+    ],
+  },
+};
 
 // The text table for a language; German for "de" and anything unknown.
 export function uiDefaults(lang) {

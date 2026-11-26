@@ -9,6 +9,8 @@ services:
     restart: unless-stopped
     environment:
       - DOMAIN=${DOMAIN:?set DOMAIN in .env to the site's domain}
+      # The Caddyfile forwards to the app on this port.
+      - PORT=${PORT:-3000}
     ports:
       - "80:80"
       - "443:443"

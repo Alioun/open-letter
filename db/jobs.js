@@ -10,6 +10,12 @@
 // A single poll loop drives the scheduler tick, reclaims expired claims, and
 // processes each registered queue. Handlers ack on success, retry-with-backoff
 // on throw (Honker dead-letters automatically after maxAttempts).
+//
+// maxAttempts is for failures that would repeat. Two kinds of throw leave it
+// untouched: `err.defer` (the handler names when to come back, `retryAfterS`)
+// and `err.transient` (a later try can succeed). A job that fails with
+// `err.transient` is tried again until its own expiry, so that only counts for
+// a job enqueued with `expires`.
 import process from "node:process";
 import { db } from "./connection.js";
 
@@ -22,6 +28,12 @@ function defaultExt() {
 
 const EXT = defaultExt();
 const WORKER_ID = `w-${process.pid}`;
+
+// Seconds until the next try after a failure that a later try can fix: soon
+// at first, for a short interruption, then at most every ten minutes while a
+// long one lasts.
+const waitAfterTransientFailure = (ageS) =>
+  Math.min(600, Math.max(5, Math.round(ageS / 2)));
 
 let started = false;
 const timers = new Set();
@@ -214,8 +226,16 @@ export function startWorker(
             await handlers[queue](payload, job);
             await ack.get(job.id, WORKER_ID);
           } catch (err) {
-            // Quota/cooldown is scheduling, and does not consume the permanent-error budget.
-            if (err.defer)
+            const kept =
+              err.transient &&
+              (await db
+                .query(
+                  "SELECT unixepoch() - created_at AS ageS FROM _honker_live WHERE id = ? AND expires_at IS NOT NULL",
+                )
+                .get(job.id));
+            // Quota/cooldown is scheduling, and a failure a later try can fix
+            // is waiting: neither consumes the permanent-error budget.
+            if (err.defer || kept)
               await db
                 .query(
                   "UPDATE _honker_live /* public-neutral */ SET attempts = MAX(0, attempts - 1) WHERE id = ?",
@@ -223,7 +243,9 @@ export function startWorker(
                 .run(job.id);
             const backoff = err.defer
               ? err.retryAfterS
-              : Math.min(600, 5 * (job.attempts || 1));
+              : kept
+                ? waitAfterTransientFailure(kept.ageS)
+                : Math.min(600, 5 * (job.attempts || 1));
             await retry.get(
               job.id,
               WORKER_ID,

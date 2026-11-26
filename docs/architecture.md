@@ -16,7 +16,7 @@ One process serves one letter and one encrypted database. Honker uses the busine
 
 The manager prepares the message lazily, waits outside a transaction for normal account pacing, and reserves the attempt and send slot together. It checks the original recipient identity and current consent after waiting, immediately before provider I/O. The transaction ends before the network call. Provider cooldowns defer work. Uncertain SMTP recipients need reconciliation while other recipients can proceed.
 
-Attempt identity survives retries and provider-profile changes. An already accepted logical message skips preparation, so replay cannot rotate an invitation credential. Acceptance updates the existing attempt and conditionally records delivery for the original recipient. Erasure can delete an attempt while its provider call is in progress. Completion cannot insert that attempt again.
+Attempt identity survives retries and provider-profile changes. An already accepted logical message skips preparation, so replay cannot rotate an invitation credential. A replayed confirmation mail records its acceptance again from the saved acceptance time, so a failed write after the provider took the mail does not leave its link on the longer wait for a mail. That write only moves a link's expiry forward. Acceptance updates the existing attempt and conditionally records delivery for the original recipient. Erasure can delete an attempt while its provider call is in progress. Completion cannot insert that attempt again.
 
 ## A meeting date identifies separate work
 
@@ -34,7 +34,7 @@ A delayed registration confirmation uses the current meeting date. If the date c
 
 ## Publication content has a lifetime
 
-`server/publications.js` owns stored-document reconciliation, submission validation, revision comparison, and the published snapshot. Startup adapts stored content to current configuration. Unsupported editorial values stay in the document's archive. Strict submission validation remains separate.
+`server/publications.js` owns submission validation, revision comparison, the published snapshot, and the adaptation of a stored document to the current configuration at startup. Unsupported editorial values stay in the document's archive. `server/stored-copy.js` says when a stored text is valid and how a start brings stored copy in line with the letter. It records each change, so a start makes it once. A stored publication is never written again: what a start changes becomes a new revision, and the preceding publication is adapted when the admin loads it. Startup and backup restoration read the stored publications through one function, `upgradedPublications`, and only startup stores the result. Strict submission validation remains separate.
 
 The publication is the active template catalog. Historical SQL template rows keep campaign references valid after retirement. New campaign creation checks the active catalog, while already accepted campaigns retain their original template identity. Retry review and delivery resolve retired templates, including language variants, from those rows.
 

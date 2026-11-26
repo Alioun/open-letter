@@ -1,5 +1,6 @@
 import { ADMIN_ACTIONS, SIGNER_EDIT_FIELDS } from "../config/admin-actions.js";
 import { DEFAULT_LANG } from "../config/letter.config.js";
+import { copyLabel } from "./publishing/copy-labels.js";
 
 export const logTime = (value) =>
   new Date(value).toLocaleString("de-DE", {
@@ -19,8 +20,48 @@ function shown(field, value) {
   return value ? `„${value}“` : "leer";
 }
 
-// One line per changed field of a "signer.edit" entry: "Name: „alt“ → „neu“".
+// What a start of the server did to a text ("website.upgrade"), by the kind
+// of change server/publications.js records. Texts that only follow their
+// changed default share one line, except the privacy policy.
+const POLICY = "legal.privacyHtml";
+const UPGRADES = {
+  default: "Der unbearbeitete Text folgt seinem geänderten Standard.",
+  policy: "Auf den Stand des Briefs gebracht. Bitte prüfen.",
+  placeholder: "Ein fehlender Platzhalter wurde ergänzt. Bitte prüfen.",
+  replaced:
+    "Der gespeicherte Text war nicht mehr gültig. An seiner Stelle steht der Standardtext.",
+  review:
+    "Der Standardtext hat sich geändert. Der bearbeitete Text ist unverändert. Bitte prüfen.",
+  wording:
+    "Ein Satz über die Angaben des Formulars enthält eigene Formulierungen und ist unverändert. Bitte prüfen, ob er noch stimmt.",
+  length:
+    "Der Text müsste an das Formular angepasst werden, wäre dann aber länger als 120.000 Zeichen. Er ist unverändert. Bitte kürzen und selbst anpassen.",
+};
+
+function upgradeLines(texts) {
+  const summed = (text) => text.change === "default" && text.path !== POLICY;
+  const followed = texts.filter(summed).length;
+  return [
+    ...texts
+      .filter((text) => !summed(text) && UPGRADES[text.change])
+      .map(
+        ({ lang, path, change, before }) =>
+          `${path === POLICY ? "Datenschutzerklärung" : copyLabel({ path })} (${lang.toUpperCase()}): ${UPGRADES[change]}${before ? ` Vorher: „${before}“` : ""}`,
+      ),
+    ...(followed
+      ? [
+          followed === 1
+            ? "1 unbearbeiteter Text folgt seinem geänderten Standard."
+            : `${followed} unbearbeitete Texte folgen ihrem geänderten Standard.`,
+        ]
+      : []),
+  ];
+}
+
+// One line per changed field of a "signer.edit" entry: "Name: „alt“ → „neu“",
+// and the lines of a "website.upgrade" entry.
 export function changeLines(detail) {
+  if (Array.isArray(detail?.texts)) return upgradeLines(detail.texts);
   const changes = detail?.changes || {};
   const lines = Object.keys(SIGNER_EDIT_FIELDS)
     .filter((field) => field in changes)

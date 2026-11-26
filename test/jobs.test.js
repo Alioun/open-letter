@@ -39,7 +39,7 @@ describe.skipIf(!hasExt)("Honker durable jobs", () => {
     const seen = [];
     await enqueue("emails", { to: "a@b.c" });
     startWorker({ emails: async (p) => seen.push(p.to) }, { intervalMs: 30 });
-    await sleep(250);
+    await waitFor(async () => seen.length > 0 && (await liveCount()) === 0);
     expect(seen).toEqual(["a@b.c"]);
     expect(await liveCount()).toBe(0); // acked + removed
   });
@@ -56,8 +56,8 @@ describe.skipIf(!hasExt)("Honker durable jobs", () => {
       },
       { intervalMs: 30 },
     );
-    await sleep(250);
-    stopWorker();
+    await waitFor(() => calls > 0);
+    await stopWorker();
     expect(calls).toBeGreaterThanOrEqual(1);
     // retry re-queues with a backoff delay -> still present, not dead-lettered yet
     expect(await liveCount()).toBe(1);
@@ -147,8 +147,8 @@ describe.skipIf(!hasExt)("Honker durable jobs", () => {
       },
       { intervalMs: 30 },
     );
-    await sleep(250);
-    stopWorker();
+    await waitFor(async () => (await deadCount()) === 1);
+    await stopWorker();
     expect(await liveCount()).toBe(0);
     expect(await deadCount()).toBe(1);
 
@@ -231,5 +231,131 @@ test.skipIf(!hasExt)(
     await sleep(150);
     stopWorker();
     expect(sends).toBe(0);
+  },
+);
+
+const laterFixable = () => {
+  const error = new Error("temporary-delivery");
+  error.transient = true;
+  return error;
+};
+const secondsUntilNextRun = async (id) =>
+  (
+    await db
+      .query("SELECT run_at - unixepoch() AS s FROM _honker_live WHERE id=?")
+      .get(id)
+  ).s;
+
+describe.skipIf(!hasExt)("a job whose failure a later try can fix", () => {
+  beforeAll(() => initJobs());
+  beforeEach(resetDb);
+  afterEach(() => stopWorker());
+
+  const waiting = (id) =>
+    waitFor(async () => {
+      const row = await db
+        .query("SELECT state, run_at FROM _honker_live WHERE id=?")
+        .get(id);
+      return (
+        row &&
+        row.state !== "processing" &&
+        row.run_at > Math.floor(Date.now() / 1000)
+      );
+    });
+
+  test("keeps all its attempts while it is kept, however often it fails", async () => {
+    const id = await enqueue(
+      "outage-fixture",
+      { kind: "verification", signerId: 9 },
+      { maxAttempts: 2, expires: 3600 },
+    );
+    let tries = 0;
+    startWorker(
+      {
+        "outage-fixture": async () => {
+          tries++;
+          throw laterFixable();
+        },
+      },
+      { intervalMs: 20 },
+    );
+    for (let n = 1; n <= 4; n++) {
+      await waitFor(() => tries >= n);
+      await waiting(id);
+      expect(tries).toBe(n);
+      expect(await deadCount()).toBe(0);
+      expect(
+        (await db.query("SELECT attempts FROM _honker_live WHERE id=?").get(id))
+          .attempts,
+      ).toBe(0);
+      await db
+        .query("UPDATE _honker_live SET run_at = unixepoch() WHERE id=?")
+        .run(id);
+    }
+  });
+
+  test("is tried again soon at first and at most ten minutes later after a long wait", async () => {
+    const fresh = await enqueue("outage-fixture", { n: 1 }, { expires: 86400 });
+    const old = await enqueue("outage-fixture", { n: 2 }, { expires: 86400 });
+    await db
+      .query(
+        "UPDATE _honker_live SET created_at = unixepoch() - 6 * 3600 WHERE id=?",
+      )
+      .run(old);
+    startWorker(
+      {
+        "outage-fixture": async () => {
+          throw laterFixable();
+        },
+      },
+      { intervalMs: 20 },
+    );
+    await waiting(fresh);
+    await waiting(old);
+    await stopWorker();
+    expect(await secondsUntilNextRun(fresh)).toBeGreaterThanOrEqual(3);
+    expect(await secondsUntilNextRun(fresh)).toBeLessThanOrEqual(30);
+    expect(await secondsUntilNextRun(old)).toBeGreaterThan(300);
+    expect(await secondsUntilNextRun(old)).toBeLessThanOrEqual(600);
+  });
+
+  test("is given up on after its attempts when nothing ends its wait", async () => {
+    await enqueue("outage-fixture", { n: 1 }, { maxAttempts: 1 });
+    startWorker(
+      {
+        "outage-fixture": async () => {
+          throw laterFixable();
+        },
+      },
+      { intervalMs: 20 },
+    );
+    await waitFor(async () => (await deadCount()) === 1);
+    expect(await liveCount()).toBe(0);
+    expect(await deadCount()).toBe(1);
+  });
+});
+
+test.skipIf(!hasExt)(
+  "a failure that will repeat uses up a kept job's attempts",
+  async () => {
+    await resetDb();
+    await initJobs();
+    await enqueue(
+      "outage-fixture",
+      { n: 1 },
+      { maxAttempts: 1, expires: 3600 },
+    );
+    startWorker(
+      {
+        "outage-fixture": async () => {
+          throw new Error("recipient-rejected");
+        },
+      },
+      { intervalMs: 20 },
+    );
+    await waitFor(async () => (await deadCount()) === 1);
+    await stopWorker();
+    expect(await liveCount()).toBe(0);
+    expect(await deadCount()).toBe(1);
   },
 );

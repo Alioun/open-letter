@@ -21,7 +21,7 @@ docker compose up --build
 
 The `data` volume contains `diaetendeckel.db`. The `backups` volume contains encrypted hourly snapshots. Store their keys separately. Startup runs `db/setup.js`. `/api/health` returns 200 only when the database and durable jobs are ready. It returns 503 during initialization, job failure, or shutdown. For alerting on mail and backups, see [monitoring](#monitoring).
 
-To update a server that runs from a git checkout, run `scripts/deploy.sh` there. It fast-forwards to `main` on GitHub, rebuilds the app with the deployed commit baked in for `/api/version`, and waits until the container is healthy. If the checkout has local edits that the update would change, it stops before touching anything.
+To update a server that runs from a git checkout, run `scripts/deploy.sh` there. It fast-forwards to `main` on GitHub, rebuilds the app with the deployed commit baked in for `/api/version`, and waits until the container is healthy. If the checkout has local edits that the update would change, it stops before touching anything. It also stops without building when the checkout has commits that `main` on GitHub lacks, or when another branch is checked out.
 
 For a local demo:
 
@@ -50,15 +50,17 @@ Compose reads `COMPOSE_FILE` from `.env`, so `docker compose up -d`, `docker com
 docker compose restart caddy
 ```
 
+Caddy forwards to the app on `PORT`, which defaults to 3000. After changing `PORT` in `.env`, run `docker compose up -d`. It recreates both containers with the new value, which a restart does not.
+
 ### Images in `public/`
 
 Image files directly in `public/` are served at the site root: `public/poster.jpg` is `/poster.jpg`. Use this for a letter's `hero.artwork.src` or `meta.ogImage`. Only `png`, `jpg`, `jpeg`, `webp`, `avif`, and `gif` files are served, cached for a day. Subfolders, dotfiles, and symlinks are not served. `docker-compose.yml` mounts `./public`, so an image copied into the checkout on the server is served without a rebuild.
 
 ### Pausing sign-ups
 
-Set `SIGNING_PAUSED=1` and restart the app to stop new signatures. The letter and the list stay online. The form shows `ui.signForm.pausedTitle` and `pausedMessage` instead of its fields. Sign-up requests, resend requests, and confirmation links answer 503 with the same message. The default message says confirmation emails are unavailable. Change it in the letter config when you pause for another reason. Remove the setting and restart to open signing again.
+Set `SIGNING_PAUSED=1` and restart the app to stop new signatures. The letter and the list stay online. The form shows `ui.signForm.pausedTitle` and `pausedMessage` instead of its fields. Sign-up requests, resend requests, and confirmation links answer 503 with the same message. The default message gives no reason for the pause. Set your own in the letter config to say why. Remove the setting and restart to open signing again.
 
-Signing does not need a pause when mail is down. Sign-ups are stored and their confirmation mails wait in the queue. A sign-up that stays unconfirmed still expires after `privacy.confirmationLinkHours`. The admin start page counts those that never got a mail, see [below](#sign-ups-lost-without-a-confirmation-mail).
+Signing does not need a pause when mail is down. Sign-ups are stored and their confirmation mails wait in the queue. A sign-up waits for its confirmation mail for `privacy.emailJobRetentionHours`, as long as the queued mail is kept. While the mail service only fails for the moment, the queued mail is tried again for all of that time: after a few seconds at first, then at most every ten minutes. Such a failure is no answer at all, a server error from the provider's API, or an SMTP 4xx. A refusal that would repeat, such as a rejected address, ends the mail after five attempts. Once the mail goes out, the link is valid for `privacy.confirmationLinkHours` from then. Signing again with the same address asks for the same mail again and starts a new wait for it. That does not change how long a link that already went out is valid; the sign-up is kept until its link has expired and no mail is awaited. A sign-up whose mail never goes out expires at the end of the wait. The admin start page counts those that never got a mail, see [below](#sign-ups-lost-without-a-confirmation-mail).
 
 ## Commands
 
@@ -75,6 +77,8 @@ Signing does not need a pause when mail is down. Sign-ups are stored and their c
 | `bun run og`                          | Regenerate `public/og.png` from the running site.                               |
 | `bun scripts/generate-artwork.js`     | Redraw the example letter's placeholder `public/example-artwork.webp`.          |
 | `bun scripts/preview-letter.js`       | Preview the letter design with demo data, without a database.                   |
+
+`bun run db:seed` is for a local copy. It stops with an error when `NODE_ENV` is `production`, before it opens the database, and no flag changes that. It also stops when the database holds a signer it did not create: its own signers all have an address at `demo.local`. To add demo data to such a database anyway, run `bun run db:seed --force`.
 
 See [publishing verification](publishing.md#verify-and-restore) for focused and full-application checks.
 
@@ -121,6 +125,8 @@ Each failed admin sign-in writes one line to the application log, `[admin] faile
 
 The hourly job writes a consistent SQLCipher snapshot to `BACKUP_DIR`, which defaults to `/app/backups`. It uses `sqlcipher_export()` with a keyed attached database, then compresses the encrypted file as `.sqlite.gz`. `BACKUP_GZIP=false` disables compression.
 
+A backup is named `backup-<UTC time>.sqlite.gz`. No backup takes the name of a finished one. When two are made in the same second, such as the backup before a first-signer import and the hourly one, the later one carries the next second in its name. Names therefore sort in the order the backups were made, and `--latest` restores the last one.
+
 `BACKUP_KEEP` sets retention in hours. Its default is `privacy.backupRetentionHours`, normally 48. It cannot exceed the erasure-log retention period. An unsafe override fails startup. Pre-restore copies follow the same retention period.
 
 A backup that cannot be written fails its job. The job is retried and then dead-lettered, and the next hourly run tries again. `GET /api/admin/backup` returns the time and size of the last successful backup, the error and time of a failure since then, and the retention in hours.
@@ -144,7 +150,7 @@ To restore a named file:
 bun run db:restore /app/backups/backup-2026-06-09T12-00-00.sqlite.gz
 ```
 
-Restoration checks row counts, publication documents, and asset hashes. It moves an existing database to `<path>.pre-restore-<timestamp>` and re-keys the restored data with `DATABASE_ENCRYPTION_KEY`. The backup may use a different key.
+Restoration checks row counts, asset hashes, and that the server can start with the backup's newest publication. It leaves the publications as the backup has them. The next start adapts the newest. A draft made from a publication that the restore discards is refused afterwards, also when a later publication takes the same revision number. It moves an existing database to `<path>.pre-restore-<timestamp>` and re-keys the restored data with `DATABASE_ENCRYPTION_KEY`. The backup may use a different key.
 
 Before replacement, restoration reads the old database's `erasure_log`. Afterward, it reapplies later erasures, newsletter and meeting opt-outs, and requests to hide names. Erasure covers registrations, pending requests, queued messages, delivery logs, and identifiable send attempts. Rows created after a logged event remain unchanged. The log stores an HMAC of the address, the action, and its time for `privacy.erasureLogDays`.
 
@@ -174,11 +180,13 @@ Set retention periods and link lifetimes in the letter's `privacy` configuration
 
 ### Sign-ups lost without a confirmation mail
 
-The five-minute sweep counts the unconfirmed sign-ups it deletes for which the mail service never accepted a mail. These are people who signed while mail was down or paused. The admin start page shows the number for the last 30 days. The database keeps one number per day under the `signups_expired_unmailed` setting and nothing about who they were.
+The five-minute sweep counts the unconfirmed sign-ups it deletes whose confirmation mail the mail service never accepted. These are people who signed while mail was down or paused. Other mail to the same address, such as a deletion link, does not count as that mail. A sign-up that asked for a new link counts when the mail with the new link never went out, because the new link replaced the earlier one. The admin start page shows the number for the last 30 days. The database keeps one number per day under the `signups_expired_unmailed` setting and nothing about who they were.
 
 ### Admin log
 
 The admin records what was done under Einstellungen, in "Protokoll": moderation, edits, exports, merges, campaigns, template and website changes, settings, and signing everyone out. An entry holds the time, the action, the id it concerned, and a count. It never holds an email address. An edit of a signature also holds the old and new values; these are deleted with the signature, whether it is erased on request, removed in the admin, or deleted by age.
+
+The server writes one kind of entry itself: "Texte der Website beim Start des Servers angepasst", when a start changed stored website texts. The entry names the texts. For a text that the default had to replace, it also holds what the text said, in full. It also has a line for a privacy policy the team has to read: one whose default changed, one with a sentence about the form's fields in the team's own words, and one with no room for a new statement. See [publishing](publishing.md#storage-and-application-controls).
 
 ### Ending a campaign
 

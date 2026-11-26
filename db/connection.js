@@ -7,39 +7,11 @@
 //   run(sql, ...params), exec(sql), loadExtension(path), and close()
 // Await every database call. Apply PRAGMA key before any other statement.
 import sqlite3 from "@journeyapps/sqlcipher";
-import { mkdirSync, readFileSync } from "node:fs";
-import { dirname, join, resolve as resolvePath } from "node:path";
+import { mkdirSync } from "node:fs";
+import { dirname, resolve as resolvePath } from "node:path";
 import { AsyncLocalStorage } from "node:async_hooks";
-import { fileURLToPath } from "node:url";
 import process from "node:process";
-
-function loadDotEnv() {
-  const root = dirname(fileURLToPath(import.meta.url));
-  const envPath = join(root, "..", ".env");
-  let content;
-  try {
-    content = readFileSync(envPath, "utf8");
-  } catch {
-    return;
-  }
-
-  for (const line of content.split(/\r?\n/)) {
-    const trimmed = line.trim();
-    if (!trimmed || trimmed.startsWith("#")) continue;
-    const idx = trimmed.indexOf("=");
-    if (idx === -1) continue;
-    const key = trimmed.slice(0, idx).trim();
-    let value = trimmed.slice(idx + 1).trim();
-    if (value.startsWith('"') && value.endsWith('"')) {
-      value = value.slice(1, -1).replace(/\\n/g, "\n").replace(/\\"/g, '"');
-    } else if (value.startsWith("'") && value.endsWith("'")) {
-      value = value.slice(1, -1);
-    }
-    if (!(key in process.env)) process.env[key] = value;
-  }
-}
-
-loadDotEnv();
+import "./env.js";
 
 export const DB_PATH = process.env.DATABASE_PATH || "./data/diaetendeckel.db";
 const DB_JOURNAL_MODE = (process.env.DATABASE_JOURNAL_MODE || "WAL")

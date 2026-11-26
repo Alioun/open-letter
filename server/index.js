@@ -165,7 +165,7 @@ import {
   purgeOldAdminActions,
   getNewsletterOptIn,
   confirmNewsletterOptIn,
-  extendPendingConfirmation,
+  startConfirmationWindow,
   unblockSigning,
   selectedNewsletterSigners,
   listNewsletterSignerIds,
@@ -1182,8 +1182,17 @@ async function buildMeetingMail(kind, recipient, token, config) {
 // Copy for the server-rendered link pages (letter config `pages`).
 const privacy = resolvePrivacy(cfg);
 const TREFFEN_RETENTION_MS = privacy.treffenRetentionMs;
-const confirmationExpiry = () =>
-  new Date(Date.now() + privacy.confirmationLinkMs);
+// A link is valid for this long from `from`: now, or when its mail went out.
+const confirmationExpiry = (from = Date.now()) =>
+  new Date(new Date(from).getTime() + privacy.confirmationLinkMs);
+// A sign-up waits for its confirmation mail as long as the queued mail is
+// kept, so it cannot run out while the mail can still go out. Once the mail
+// service takes the mail, the link counts from then (startConfirmationWindow).
+// Each request for the mail starts this wait again and leaves a link that
+// went out as it is. A sign-up whose mail is given up on ends here and is
+// counted as lost.
+const mailWaitExpiry = () =>
+  new Date(Date.now() + privacy.emailJobRetentionS * 1000);
 // The admin log is kept as long as the delivery log unless the letter sets
 // privacy.adminLogDays.
 const ADMIN_LOG_DAYS = privacy.adminLogDays;
@@ -1389,6 +1398,7 @@ function publicationResponse(snapshot = publications.current) {
   return {
     nextTemplateId: publications.nextTemplateIdValue,
     revision: snapshot.revision,
+    id: snapshot.id,
     document: snapshot.document,
     publishedAt: snapshot.publishedAt,
   };
@@ -1807,6 +1817,7 @@ const server = Bun.serve(
             const published = await publications.publish(
               body.document,
               body.expectedRevision,
+              body.expectedId,
             );
             await recordAdminAction("website.publish", {
               targetId: published.revision,
@@ -2369,7 +2380,7 @@ const server = Bun.serve(
             }
 
             const token = crypto.randomUUID();
-            const expiresAt = confirmationExpiry();
+            const expiresAt = mailWaitExpiry();
 
             const delivery = emailManager.status.ready
               ? {}
@@ -2577,7 +2588,7 @@ const server = Bun.serve(
             if (!isValidEmail(email)) return json({ ok: true });
 
             const token = crypto.randomUUID();
-            const expiresAt = confirmationExpiry();
+            const expiresAt = mailWaitExpiry();
             return await durableWork.run(async () => {
               const name = await refreshVerificationToken(
                 email,
@@ -2964,13 +2975,11 @@ const server = Bun.serve(
                 : undefined;
             const newsletter = Boolean(body.newsletter);
             const showPublicly = body.showPublicly === true;
-            const showSignerDetails = cfg.features.publicSignerDetails
-              ? !showPublicly
-                ? false
-                : typeof body.showSignerDetails === "boolean"
-                  ? body.showSignerDetails
-                  : undefined
-              : undefined;
+            // Honoured only for a signer who has this choice.
+            const showSignerDetails =
+              typeof body.showSignerDetails === "boolean"
+                ? body.showSignerDetails
+                : undefined;
             // Only honor the delegate flag while the field is enabled.
             const delegierter =
               (await getShowDelegierter()) && Boolean(body.delegierter);
@@ -3899,7 +3908,7 @@ const server = Bun.serve(
               await refreshVerificationToken(
                 signer.email,
                 crypto.randomUUID(),
-                confirmationExpiry(),
+                mailWaitExpiry(),
               );
               await queueEmail("verification", {
                 signerId: id,
@@ -4958,7 +4967,19 @@ async function sendQueuedEmail(payload, job) {
   if (!payload.messageId && !job?.id)
     throw new Error("Queued email needs a logical message identity");
   const scope = `transactional:${payload.messageId || job.id}`;
-  if (await emailManager.completed(scope)) return;
+  // The mail went out on an earlier run that failed before the job was
+  // acknowledged. What the mail's acceptance starts may be what failed, so
+  // it is recorded again, from when the mail went out.
+  const acceptedAt = await emailManager.acceptedAt(scope);
+  if (acceptedAt) {
+    if (payload.kind === "verification" && payload.signerId && payload.token)
+      await startConfirmationWindow(
+        payload.signerId,
+        payload.token,
+        confirmationExpiry(acceptedAt),
+      );
+    return;
+  }
   if (payload.to) {
     payload = await sqlDb.transaction(
       async () => {
@@ -5013,8 +5034,6 @@ async function sendQueuedEmail(payload, job) {
   }
   const args = await prepareQueuedEmail(payload);
   if (!args) return; // row gone, already confirmed or link expired
-  if (args.kind === "verification")
-    await extendPendingConfirmation(payload.signerId, confirmationExpiry());
   return deliveryContext.run(
     {
       ...deliveryContext.getStore(),
@@ -5024,6 +5043,14 @@ async function sendQueuedEmail(payload, job) {
           token: args.token,
           connection,
         }),
+      ...(args.kind === "verification" && {
+        onAccepted: (_connection, acceptedAt) =>
+          startConfirmationWindow(
+            payload.signerId,
+            args.token,
+            confirmationExpiry(acceptedAt),
+          ),
+      }),
     },
     async () => {
       switch (args.kind) {

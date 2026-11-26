@@ -2,7 +2,8 @@ import { beforeEach, describe, expect, test } from "bun:test";
 import { mkdtempSync, readFileSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { db, resetDb, addVerifiedSigner } from "./helpers.js";
+import { db, resetDb, addVerifiedSigner, setUnsubToken } from "./helpers.js";
+import { HIDE_SIGNER_DETAILS, readErasureLog } from "../db/erasure-log.js";
 import * as q from "../server/db.js";
 import cfg from "../config/letter.config.js";
 import { invalidate } from "../server/cache.js";
@@ -84,6 +85,132 @@ describe("first signers and their public details", () => {
           Declined: null,
           "Unpinned agreed": null,
         }),
+    );
+  });
+
+  test("a signer who shows only their name publishes no region, on a letter that asks for name or details", async () => {
+    const add = async (name, kreisverband, showDetails) => {
+      const signer = await addVerifiedSigner({
+        name,
+        kreisverband,
+        state: kreisverband,
+        occupation: "",
+      });
+      await db
+        .query("UPDATE signers SET show_signer_details = ? WHERE id = ?")
+        .run(showDetails, signer.id);
+    };
+    await add("Nur Name", "Berlin", 0);
+    await add("Mit Angaben", "Hamburg", 1);
+    const regions = async (options = {}) =>
+      Object.fromEntries(
+        (await q.getSigners({ sort: "asc", ...options })).signers.map(
+          (signer) => [signer.name, [signer.kreisverband, signer.state]],
+        ),
+      );
+
+    await withFeatures(
+      { publicSignerDetails: true, kreisverbandField: true },
+      async () => {
+        expect(await regions()).toEqual({
+          "Nur Name": ["", ""],
+          "Mit Angaben": ["Hamburg", "Hamburg"],
+        });
+        // Neither a search for the region nor the "with region" view may
+        // give away where a name-only signer is from.
+        expect(await regions({ search: "Berlin" })).toEqual({});
+        expect(await regions({ search: "berlim" })).toEqual({});
+        expect(Object.keys(await regions({ search: "Hamburg" }))).toEqual([
+          "Mit Angaben",
+        ]);
+        expect(Object.keys(await regions({ filter: "kv" }))).toEqual([
+          "Mit Angaben",
+        ]);
+        expect(
+          (await q.exportPublicSigners()).map((row) => [
+            row.name,
+            row.kreisverband,
+            row.state,
+          ]),
+        ).toEqual([
+          ["Nur Name", "", ""],
+          ["Mit Angaben", "Hamburg", "Hamburg"],
+        ]);
+      },
+    );
+
+    // A letter with one checkbox, "my name (and region) may be shown", keeps
+    // showing the region with every public name.
+    await withFeatures(
+      { publicSignerDetails: false, kreisverbandField: true },
+      async () => {
+        expect(await regions()).toEqual({
+          "Nur Name": ["Berlin", "Berlin"],
+          "Mit Angaben": ["Hamburg", "Hamburg"],
+        });
+        expect(Object.keys(await regions({ search: "Berlin" }))).toEqual([
+          "Nur Name",
+        ]);
+        expect(Object.keys(await regions({ filter: "kv" }))).toEqual([
+          "Nur Name",
+          "Mit Angaben",
+        ]);
+      },
+    );
+  });
+
+  test("a first signer can take back, and give again, the choice to show their details on their settings page", async () => {
+    const first = await person("First", 1);
+    const other = await person("Other", 1);
+    await db
+      .query("UPDATE signers SET first_signer = 1 WHERE id = ?")
+      .run(first.id);
+    await setUnsubToken(first.id, "first-token");
+    await setUnsubToken(other.id, "other-token");
+    const settings = (token) =>
+      q.getUnifiedUnsubscribeState(token, "newsletter");
+    const save = (signer, showSignerDetails) =>
+      q.updateSignerByEmail(signer.email, {
+        name: signer.name,
+        kreisverband: "",
+        occupation: "Klinikum",
+        newsletter: true,
+        showPublicly: true,
+        showSignerDetails,
+      });
+    const stored = async (signer) =>
+      (
+        await db
+          .query("SELECT show_signer_details FROM signers WHERE id = ?")
+          .get(signer.id)
+      ).show_signer_details;
+
+    // A letter that shows details for first signers only.
+    await withFeatures(
+      { publicSignerDetails: false, publicFirstSignerDetails: true },
+      async () => {
+        expect((await settings("first-token")).showSignerDetails).toBe(true);
+        expect(await publicList()).toMatchObject({ First: "Sprecherin" });
+
+        await save(first, false);
+        expect(await publicList()).toMatchObject({ First: null });
+        expect((await settings("first-token")).showSignerDetails).toBe(false);
+        // A restored backup must not bring the details back.
+        expect((await readErasureLog(db)).map((entry) => entry.kind)).toContain(
+          HIDE_SIGNER_DETAILS,
+        );
+
+        await save(first, true);
+        expect(await publicList()).toMatchObject({ First: "Sprecherin" });
+
+        // Nobody else's details are public on this letter, so they are not
+        // asked, and saving their settings changes nothing about them.
+        expect(await settings("other-token")).not.toHaveProperty(
+          "showSignerDetails",
+        );
+        await save(other, false);
+        expect(await stored(other)).toBe(1);
+      },
     );
   });
 

@@ -13,6 +13,7 @@ Public read endpoints require a 30-minute session token from `/api/session` when
 | `GET`  | `/api/stats`                      | Signature totals, milestones, and the current goal.                                                                                                          |
 | `GET`  | `/api/signers`                    | Paginated, filtered public signer list.                                                                                                                      |
 | `GET`  | `/api/occupations`                | Occupation counts.                                                                                                                                           |
+| `GET`  | `/api/signer-functions`           | Role counts, when the letter has the role field.                                                                                                             |
 | `GET`  | `/api/kreisverband-stats`         | Counts by regional affiliation.                                                                                                                              |
 | `GET`  | `/api/state-stats`                | Counts by German state.                                                                                                                                      |
 | `POST` | `/api/sign`                       | Submit a signature and queue its confirmation email.                                                                                                         |
@@ -26,6 +27,8 @@ Public read endpoints require a 30-minute session token from `/api/session` when
 | `GET`  | `/api/unsubscribe/:token`         | Read newsletter subscription state.                                                                                                                          |
 | `POST` | `/api/unsubscribe/:token/opt-out` | Unsubscribe from newsletters.                                                                                                                                |
 | `POST` | `/api/unsubscribe/:token/delete`  | Delete a signature using its newsletter link.                                                                                                                |
+
+The four count endpoints cover signers whose name is public. With `features.publicSignerDetails`, they cover only signers who chose to show their details, like the role, organisation, and region in `/api/signers`.
 
 ### Submit a signature
 
@@ -42,7 +45,7 @@ Public read endpoints require a 30-minute session token from `/api/session` when
 
 The route requires a name of at least two characters and a valid email address. It trims text, strips HTML, and limits input lengths. Each IP can make 30 requests per 15 minutes. Excess requests receive 429 and a `Retry-After` header.
 
-A successful request queues a confirmation email as a durable job. Its UUID token expires after `privacy.confirmationLinkHours`, which defaults to 24 hours. The response is `{ok: true}` whether the email address is new or already registered.
+A successful request queues a confirmation email as a durable job. Its UUID token expires `privacy.confirmationLinkHours` after the email went out, which defaults to 24 hours. Until the email goes out, the sign-up waits for `privacy.emailJobRetentionHours`. A second request for a pending address queues the same email again and restarts that wait, without changing the expiry of a link that already went out. The response is `{ok: true}` whether the email address is new or already registered.
 
 ### List public signers
 

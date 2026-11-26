@@ -176,6 +176,33 @@ describe("admin routes on a working server", () => {
     expect(response.status).toBe(413);
   });
 
+  test("a draft is refused as stale when it was made from another publication than the current one, also with the current revision number", async () => {
+    const current = await (
+      await server.request("/api/admin/publication", { token })
+    ).json();
+    expect(typeof current.id).toBe("string");
+    const publish = (expectedId) =>
+      server.request("/api/admin/publication", {
+        method: "PUT",
+        token,
+        body: {
+          document: current.document,
+          expectedRevision: current.revision,
+          expectedId,
+        },
+      });
+
+    const refused = await publish("the-id-of-another-publication");
+    expect(refused.status).toBe(409);
+    expect((await refused.json()).revision).toBe(current.revision);
+
+    const published = await publish(current.id);
+    expect(published.status).toBe(200);
+    const next = await published.json();
+    expect(next.revision).toBe(current.revision + 1);
+    expect(next.id).not.toBe(current.id);
+  });
+
   test("a template still due to be sent cannot be removed, by either route", async () => {
     const publication = async () =>
       (await server.request("/api/admin/publication", { token })).json();

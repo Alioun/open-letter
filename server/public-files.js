@@ -9,18 +9,18 @@ const PUBLIC_DIR = fileURLToPath(new URL("../public/", import.meta.url));
 
 // SVG is left out on purpose: opened on its own, it can run script on the
 // site's origin.
-const IMAGE_TYPES = {
-  png: "image/png",
-  jpg: "image/jpeg",
-  jpeg: "image/jpeg",
-  webp: "image/webp",
-  avif: "image/avif",
-  gif: "image/gif",
-};
+const IMAGE_TYPES = new Map([
+  ["png", "image/png"],
+  ["jpg", "image/jpeg"],
+  ["jpeg", "image/jpeg"],
+  ["webp", "image/webp"],
+  ["avif", "image/avif"],
+  ["gif", "image/gif"],
+]);
 
 export async function publicFile(pathname, dir = PUBLIC_DIR) {
   const match = /^\/([A-Za-z0-9][\w.-]*\.([A-Za-z0-9]+))$/.exec(pathname);
-  const type = match && IMAGE_TYPES[match[2].toLowerCase()];
+  const type = match && IMAGE_TYPES.get(match[2].toLowerCase());
   if (!type) return null;
   const path = join(dir, match[1]);
   const stat = await lstat(path).catch(() => null);

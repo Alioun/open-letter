@@ -48,23 +48,27 @@ function uniqueEmail(prefix = "u") {
 }
 
 // Insert a verified signer directly (full control over verified/state/created_at).
+// show_signer_details is the signer's own choice to show role, organisation
+// and region with the name; unset means they were never asked.
 export async function addVerifiedSigner(overrides = {}) {
   const s = {
     name: "Anna Schmidt",
     email: uniqueEmail("s"),
     kreisverband: "Berlin-Mitte",
     occupation: "Lehrerin",
+    signer_function: "",
     state: "",
     newsletter: 1,
     show_publicly: 1,
+    show_signer_details: null,
     created_at: isoNow(),
     ...overrides,
   };
   const row = await db
     .query(
       `INSERT INTO signers
-        (name, email, kreisverband, occupation, state, newsletter, show_publicly, verified, created_at)
-       VALUES (?, ?, ?, ?, ?, ?, ?, 1, ?)
+        (name, email, kreisverband, occupation, signer_function, state, newsletter, show_publicly, show_signer_details, verified, created_at)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 1, ?)
        RETURNING id`,
     )
     .get(
@@ -72,9 +76,11 @@ export async function addVerifiedSigner(overrides = {}) {
       s.email,
       s.kreisverband,
       s.occupation,
+      s.signer_function,
       s.state,
       s.newsletter ? 1 : 0,
       s.show_publicly ? 1 : 0,
+      s.show_signer_details === null ? null : s.show_signer_details ? 1 : 0,
       s.created_at,
     );
   return { id: row.id, ...s };

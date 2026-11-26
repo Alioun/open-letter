@@ -205,9 +205,9 @@ describe("signers: insert / confirm / delete", () => {
     });
     expect((await q.getPendingSignerByToken("tok-1")).show_publicly).toBe(true);
 
-    // Once the first link expired, a new sign-up replaces the pending row.
+    // Once the first sign-up has run out, a new one replaces the pending row.
     await db.run(
-      "UPDATE signers SET token_expires_at = '2000-01-01T00:00:00.000Z'",
+      "UPDATE signers SET mail_wait_until = '2000-01-01T00:00:00.000Z'",
     );
     const r2b = await q.insertSigner(attempt);
     expect(r2b.pendingKept).toBeUndefined();
@@ -317,8 +317,16 @@ describe("getSigners + fuzzy search", () => {
   });
 
   test("filter=kv only returns rows with a Kreisverband", async () => {
-    await addVerifiedSigner({ name: "HasKV", kreisverband: "Leipzig" });
-    await addVerifiedSigner({ name: "NoKV", kreisverband: "" });
+    await addVerifiedSigner({
+      name: "HasKV",
+      kreisverband: "Leipzig",
+      show_signer_details: 1,
+    });
+    await addVerifiedSigner({
+      name: "NoKV",
+      kreisverband: "",
+      show_signer_details: 1,
+    });
     const res = await q.getSigners({ filter: "kv" });
     expect(res.signers.map((s) => s.name)).toEqual(["HasKV"]);
   });
@@ -332,7 +340,11 @@ describe("getSigners + fuzzy search", () => {
   });
 
   test("fuzzy: matches on Kreisverband and ranks exact higher", async () => {
-    await addVerifiedSigner({ name: "X", kreisverband: "Leipzig" });
+    await addVerifiedSigner({
+      name: "X",
+      kreisverband: "Leipzig",
+      show_signer_details: 1,
+    });
     const res = await q.getSigners({ search: "leipzig" });
     expect(res.total).toBe(1);
   });
@@ -454,17 +466,29 @@ describe("stats", () => {
   });
 });
 
+async function withFeatures(features, run) {
+  const shipped = cfg.features;
+  cfg.features = { ...shipped, ...features };
+  try {
+    return await run();
+  } finally {
+    cfg.features = shipped;
+  }
+}
+
 describe("occupations", () => {
   test("groups gender variants and adds Gendersternchen", async () => {
     const { signerFunction } = cfg.sign.fields;
     delete cfg.sign.fields.signerFunction;
     try {
-      await addVerifiedSigner({ occupation: "Lehrer" });
-      await addVerifiedSigner({ occupation: "Lehrerin" });
-      const occ = await q.getOccupations();
-      const lehr = occ.find((o) => o.count === 2);
-      expect(lehr).toBeTruthy();
-      expect(lehr.occupation).toContain("*");
+      await withFeatures({ publicSignerDetails: false }, async () => {
+        await addVerifiedSigner({ occupation: "Lehrer" });
+        await addVerifiedSigner({ occupation: "Lehrerin" });
+        const occ = await q.getOccupations();
+        const lehr = occ.find((o) => o.count === 2);
+        expect(lehr).toBeTruthy();
+        expect(lehr.occupation).toContain("*");
+      });
     } finally {
       cfg.sign.fields.signerFunction = signerFunction;
     }
@@ -472,13 +496,105 @@ describe("occupations", () => {
 
   test("next to a role field, organisations are listed as written", async () => {
     expect(cfg.sign.fields.signerFunction).toBeTruthy();
-    await addVerifiedSigner({ occupation: "Lehrer" });
-    await addVerifiedSigner({ occupation: "Lehrerin" });
+    await addVerifiedSigner({ occupation: "Lehrer", show_signer_details: 1 });
+    await addVerifiedSigner({
+      occupation: "Lehrerin",
+      show_signer_details: 1,
+    });
     const occ = await q.getOccupations();
     expect(occ.map((o) => [o.occupation, o.count])).toEqual([
       ["Lehrer", 1],
       ["Lehrerin", 1],
     ]);
+  });
+});
+
+describe("public counts of role, organisation, region and state", () => {
+  async function addSigners() {
+    await addVerifiedSigner({
+      name: "With Details",
+      show_signer_details: 1,
+      signer_function: "Chair",
+      occupation: "Food Bank",
+      kreisverband: "Leipzig",
+      state: "Sachsen",
+    });
+    await addVerifiedSigner({
+      name: "Name Only",
+      show_signer_details: 0,
+      signer_function: "Treasurer",
+      occupation: "City Library",
+      kreisverband: "Kiel",
+      state: "Schleswig-Holstein",
+    });
+    await addVerifiedSigner({
+      name: "Never Asked",
+      signer_function: "Nurse",
+      occupation: "Clinic",
+      kreisverband: "Bonn",
+      state: "Nordrhein-Westfalen",
+    });
+    await addVerifiedSigner({
+      name: "Not Public",
+      show_publicly: 0,
+      signer_function: "Driver",
+      occupation: "Depot",
+      kreisverband: "Ulm",
+      state: "Baden-Württemberg",
+    });
+  }
+  const counts = async () => ({
+    roles: (await q.getSignerFunctions()).map((r) => [r.label, r.count]),
+    organisations: (await q.getOccupations()).map((r) => [
+      r.occupation,
+      r.count,
+    ]),
+    regions: (await q.getKreisverbandStats()).map((r) => [
+      r.kreisverband,
+      r.state,
+      r.count,
+    ]),
+    states: (await q.getStateStats()).map((r) => [r.state, r.count]),
+  });
+
+  test("where signers choose between their name and their details, only those who chose the details are counted", async () => {
+    await withFeatures({ publicSignerDetails: true }, async () => {
+      await addSigners();
+      expect(await counts()).toEqual({
+        roles: [["Chair", 1]],
+        organisations: [["Food Bank", 1]],
+        regions: [["Leipzig", "Sachsen", 1]],
+        states: [["Sachsen", 1]],
+      });
+    });
+  });
+
+  test("a letter with one checkbox for the public name counts everyone who ticked it", async () => {
+    await withFeatures({ publicSignerDetails: false }, async () => {
+      await addSigners();
+      expect(await counts()).toEqual({
+        roles: [
+          ["Chair", 1],
+          ["Nurse", 1],
+          ["Treasurer", 1],
+        ],
+        organisations: [
+          ["City Library", 1],
+          ["Clinic", 1],
+          ["Food Bank", 1],
+        ],
+        regions: [
+          ["Bonn", "Nordrhein-Westfalen", 1],
+          ["Kiel", "Schleswig-Holstein", 1],
+          ["Leipzig", "Sachsen", 1],
+        ],
+        states: [
+          ["Nordrhein-Westfalen", 1],
+          ["Sachsen", 1],
+          ["Schleswig-Holstein", 1],
+        ],
+      });
+    });
   });
 });
 
@@ -1036,7 +1152,10 @@ describe("unsubscribe tokens: stable, opt-out never expires", () => {
     expect((await db.query("SELECT COUNT(*) c FROM signers").get()).c).toBe(0);
   });
 
-  test("re-submitting a pending sign-up renews its link but keeps its values", async () => {
+  const linkValidUntil = async (email) =>
+    (await q.lookupSignups(email)).signups[0].confirmationExpiresAt;
+
+  test("re-submitting a sign-up that has no mail yet renews its wait but keeps its values", async () => {
     const base = {
       name: "Pia",
       email: "renew@example.org",
@@ -1059,14 +1178,63 @@ describe("unsubscribe tokens: stable, opt-out never expires", () => {
     });
     expect(r.pendingKept).toBe(true);
     const row = await db
-      .query(
-        "SELECT name, verification_token, token_expires_at FROM signers WHERE email = ?",
-      )
+      .query("SELECT name, verification_token FROM signers WHERE email = ?")
       .get(base.email);
-    expect(row).toEqual({
-      name: "Pia",
-      verification_token: "t1",
-      token_expires_at: later.toISOString(),
+    expect(row).toEqual({ name: "Pia", verification_token: "t1" });
+    // No mail has gone out, so the link works for as long as the sign-up
+    // waits for one.
+    expect(await linkValidUntil(base.email)).toBe(later.toISOString());
+  });
+
+  describe("signing again after the confirmation mail went out", () => {
+    const start = Date.now();
+    const hours = (n) => new Date(start + n * 3600_000);
+    const signup = {
+      name: "Ina",
+      email: "issued@example.org",
+      kv: "",
+      occupation: "",
+      newsletter: false,
+      showPublicly: true,
+    };
+    let id;
+    beforeEach(async () => {
+      await q.insertSigner({
+        ...signup,
+        token: "issued",
+        expiresAt: hours(24),
+      });
+      ({ id } = await db
+        .query("SELECT id FROM signers WHERE email = ?")
+        .get(signup.email));
+      // The mail service took the mail. Its link is valid for one hour.
+      await q.startConfirmationWindow(id, "issued", hours(1));
+      const again = await q.insertSigner({
+        ...signup,
+        token: "other",
+        expiresAt: hours(24.5),
+      });
+      expect(again.pendingKept).toBe(true);
+    });
+
+    test("does not make that mail's link valid for longer, and the sign-up waits for the new mail", async () => {
+      expect(await linkValidUntil(signup.email)).toBe(hours(1).toISOString());
+      // The link has run out and the new mail has not gone out.
+      expect(await q.deleteExpiredUnverifiedSigners(hours(2))).toBe(0);
+      expect(await q.deleteExpiredUnverifiedSigners(hours(25))).toBe(1);
+    });
+
+    test("recording the first mail again after the second leaves the second mail's time", async () => {
+      await q.startConfirmationWindow(id, "issued", hours(4));
+      await q.startConfirmationWindow(id, "issued", hours(1));
+      expect(await linkValidUntil(signup.email)).toBe(hours(4).toISOString());
+    });
+
+    test("the new mail's link counts from when that mail goes out, and the wait is over", async () => {
+      await q.startConfirmationWindow(id, "issued", hours(4));
+      expect(await linkValidUntil(signup.email)).toBe(hours(4).toISOString());
+      expect(await q.deleteExpiredUnverifiedSigners(hours(3.5))).toBe(0);
+      expect(await q.deleteExpiredUnverifiedSigners(hours(4.5))).toBe(1);
     });
   });
 });

@@ -6,15 +6,17 @@
 // changes. Invalid values (not a positive number) throw at startup.
 
 export const PRIVACY_DEFAULTS = {
-  // Sign-up, Treffen and deletion confirmation links stay valid this long.
-  // Unconfirmed sign-ups are deleted once their link has expired.
+  // Sign-up, Treffen and deletion confirmation links stay valid this long. A
+  // sign-up's link counts from when its mail went out. Unconfirmed sign-ups
+  // are deleted once their link has expired and they wait for no mail.
   confirmationLinkHours: 24,
   // How long after the last mail carrying it a signer's unsubscribe link may
   // still show, edit or delete data. Opting out works with a link of any age.
   // Treffen links have no such limit: they work while the registration exists.
   settingsLinkDays: 90,
   // A queued transactional mail is dropped after this long, and a mail job
-  // that failed for good is deleted this long after it failed.
+  // that failed for good is deleted this long after it failed. A sign-up waits
+  // this long for its confirmation mail; without one it then ends.
   emailJobRetentionHours: 24,
   // Treffen registrations are deleted this many days after the event.
   treffenRetentionDays: 14,

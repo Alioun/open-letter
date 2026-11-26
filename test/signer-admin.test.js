@@ -200,6 +200,55 @@ test("an edit changes only what it names and logs the old and new value", async 
   expect(await q.updateSignerByAdmin(999999, { name: "Niemand" })).toBeNull();
 });
 
+test("an edit is saved and logged whatever text sits around an address in the old value", async () => {
+  // A quote, a backslash or a line break next to an address, as a name or a
+  // note typed by hand can hold them.
+  const names = [
+    'Signer "contact@example.org"',
+    "Signer \\contact@example.org\\",
+    "Signer\ncontact@example.org\tand more",
+    '"contact@example.org',
+    "contact@example.org\\",
+  ];
+  for (const name of names) {
+    const signer = await addVerifiedSigner({ name });
+    const saved = await q.updateSignerByAdmin(
+      signer.id,
+      { name: "Signer", showPublicly: false },
+      { consentNote: `asked by ${name}` },
+    );
+    expect(saved.signer.name).toBe("Signer");
+    expect((await q.getSignerForAdmin(signer.id)).name).toBe("Signer");
+  }
+
+  const entries = await logged();
+  expect(entries).toHaveLength(names.length);
+  for (const entry of entries) {
+    const [before, after] = entry.detail.changes.name;
+    expect(before).toContain("[E-Mail-Adresse entfernt]");
+    expect(after).toBe("Signer");
+    expect(JSON.stringify(entry)).not.toContain("@");
+  }
+  // Only the address goes; the text around it stays as it was typed.
+  expect(entries.at(-1).detail.changes.name[0]).toBe(
+    'Signer "[E-Mail-Adresse entfernt]"',
+  );
+
+  // Values that are not text, and text JSON has to escape, are kept as is.
+  await recordAdminAction(db, "signer.position", {
+    targetId: 1,
+    detail: {
+      changes: { position: [null, 3], firstSigner: [false, true] },
+      consentNote: 'half \ud800 pair, "quoted" \\ and\u0000 a@example.org',
+    },
+  });
+  expect((await logged())[0].detail).toEqual({
+    changes: { position: [null, 3], firstSigner: [false, true] },
+    consentNote:
+      'half \ud800 pair, "quoted" \\ and\u0000 [E-Mail-Adresse entfernt]',
+  });
+});
+
 test("a function taken off stays off after a backup is restored, unless it was entered again", async () => {
   const signer = await addVerifiedSigner({ email: "funktion@example.org" });
   const setFunction = (value) =>

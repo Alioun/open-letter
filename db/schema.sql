@@ -30,7 +30,13 @@ CREATE TABLE IF NOT EXISTS signers (
   show_signer_details            INTEGER CHECK(show_signer_details IN (0, 1)),
   verified                      INTEGER NOT NULL DEFAULT 0,
   verification_token            TEXT UNIQUE,
+  -- The two clocks of an unconfirmed sign-up. token_expires_at: until when
+  -- the link in a confirmation mail that went out works; NULL until the mail
+  -- service has taken a mail with the current token. mail_wait_until: until
+  -- when the sign-up waits for a confirmation mail that was asked for and has
+  -- not gone out; NULL once it has.
   token_expires_at              TEXT,
+  mail_wait_until               TEXT,
   deletion_token                TEXT UNIQUE,
   deletion_token_expires_at     TEXT,
   unsubscribe_token             TEXT UNIQUE,

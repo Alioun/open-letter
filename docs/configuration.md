@@ -25,6 +25,22 @@ After the first publication, the database supplies published content and templat
 | `invite`                | Invitation copy and private statistics rules. Defaults are in `config/invite.js`.                                                     |
 | `zoom`                  | Meeting label, date, and duration when `features.zoomEvent` is enabled.                                                               |
 | `languages`, `i18n`     | Enabled languages and overrides when `features.multiLanguage` is enabled.                                                             |
+| `previousDefaults`      | Earlier texts of this file by copy path, for a site that started on an earlier version. See [changed defaults](#changed-defaults).    |
+
+`legal.privacyHtml` replaces the default privacy policy with your own, as HTML. The server completes it as it completes a policy a team wrote in the admin. It adds the paragraphs on blocked addresses, the admin log, and first signers added by hand, and the statements about the optional fields of the form, as far as your policy lacks them. A new site stores your policy with these additions. A site whose team has not edited the policy follows the config when you change the policy or the form. The additions are German or English, as the next paragraph says, so state `legal.privacyLanguage` with a policy in another language than the letter's.
+
+`legal.privacyLanguage` states the language of the privacy policy, `"de"` or `"en"`. The server writes in that language when it has to add text to a policy the team edited. Without the key, the server decides once: German for a site that starts on the default policy, which is German for every language. Set the key when the team replaces the default with a policy in another language. In a letter with several languages, set it per language under `i18n.<lang>.legal`. See [publishing](publishing.md#storage-and-application-controls).
+
+### Changed defaults
+
+A site stores a value for every text of its letter, including the ones nobody edited, so the admin can edit them. A stored text that still is what was its default follows the default when you change it in the config, and when a new version of the platform changes it. A text the team edited stays. The server records each default at every start to tell the two apart. A start that changes a text publishes a new revision and adds an entry to the admin log. See [publishing](publishing.md#storage-and-application-controls).
+
+A database that last ran a version without that record cannot tell them apart. For it, a stored text counts as an old default in two cases:
+
+- The letter lists it under `previousDefaults`, by copy path: `previousDefaults: { "sign.fields.occupation.label": ["Occupation"] }`. In a letter with several languages, `i18n.<lang>.previousDefaults` lists them for that language.
+- It is an interface text (`ui.…`) and equals the platform's wording for it, the current one or an earlier one from `PREVIOUS_UI_DEFAULTS` in `config/ui.js`. That is what the site showed before the letter set its own text. For a letter with one language, the platform's wording is the German one. For a letter with several languages, the German wording counts too, because the letter may have had one language when the text was stored.
+
+Such a text moves to the current default once, at the first start on this version. After that the record exists, and a text the team sets to an earlier wording stays.
 
 ### Theme and form fields
 
@@ -42,9 +58,11 @@ These flags change what the public list shows:
 
 | Flag                       | Default | Effect                                                                                                                                                                                                                                                                                                                                             |
 | -------------------------- | ------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `publicSignerDetails`      | off     | The form replaces the public-name checkbox with three choices under `ui.signForm.visibilityLegend`: keep the signature private, show the name only, or show the name with role and organisation (`sign.publicDetailsLabel`). Role and organisation appear only for people who chose the third. Without the flag they are published as counts only. |
-| `publicFirstSignerDetails` | off     | Shows role and organisation next to the names of first signers who agreed, even without `publicSignerDetails`.                                                                                                                                                                                                                                     |
+| `publicSignerDetails`      | off     | The form replaces the public-name checkbox with three choices under `ui.signForm.visibilityLegend`: keep the signature private, show the name only, or show the name with role and organisation (`sign.publicDetailsLabel`). Role and organisation appear, and are counted in the list's filters, only for people who chose the third. Without the flag they are published as counts only, for everyone with a public name. |
+| `publicFirstSignerDetails` | off     | Shows role and organisation next to the names of first signers who agreed, even without `publicSignerDetails`. They can change that on their settings page.                                                                                                                                                                                                                                     |
 | `faq`                      | on      | `false` removes the FAQ section. Remove its entry from `nav` as well.                                                                                                                                                                                                                                                                              |
+
+With `publicSignerDetails`, the form offers three choices: keep the signature private, show only the name, or show the name with details. The region then counts as one of the details. It appears in the list, its search, and the export only for people who chose the third option, so name the region in `sign.publicDetailsLabel` when the regional field is on. The public counts per role, organisation, region, and state cover the same people and nobody else, because a count of 1 names its one signer. Without the flag, the region appears with every public name, as the single checkbox says, and the counts cover every public name.
 
 ### Hero kicker, description, and artwork
 
@@ -68,7 +86,7 @@ A letter can ask signers for their organisation and their role, and let them cho
 2. Define `sign.fields.signerFunction` with `label`, `optionalLabel`, `placeholder`, `filterLabel`, and `emptyLabel`. The list then gets a filter, labelled `filterLabel`, that counts signers by role.
 3. To publish them, set `features.publicSignerDetails: true` and `sign.publicDetailsLabel`, the text of the third visibility choice. See [feature flags](#feature-flags).
 
-Both fields are stored, edited in the admin, and exported separately. With either details flag on, a row in the public list shows role and organisation when the signer agreed to it. A row without them shows the region only when `features.kreisverbandField` is on. Without either details flag, every row shows the region line, or `noneLabel` for a signer who gave no region.
+Both fields are stored, edited in the admin, and exported separately. With either details flag on, a row in the public list shows role and organisation when the signer agreed to it. A row without them shows the region only when `features.kreisverbandField` is on and, with `publicSignerDetails`, only for signers who chose the details. Without either details flag, every row shows the region line, or `noneLabel` for a signer who gave no region.
 
 Without `features.multiLanguage`, interface copy starts from the German defaults in `config/ui.js`. A letter in another language sets the copy these features show in its own `ui` block, as the example letter does:
 
@@ -90,6 +108,8 @@ ui: {
   },
 },
 ```
+
+Two more groups of copy show on any letter, whatever its features, and are German until the letter sets them. A sign-up made while mail is delayed shows `ui.signForm.emailDelayed` on the form and `ui.emailModal.delayedTitle`, `delayedSent`, and `delayedHint` in the modal. `delayedHint` takes `{hours}` and `{waitHours}`, the two periods from `privacy`. A signing pause shows `ui.signForm.pausedTitle` and `pausedMessage`. The example letter sets all six in English.
 
 ### First signers
 

@@ -100,17 +100,45 @@ async function saveStatus(change) {
     );
 }
 
+// One run at a time. The hourly job and the backup before an import can start
+// in the same second, and every run prunes the same folder and takes its name
+// from what is in it, so two at once fail on each other's files.
+let lastRun = Promise.resolve();
+
 // Rejects when no backup was written, so the job that ran it fails with it.
-export async function runBackup() {
-  const ts = new Date().toISOString().replace(/[:.]/g, "-").slice(0, 19);
-  const base = join(BACKUP_DIR, `backup-${ts}.sqlite`);
-  const tmp = `${base}.tmp`;
-  const finalPath = BACKUP_GZIP ? `${base}.gz` : base;
+export function runBackup() {
+  const run = lastRun.then(writeBackup);
+  lastRun = run.catch(() => {});
+  return run;
+}
+
+// The time a new backup carries in its name, YYYY-MM-DDTHH-MM-SS (UTC): the
+// current second, or the second after the newest backup's when that one is
+// not earlier. So no backup ever takes the name of a finished one, and names
+// sort in the order the backups were made. Two made in the same second, like
+// the one before an import and the hourly one, are both kept: the second
+// carries the next second.
+async function nextBackupStamp() {
+  const [newest] = await listBackups();
+  const newestAt = newest ? nameTime(newest.slice("backup-".length)) : NaN;
+  const now = Math.floor(Date.now() / 1000) * 1000;
+  const at = Number.isNaN(newestAt) ? now : Math.max(now, newestAt + 1000);
+  return new Date(at).toISOString().replace(/[:.]/g, "-").slice(0, 19);
+}
+
+async function writeBackup() {
+  let tmp;
+  let unpublished;
   const status = {};
   let failure;
 
   try {
     await mkdir(BACKUP_DIR, { recursive: true });
+    const base = join(BACKUP_DIR, `backup-${await nextBackupStamp()}.sqlite`);
+    tmp = `${base}.tmp`;
+    const finalPath = BACKUP_GZIP ? `${base}.gz` : base;
+    // The backup appears under its final name only once it is complete.
+    unpublished = `${finalPath}.tmp`;
     // Make room before writing, not only after: drop to one below the limit so
     // the new file lands in the slot the oldest one leaves. Steady-state disk
     // use is unchanged, but on a full disk this frees roughly one backup's
@@ -123,12 +151,11 @@ export async function runBackup() {
       await pipeline(
         createReadStream(tmp),
         createGzip(),
-        createWriteStream(finalPath),
+        createWriteStream(unpublished),
       );
       await unlink(tmp);
-    } else {
-      await rename(tmp, finalPath);
     }
+    await rename(unpublished, finalPath);
 
     console.log(`[backup] saved ${finalPath}`);
     await pruneToCount(BACKUP_KEEP);
@@ -141,7 +168,7 @@ export async function runBackup() {
   } catch (err) {
     failure = err;
     console.error(`[backup] failed: ${err.message}`);
-    for (const f of [tmp, finalPath]) {
+    for (const f of [tmp, unpublished].filter(Boolean)) {
       try {
         await unlink(f);
       } catch {}
@@ -230,10 +257,11 @@ async function pruneExpired() {
   return new Date(newestAt).toISOString();
 }
 
-// A `.sqlite.tmp` is only ever the in-flight export of one run. If the process
-// dies mid-export (deploy, OOM) the run's own catch never cleans it up, and
-// BACKUP_FILE_RE keeps it out of the pruning above, so drop any tmp whose
-// timestamp is over an hour old, well past any run that could still own it.
+// A `.tmp` is only ever the in-flight export of one run, or its compressed
+// copy before it gets its final name. If the process dies mid-run (deploy,
+// OOM) the run's own catch never cleans it up, and BACKUP_FILE_RE keeps it out
+// of the pruning above, so drop any tmp whose timestamp is over an hour old,
+// well past any run that could still own it.
 async function pruneStaleTmp() {
   let names;
   try {
@@ -243,7 +271,7 @@ async function pruneStaleTmp() {
   }
   const cutoff = Date.now() - ONE_HOUR;
   for (const f of names) {
-    if (!/^backup-.+\.sqlite\.tmp$/.test(f)) continue;
+    if (!/^backup-.+\.sqlite(\.gz)?\.tmp$/.test(f)) continue;
     const at = nameTime(f.slice("backup-".length));
     if (Number.isNaN(at) || at >= cutoff) continue;
     await unlink(join(BACKUP_DIR, f));

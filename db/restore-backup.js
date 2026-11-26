@@ -22,10 +22,7 @@ import { createGunzip } from "node:zlib";
 import { pipeline } from "node:stream/promises";
 import process from "node:process";
 import { createHash } from "node:crypto";
-import {
-  cleanDocument,
-  reconcileStoredDocument,
-} from "../server/publications.js";
+import { cleanDocument, upgradedPublications } from "../server/publications.js";
 import { openEncrypted, DB_PATH } from "./connection.js";
 import { readErasureLog, applyErasureLog } from "./erasure-log.js";
 import { endAdminSessions } from "../server/admin-sessions.js";
@@ -92,7 +89,11 @@ async function resolveBackupFile(arg) {
   return join(BACKUP_DIR, files[0]);
 }
 
-async function validatePublications(connection, persist = false) {
+// The backup's newest publication has to be one the server can start with.
+// The restored database keeps the publications as the backup has them: the
+// server's next start brings the newest in line with the letter, going by
+// what the backup itself recorded about it.
+async function validatePublications(connection) {
   const table = await connection
     .query(
       "SELECT name FROM sqlite_master WHERE type='table' AND name='publications'",
@@ -115,18 +116,8 @@ async function validatePublications(connection, persist = false) {
       throw new Error("Invalid publication asset in backup");
   }
   const knownAssets = assets.map((a) => `/assets/${a.hash}.png`);
-  for (const row of await connection
-    .query("SELECT revision,document FROM publications")
-    .all()) {
-    const document = cleanDocument(
-      reconcileStoredDocument(JSON.parse(row.document)),
-      knownAssets,
-    );
-    if (persist)
-      await connection
-        .query("UPDATE publications SET document=? WHERE revision=?")
-        .run(JSON.stringify(document), row.revision);
-  }
+  const stored = await upgradedPublications(connection);
+  if (stored) cleanDocument(stored.document, knownAssets, { stored: true });
 }
 
 async function main() {
@@ -223,9 +214,6 @@ async function main() {
   }
   const restored = await openEncrypted(DB_PATH, DB_KEY);
   try {
-    await restored.transaction(() => validatePublications(restored, true), {
-      immediate: true,
-    });
     // A backup cannot attest that restored credentials still work or that attempts completed.
     await restored
       .query(

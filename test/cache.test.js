@@ -160,6 +160,7 @@ describe("cached read endpoints", () => {
       name: "Dana Fischer",
       email: "d@example.org",
       kreisverband: "Köln",
+      show_signer_details: 1,
     });
     await addVerifiedSigner({
       name: "Erik Vogel",

@@ -23,7 +23,10 @@ import {
   campaignRequest,
   submittedCampaign,
 } from "../src/campaign-draft.js";
-import { draftAfterPublication } from "../src/publishing/draft.js";
+import {
+  draftAfterPublication,
+  draftIsStale,
+} from "../src/publishing/draft.js";
 import { publicationScope } from "../src/publishing/scope.js";
 import {
   campaignText,
@@ -151,6 +154,30 @@ test("publication completion preserves edits made after the submitted snapshot a
     state: { document: submitted, base: submitted, revision: 4 },
   });
 });
+test("a draft is stale when the current publication is another one than it was made from, also under the same revision number", () => {
+  const publication = { revision: 2, id: "published-after-the-restore" };
+  expect(draftIsStale({ revision: 2, id: publication.id }, publication)).toBe(
+    false,
+  );
+  expect(draftIsStale({ revision: 1, id: publication.id }, publication)).toBe(
+    true,
+  );
+  expect(
+    draftIsStale({ revision: 2, id: "discarded-by-the-restore" }, publication),
+  ).toBe(true);
+  // A draft saved by a version that kept no id cannot show where it is from.
+  expect(draftIsStale({ revision: 2 }, publication)).toBe(true);
+
+  const published = { document: { subject: "A" }, revision: 3, id: "next" };
+  expect(
+    draftAfterPublication(
+      { document: published.document, revision: 2, id: publication.id },
+      published,
+      published.document,
+    ).state,
+  ).toMatchObject({ revision: 3, id: "next" });
+});
+
 const faqItems = (document) => document.locales.en.blocks.faq.items;
 const faqBase = () =>
   faqDocument([

@@ -140,7 +140,7 @@ export async function prepareQueuedEmail(payload) {
   if (kind === "verification") {
     if (
       signer.verified ||
-      !notExpired(signer.token_expires_at) ||
+      !notExpired(signer.signup_ends_at) ||
       (payload.token && payload.token !== signer.verification_token)
     )
       return null;

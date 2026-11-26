@@ -14,7 +14,7 @@ import {
 import { cssDiagnostics } from "../../config/css-policy.js";
 import { Choice, ConfirmDialog, EmptyState, Notice } from "../ui.jsx";
 import { FieldEditor } from "../AdminCopy.jsx";
-import { usePublicationDraft } from "./draft.js";
+import { draftIsStale, usePublicationDraft } from "./draft.js";
 import { publicationScope } from "./scope.js";
 import VisualEditor from "./puck.jsx";
 import CssEditor from "./CssEditor.jsx";
@@ -195,7 +195,7 @@ function Publisher({ publication, setPublication, api, workspace }) {
   const [imported, setImported] = useState(null);
   const [importBusy, setImportBusy] = useState(false);
   const [rejectedStale, setStale] = useState(false);
-  const stale = rejectedStale || draft.revision !== publication.revision;
+  const stale = rejectedStale || draftIsStale(draft, publication);
   const recoveryPanel = useRef(null);
   const recoveryVisible = !conflict && Boolean(stale || publishError);
   function focusRecovery() {
@@ -350,6 +350,12 @@ function Publisher({ publication, setPublication, api, workspace }) {
       const previous = await response.json();
       if (previous.document === null) {
         setStatus("Es gibt noch keine vorherige Veröffentlichung.");
+      } else if (JSON.stringify(previous.document) === JSON.stringify(doc)) {
+        // After a start adapted the texts, the publication before is loaded
+        // in the adapted version, which is the current publication.
+        setStatus(
+          "Die vorherige Veröffentlichung entspricht deinem Entwurf. Texte, die der Server beim Start an den Brief angepasst hat, enthält sie in der angepassten Fassung.",
+        );
       } else if (previous.document?.locales && previous.document?.layout) {
         setStatus("");
         ask(
@@ -445,6 +451,7 @@ function Publisher({ publication, setPublication, api, workspace }) {
         body: JSON.stringify({
           document: doc,
           expectedRevision: draft.revision,
+          expectedId: draft.id,
         }),
       });
       const data = await res.json();

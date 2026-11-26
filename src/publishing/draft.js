@@ -2,6 +2,13 @@ import { PUBLICATION_VERSION } from "../../config/publication.js";
 import { useEffect, useState, useRef } from "react";
 const KEY = "open-letter-publication-draft-v2";
 
+// A draft keeps the revision and the id of the publication it was made
+// from. Both have to be the current publication's for the draft to be
+// published: after a backup is restored, another publication can have the
+// same revision number.
+export const draftIsStale = (draft, publication) =>
+  draft.revision !== publication.revision || draft.id !== publication.id;
+
 export function draftAfterPublication(current, publication, submitted) {
   const newerChanges =
     JSON.stringify(current.document) !== JSON.stringify(submitted);
@@ -11,6 +18,7 @@ export function draftAfterPublication(current, publication, submitted) {
       document: newerChanges ? current.document : publication.document,
       base: publication.document,
       revision: publication.revision,
+      id: publication.id,
     },
   };
 }
@@ -29,6 +37,7 @@ export function usePublicationDraft(publication) {
       document: publication.document,
       base: publication.document,
       revision: publication.revision,
+      id: publication.id,
     };
   });
   const [storageWarning, setStorageWarning] = useState("");
@@ -76,6 +85,7 @@ export function usePublicationDraft(publication) {
         document,
         base: current.document,
         revision: current.revision,
+        id: current.id,
       });
     },
     storageWarning,
@@ -91,6 +101,7 @@ export function usePublicationDraft(publication) {
         document: publication.document,
         base: publication.document,
         revision: publication.revision,
+        id: publication.id,
       });
       setHistory([]);
       try {

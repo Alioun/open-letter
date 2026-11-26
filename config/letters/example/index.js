@@ -322,9 +322,10 @@ export default {
     collapsedSections: [],
   },
 
-  // Interface copy for the role, organisation and first-signer features.
-  // Without features.multiLanguage the defaults are the German table in
-  // config/ui.js, so an English letter sets these itself.
+  // Interface copy for the role, organisation and first-signer features,
+  // for a sign-up made while mail is delayed, and for a signing pause
+  // (SIGNING_PAUSED). Without features.multiLanguage the defaults are the
+  // German table in config/ui.js, so an English letter sets these itself.
   ui: {
     list: {
       filterOccupations: "Organisations",
@@ -332,15 +333,38 @@ export default {
       firstSigner: "First signatory",
     },
     signForm: {
+      emailDelayed:
+        "Email delivery is limited right now. You can still sign: your signature is saved, and the confirmation link reaches you automatically once delivery works again.",
       visibilityLegend: "What should appear in the public list?",
       visibilityPrivate: "Keep my signature private",
       visibilityName: "Show only my name",
+      pausedTitle: "Signing paused",
+      pausedMessage:
+        "We’re not taking new signatures at the moment. Please try again later.",
+    },
+    // {hours}: privacy.confirmationLinkHours. {waitHours}:
+    // privacy.emailJobRetentionHours.
+    emailModal: {
+      delayedTitle: "Signature saved",
+      delayedSent:
+        "Thank you, {name}. Your signature is saved. Email delivery is limited right now, so the confirmation link will arrive a little later at:",
+      delayedHint:
+        "There's nothing else to do. The email arrives automatically once delivery works again, and the link is valid for {hours} hours from then. If it can't be sent within {waitHours} hours, your signature expires. Please sign again then.",
     },
     settings: {
       occupationLabel: "Organisation",
       errOccupationLong:
         "Please shorten the organisation to 160 characters or fewer.",
     },
+  },
+
+  // What a text in this file said in an earlier version, by copy path. A
+  // site stores its copy, so one that started on the earlier version still
+  // holds that text. Listing it here marks it as the old default, and the
+  // site moves on to the text above. Only a site from before defaults were
+  // recorded needs this (docs/publishing.md).
+  previousDefaults: {
+    "sign.fields.occupation.label": ["Occupation"],
   },
 
   // Success / accomplished announcement (only read when features.successMode).

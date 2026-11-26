@@ -170,3 +170,113 @@ test("failed mail from the last day is put back in the queue, older failures sta
   const left = await db.query("SELECT payload FROM _honker_dead").all();
   expect(left.map((j) => JSON.parse(j.payload).signerId)).toEqual([2]);
 });
+
+test("a failure is marked when a later try can fix it, and not when it would repeat", async () => {
+  let failure;
+  let scope = 0;
+  const tried = async (manager, error) => {
+    failure = error;
+    await db.query("UPDATE email_quota SET next_at=0").run();
+    return manager
+      .send({ to: "signer@example.org" }, { scope: `try-${++scope}` })
+      .then(
+        () => null,
+        (thrown) => thrown,
+      );
+  };
+  const refused = (fields) => Object.assign(new Error("refused"), fields);
+
+  const smtp = await activeManager(async () => {
+    if (failure) throw failure;
+  });
+  expect((await tried(smtp, dropConnection())).transient).toBe(true);
+  expect((await tried(smtp, refused({ responseCode: 451 }))).transient).toBe(
+    true,
+  );
+  expect(
+    (await tried(smtp, refused({ responseCode: 554, command: "DATA" })))
+      .transient,
+  ).toBe(false);
+  expect(
+    (await tried(smtp, refused({ responseCode: 550, command: "RCPT TO" })))
+      .transient,
+  ).toBe(false);
+
+  await db.run("DELETE FROM email_configuration; DELETE FROM email_attempts;");
+  const api = await createEmailManager(db, cfg, {
+    request: async (_profile, path) => {
+      if (path === "emails" && failure) throw failure;
+      return { id: "fixture" };
+    },
+  });
+  failure = null;
+  await api.save(null, 0, true);
+  await api.save({ ...profile, provider: "resend", user: "account" }, 1);
+  await api.test(2, "admin@example.org");
+  await api.confirmReceipt(2, api.status.validation?.id);
+  await api.activate(2);
+  expect((await tried(api, refused({ status: 503 }))).transient).toBe(true);
+  expect((await tried(api, refused({ status: 500 }))).transient).toBe(true);
+  expect((await tried(api, refused({ status: 422 }))).transient).toBe(false);
+});
+
+test("an SMTP server that cannot check the login for the moment does not pause delivery, a refused login does", async () => {
+  let failure;
+  const smtp = await activeManager(async () => {
+    if (failure) throw failure;
+  });
+  // nodemailer reports every failed login as EAUTH, with the server's answer.
+  const login = (responseCode) =>
+    Object.assign(new Error("Invalid login"), {
+      code: "EAUTH",
+      responseCode,
+      command: "AUTH PLAIN",
+    });
+  const tried = async (scope) => {
+    await db.query("UPDATE email_quota SET next_at=0").run();
+    return smtp.send({ to: "signer@example.org" }, { scope }).then(
+      () => null,
+      (thrown) => thrown,
+    );
+  };
+
+  failure = login(454);
+  const forNow = await tried("login-454");
+  expect(forNow.diagnostic.category).toBe("temporary-delivery");
+  expect(forNow.transient).toBe(true);
+  expect(smtp.status.ready).toBe(true);
+
+  failure = null;
+  expect(await tried("login-454")).toBeNull();
+  expect(smtp.status).toMatchObject({ ready: true, failure: null });
+
+  failure = login(535);
+  const refused = await tried("login-535");
+  expect(refused.diagnostic.category).toBe("authentication");
+  expect(refused.transient).toBe(false);
+  expect(smtp.status.ready).toBe(false);
+});
+
+test("a 4xx answer to the login does not pause delivery, whatever its text mentions", async () => {
+  // nodemailer puts the server's answer in the message, and this one reads
+  // like a broken certificate.
+  const failure = Object.assign(
+    new Error(
+      "Invalid login: 454 4.7.0 Temporary authentication failure: certificate status check timed out",
+    ),
+    { code: "EAUTH", responseCode: 454, command: "AUTH PLAIN" },
+  );
+  const smtp = await activeManager(async ({ to }) => {
+    if (to === "signer@example.org") throw failure;
+  });
+
+  const thrown = await smtp
+    .send({ to: "signer@example.org" }, { scope: "login-454-certificate" })
+    .then(
+      () => null,
+      (error) => error,
+    );
+  expect(thrown.diagnostic.category).toBe("temporary-delivery");
+  expect(thrown.transient).toBe(true);
+  expect(smtp.status.ready).toBe(true);
+});

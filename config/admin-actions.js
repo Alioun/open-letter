@@ -32,6 +32,8 @@ export const ADMIN_ACTIONS = {
   "template.update": "Vorlage geändert",
   "template.delete": "Vorlage gelöscht",
   "website.publish": "Website veröffentlicht",
+  // By a start of the server, not by the team: see server/publications.js.
+  "website.upgrade": "Texte der Website beim Start des Servers angepasst",
   "meeting.clear": "Alle Anmeldungen zum Treffen gelöscht",
   "meeting.remove": "Eine Anmeldung zum Treffen entfernt",
   "meeting.settings": "Einstellungen zum Treffen gespeichert",

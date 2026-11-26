@@ -44,7 +44,7 @@ bun run db:setup
 bun run dev
 ```
 
-Run `bun run db:seed` in another terminal to add demo signers and first signers.
+Run `bun run db:seed` in another terminal to add demo signers and first signers. It refuses a production environment, and a database that already holds signers it did not create unless you pass `--force`.
 
 ## Set up your letter
 

@@ -178,24 +178,32 @@ async function failedMailDetail(connection, retryableS) {
 export function diagnostic(error) {
   const protocol = Number(error.responseCode || error.status || 0);
   const code = String(error.code || "");
+  // An SMTP server that cannot check a login for the moment answers 4xx, for
+  // example 454. That is a failed login to the mail library, like a wrong
+  // password, but the same login works again once the server has recovered.
+  // The server's code decides this, whatever the text of its answer mentions.
+  const smtp = Number(error.responseCode || 0);
+  const loginFailedForNow = code === "EAUTH" && smtp >= 400 && smtp < 500;
   const category =
     protocol === 429 || protocol === 452 || protocol === 421
       ? "quota"
-      : protocol === 535 || protocol === 401 || code === "EAUTH"
-        ? "authentication"
-        : /CERT|TLS|SSL/.test(code) ||
-            /certificate|self.signed|unable.to.verify/i.test(
-              String(error.message || ""),
-            )
-          ? "encryption"
-          : protocol === 403 ||
-              (protocol === 550 && error.command === "MAIL FROM")
-            ? "sender-authorization"
-            : protocol >= 500 && error.command === "RCPT TO"
-              ? "recipient-rejected"
-              : ["ENOTFOUND", "EINVAL"].includes(code)
-                ? "configuration"
-                : "temporary-delivery";
+      : loginFailedForNow
+        ? "temporary-delivery"
+        : protocol === 535 || protocol === 401 || code === "EAUTH"
+          ? "authentication"
+          : /CERT|TLS|SSL/.test(code) ||
+              /certificate|self.signed|unable.to.verify/i.test(
+                String(error.message || ""),
+              )
+            ? "encryption"
+            : protocol === 403 ||
+                (protocol === 550 && error.command === "MAIL FROM")
+              ? "sender-authorization"
+              : protocol >= 500 && error.command === "RCPT TO"
+                ? "recipient-rejected"
+                : ["ENOTFOUND", "EINVAL"].includes(code)
+                  ? "configuration"
+                  : "temporary-delivery";
   return {
     category,
     protocol: protocol || null,
@@ -211,6 +219,16 @@ export function diagnostic(error) {
       : null,
     correlationId: randomUUID(),
   };
+}
+
+// Whether a later try can get a refused mail through: nothing answered at
+// all, the API had a server error, or the SMTP server gave a 4xx. An API
+// 4xx and an SMTP 5xx say the same request will be refused again.
+function fixableLater(error) {
+  const smtp = Number(error.responseCode || 0);
+  if (smtp) return smtp < 500;
+  const http = Number(error.status || 0);
+  return !http || http >= 500 || http === 408;
 }
 
 async function apiRequest(p, path, data, key) {
@@ -539,16 +557,19 @@ export async function createEmailManager(
         return publicState();
       });
     },
-    async completed(scope) {
+    // When the mail service took the mail of this scope, or null while it
+    // has not.
+    async acceptedAt(scope) {
       const key = createHash("sha256").update(scope).digest("hex");
-      return (
-        (
-          await connection
-            .query("SELECT status FROM email_attempts WHERE scope=?")
-            .get(key)
-        )?.status === "delivered"
-      );
+      const attempt = await connection
+        .query("SELECT status,updated_at FROM email_attempts WHERE scope=?")
+        .get(key);
+      return attempt?.status === "delivered" ? attempt.updated_at : null;
     },
+    // `onAccepted(connection, acceptedAt)` runs once the mail service has
+    // taken the mail, with the time it did. A call for a mail that went out
+    // on an earlier call gets that earlier time, so what it writes has to
+    // depend on the time alone.
     async send(
       payload,
       {
@@ -570,7 +591,7 @@ export async function createEmailManager(
         .query("SELECT * FROM email_attempts WHERE scope=?")
         .get(scope);
       if (previous?.status === "delivered") {
-        if (onAccepted) await onAccepted(connection);
+        if (onAccepted) await onAccepted(connection, previous.updated_at);
         return;
       }
       if (typeof payload === "function") payload = await payload();
@@ -688,7 +709,7 @@ export async function createEmailManager(
         if (priority === "transactional") waitingTransactional--;
       }
       if (attempt?.status === "delivered") {
-        if (onAccepted) await onAccepted(connection);
+        if (onAccepted) await onAccepted(connection, attempt.updated_at);
         return;
       }
       if (!(await eligible(connection))) {
@@ -708,6 +729,7 @@ export async function createEmailManager(
         return;
       }
       let result;
+      let acceptedAt;
       try {
         result = await deliver(
           profile,
@@ -722,14 +744,14 @@ export async function createEmailManager(
           scope,
         );
         await locked(async () => {
-          const at = new Date().toISOString();
+          acceptedAt = new Date().toISOString();
           await connection
             .query(
               "UPDATE email_attempts /* public-neutral */ SET status='delivered',updated_at=? WHERE scope=?",
             )
-            .run(at, scope);
+            .run(acceptedAt, scope);
           // A mail went out, so whatever stopped the last one is over.
-          await persist({ ...state, lastSuccess: at, failure: null });
+          await persist({ ...state, lastSuccess: acceptedAt, failure: null });
         });
       } catch (e) {
         const d = { ...diagnostic(e), correlationId: attempt.correlation_id };
@@ -775,11 +797,15 @@ export async function createEmailManager(
           throw new DeliveryDeferred("provider-quota", e.retryAfterS || 60);
         const error = new Error(`${d.category} (${d.correlationId})`);
         error.diagnostic = d;
+        // For the job worker: this mail waits for its next try instead of
+        // using up one of its attempts.
+        error.transient =
+          d.category === "temporary-delivery" && fixableLater(e);
         throw error;
       } finally {
         inFlight.delete(scope);
       }
-      if (onAccepted) await onAccepted(connection);
+      if (onAccepted) await onAccepted(connection, acceptedAt);
       return result;
     },
     reconcile(scope, resolution, expected) {

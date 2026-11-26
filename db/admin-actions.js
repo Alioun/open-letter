@@ -19,6 +19,23 @@ export function withoutEmailAddresses(text) {
   return String(text ?? "").replace(EMAIL_LIKE, "[E-Mail-Adresse entfernt]");
 }
 
+// The same for every text inside a log entry's detail. Each text is cleaned
+// as it was typed, before the entry becomes JSON: cleaning the JSON instead
+// can cut into the escaping of a quote or backslash next to an address, and
+// the entry then no longer parses.
+function detailWithoutEmailAddresses(value) {
+  if (typeof value === "string") return withoutEmailAddresses(value);
+  if (Array.isArray(value)) return value.map(detailWithoutEmailAddresses);
+  if (value && typeof value === "object")
+    return Object.fromEntries(
+      Object.entries(value).map(([key, entry]) => [
+        withoutEmailAddresses(key),
+        detailWithoutEmailAddresses(entry),
+      ]),
+    );
+  return value;
+}
+
 export async function recordAdminAction(
   db,
   action,
@@ -26,8 +43,7 @@ export async function recordAdminAction(
 ) {
   if (!(action in ADMIN_ACTIONS))
     throw new Error(`Unknown admin action: ${action}`);
-  if (detail)
-    detail = JSON.parse(withoutEmailAddresses(JSON.stringify(detail)));
+  if (detail) detail = detailWithoutEmailAddresses(detail);
   await db
     .query(
       `INSERT INTO admin_actions /* public-neutral */ (at, action, target_id, count, detail)

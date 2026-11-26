@@ -6,7 +6,7 @@ import {
   createPublicationStore,
   configFromDocument,
   migrateDocument,
-  reconcileStoredDocument,
+  upgradeStoredDocument,
 } from "../server/publications.js";
 import {
   adminLogPrivacy,
@@ -308,24 +308,145 @@ test("stored version 1 FAQs migrate explicitly and missing localized fields reta
   );
 });
 
+test("the policy says what is kept of a blocked address: a value computed with a secret key, not an encrypted address", () => {
+  const german = blockedAddressPrivacy("3");
+  expect(german).not.toMatch(/verschlüsselt/);
+  expect(german).toMatch(/mit einem geheimen Schlüssel berechnet/);
+  expect(german).toMatch(/lässt sich die Adresse nicht ablesen/);
+  const english = blockedAddressPrivacy("3", "en");
+  expect(english).not.toMatch(/encrypt/);
+  expect(english).toMatch(/computed with a secret key/);
+  expect(english).toMatch(/cannot be read from it/);
+
+  // A policy published with the earlier sentence gets the accurate one.
+  // The default policy as a site stores it.
+  const current = sanitizeRich(
+    initialDocument().locales[DEFAULT_LANG].copy["legal.privacyHtml"],
+  );
+  const stored = initialDocument();
+  stored.locales[DEFAULT_LANG].copy["legal.privacyHtml"] = current.replace(
+    `<p>${german.replace("3", "{{signerRetentionYears}}")}</p>`,
+    "<p>Unterschriften, die offensichtlich nicht ernst gemeint oder unter falschem Namen abgegeben wurden, können wir entfernen. Damit dieselbe E-Mail-Adresse nicht erneut so eingetragen wird, speichern wir danach nur eine verschlüsselte Prüfsumme der Adresse, nicht die Adresse selbst. Rechtsgrundlage ist Art. 6 Abs. 1 lit. f DS-GVO (berechtigtes Interesse an einer unverfälschten Unterschriftenliste). Die Prüfsumme wird nach {{signerRetentionYears}} Jahren gelöscht. Wenn du meinst, dass deine Adresse zu Unrecht gesperrt ist, schreib uns.</p>",
+  );
+  expect(stored.locales[DEFAULT_LANG].copy["legal.privacyHtml"]).toContain(
+    "verschlüsselte Prüfsumme",
+  );
+  const upgraded = upgradeStoredDocument(stored, null).document;
+  expect(upgraded.locales[DEFAULT_LANG].copy["legal.privacyHtml"]).toBe(
+    current,
+  );
+});
+
+test("a policy the team wrote in English gains the new paragraphs in English and keeps its own newsletter wording", () => {
+  const german =
+    initialDocument().locales[DEFAULT_LANG].copy["legal.privacyHtml"];
+  // Every protected placeholder except the one the admin log paragraph
+  // brings, as a team's own English policy would hold them.
+  const placeholders = [...new Set(german.match(/\{\{\w+\}\}/g))].filter(
+    (token) => token !== "{{adminLogDays}}",
+  );
+  const newsletter =
+    "<p>We send campaign emails only if you ticked the box when you signed.</p>";
+  const english = `<h4>Privacy</h4><p>We keep your signature for ${placeholders.join(" ")} under the GDPR.</p>${newsletter}`;
+  const stored = initialDocument();
+  stored.locales[DEFAULT_LANG].copy["legal.privacyHtml"] = english;
+
+  const first = upgradeStoredDocument(stored, null);
+  const once = first.document;
+  const html = once.locales[DEFAULT_LANG].copy["legal.privacyHtml"];
+  expect(html).toStartWith(english);
+  const added = html.slice(english.length);
+  expect(added).toBe(
+    [
+      blockedAddressPrivacy("{{signerRetentionYears}}", "en"),
+      adminLogPrivacy("{{adminLogDays}}", "en"),
+      handEntryPrivacy("en"),
+      // What the example letter stores and shows of its optional fields.
+      "With your signature we also store these optional details: Organisation and Role. If you agreed to your role and organisation being shown publicly, we show them next to your name. We publish how many signatures gave each entry in the fields “Organisation” and “Role”, separately from the names, only for signatures whose details are shown publicly.",
+    ]
+      .map((paragraph) => `<p>${paragraph}</p>`)
+      .join(""),
+  );
+  // English, with the facts the German paragraphs state.
+  expect(added).not.toMatch(/Prüfsumme|Protokoll|von Hand|DS-GVO/);
+  expect(added).toMatch(/blocked by mistake/);
+  expect(added).toMatch(/internal log/);
+  expect(added).toMatch(/by hand/);
+  expect(added).toMatch(/GDPR/);
+
+  const twice = upgradeStoredDocument(once, first.record).document;
+  expect(twice.locales[DEFAULT_LANG].copy["legal.privacyHtml"]).toBe(html);
+  expect(() => cleanDocument(twice)).not.toThrow();
+  expect(renderPrivacy(configFromDocument(twice, DEFAULT_LANG))).toContain(
+    "after 30 days",
+  );
+});
+
+test("an English policy that names the German abbreviation of the law still gains its paragraphs in English", () => {
+  const german =
+    initialDocument().locales[DEFAULT_LANG].copy["legal.privacyHtml"];
+  const placeholders = [...new Set(german.match(/\{\{\w+\}\}/g))].filter(
+    (token) => token !== "{{adminLogDays}}",
+  );
+  const english = `<h4>Privacy</h4><p>We keep your signature for ${placeholders.join(" ")} under the GDPR (known in Germany as the DS-GVO).</p>`;
+  const stored = initialDocument();
+  stored.locales[DEFAULT_LANG].copy["legal.privacyHtml"] = english;
+
+  const html = upgradeStoredDocument(stored, null).document.locales[
+    DEFAULT_LANG
+  ].copy["legal.privacyHtml"];
+  expect(html).toStartWith(english);
+  const added = html.slice(english.length);
+  expect(added).toContain(
+    `<p>${blockedAddressPrivacy("{{signerRetentionYears}}", "en")}</p>`,
+  );
+  expect(added).toContain(
+    `<p>${adminLogPrivacy("{{adminLogDays}}", "en")}</p>`,
+  );
+  expect(added).toContain(`<p>${handEntryPrivacy("en")}</p>`);
+  expect(added).not.toMatch(/Prüfsumme|Protokoll|von Hand/);
+});
+
+test("the default policy counts as German on an English letter, whatever was added to it", () => {
+  const german =
+    initialDocument().locales[DEFAULT_LANG].copy["legal.privacyHtml"];
+  const stored = initialDocument();
+  stored.locales[DEFAULT_LANG].copy["legal.privacyHtml"] = german
+    .replace(`<p>${handEntryPrivacy()}</p>`, "")
+    .replace("</h4>", "</h4><p>Our team works under the GDPR.</p>");
+
+  expect(DEFAULT_LANG).toBe("en");
+  expect(
+    upgradeStoredDocument(stored, null).document.locales[DEFAULT_LANG].copy[
+      "legal.privacyHtml"
+    ],
+  ).toContain(`<p>${handEntryPrivacy()}</p>`);
+});
+
 test("a published privacy policy gains the block, Protokoll and hand-entry paragraphs and the newsletter consent mail once", () => {
   const block = `<p>${blockedAddressPrivacy("{{signerRetentionYears}}")}</p>`;
   const paragraph = `<p>${adminLogPrivacy("{{adminLogDays}}")}</p>`;
-  const current =
-    initialDocument().locales[DEFAULT_LANG].copy["legal.privacyHtml"];
-  expect(current).toContain(`${block}${paragraph}<p>${handEntryPrivacy}</p>`);
+  // The default policy as a site stores it.
+  const current = sanitizeRich(
+    initialDocument().locales[DEFAULT_LANG].copy["legal.privacyHtml"],
+  );
+  expect(current).toContain(`${block}${paragraph}<p>${handEntryPrivacy()}</p>`);
   const withBlock = current
-    .replace(`<p>${handEntryPrivacy}</p>`, "")
+    .replace(`<p>${handEntryPrivacy()}</p>`, "")
     .replace(paragraph, "")
-    .replace(newsletterConsentPrivacy.after, newsletterConsentPrivacy.before);
+    .replace(
+      newsletterConsentPrivacy().after,
+      newsletterConsentPrivacy().before,
+    );
   const published = withBlock.replace(block, "");
   const stored = initialDocument();
   stored.locales[DEFAULT_LANG].copy["legal.privacyHtml"] = published;
 
-  const once = reconcileStoredDocument(stored);
+  const first = upgradeStoredDocument(stored, null);
+  const once = first.document;
   const html = once.locales[DEFAULT_LANG].copy["legal.privacyHtml"];
   expect(html).toBe(current);
-  const twice = reconcileStoredDocument(once);
+  const twice = upgradeStoredDocument(once, first.record).document;
   expect(twice.locales[DEFAULT_LANG].copy["legal.privacyHtml"]).toBe(current);
   expect(() => cleanDocument(twice)).not.toThrow();
   expect(renderPrivacy(configFromDocument(twice, DEFAULT_LANG))).toContain(
@@ -339,9 +460,9 @@ test("a published privacy policy gains the block, Protokoll and hand-entry parag
     "deine Adresse zu Unrecht gesperrt ist, schreib uns.",
     "melde dich bei uns.",
   );
-  const fixed = reconcileStoredDocument(rewritten);
+  const fixed = upgradeStoredDocument(rewritten, null).document;
   expect(fixed.locales[DEFAULT_LANG].copy["legal.privacyHtml"]).toEndWith(
-    `${paragraph}<p>${handEntryPrivacy}</p>`,
+    `${paragraph}<p>${handEntryPrivacy()}</p>`,
   );
   expect(() => cleanDocument(fixed)).not.toThrow();
 });

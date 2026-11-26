@@ -4,10 +4,12 @@ import {
   rmSync,
   existsSync,
   readdirSync,
+  readFileSync,
   writeFileSync,
   mkdirSync,
   statSync,
 } from "node:fs";
+import { gunzipSync } from "node:zlib";
 import { tmpdir } from "node:os";
 import { join, dirname } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -158,6 +160,110 @@ describe("pre-restore copies", () => {
     expect(left).not.toContain(`${old}-wal`);
     expect(left).toContain(recent);
   });
+});
+
+describe("backups that overlap", () => {
+  const stamp = (msAgo) =>
+    new Date(Date.now() - msAgo)
+      .toISOString()
+      .replace(/[:.]/g, "-")
+      .slice(0, 19);
+
+  test("backups started together all succeed, and each leaves its own copy", async () => {
+    await resetDb();
+    await addVerifiedSigner();
+    await addVerifiedSigner();
+    const backupDir = tmp();
+
+    // An import's backup and the hourly one, started together.
+    const res = run(
+      [
+        "-e",
+        `const { runBackup } = await import('./server/backup.js');
+         const results = await Promise.allSettled([runBackup(), runBackup(), runBackup()]);
+         console.log(JSON.stringify(results.map((r) => r.status)));
+         if (results.some((r) => r.status === "rejected")) process.exit(1);`,
+      ],
+      { BACKUP_DIR: backupDir, BACKUP_KEEP: "48" },
+    );
+    expect(res.stdout.toString().trim().split("\n").at(-1)).toBe(
+      JSON.stringify(["fulfilled", "fulfilled", "fulfilled"]),
+    );
+    expect(res.exitCode).toBe(0);
+
+    const files = readdirSync(backupDir);
+    expect(files.filter((f) => !/^backup-.+\.sqlite\.gz$/.test(f))).toEqual([]);
+    expect(files).toHaveLength(3);
+    const plain = join(tmp(), "newest.sqlite");
+    writeFileSync(
+      plain,
+      gunzipSync(readFileSync(join(backupDir, files.sort().at(-1)))),
+    );
+    const snap = await openEncrypted(plain, KEY);
+    expect((await snap.query("SELECT COUNT(*) c FROM signers").get()).c).toBe(
+      2,
+    );
+    await snap.close();
+  }, 60_000);
+
+  test("a backup made in the same second as a finished one leaves that one as it is and sorts after it", async () => {
+    await resetDb();
+    await addVerifiedSigner();
+    const backupDir = tmp();
+    // A finished backup for every second the run could fall into, such as
+    // the restore point taken before an import.
+    const finished = [];
+    for (let s = 0; s < 30; s++) {
+      const name = `backup-${stamp(-s * 1000)}.sqlite.gz`;
+      writeFileSync(join(backupDir, name), `restore point ${s}`);
+      finished.push(name);
+    }
+
+    const res = run(
+      [
+        "-e",
+        "const { runBackup } = await import('./server/backup.js'); await runBackup();",
+      ],
+      { BACKUP_DIR: backupDir, BACKUP_KEEP: "48" },
+    );
+    expect(res.exitCode, res.stderr.toString()).toBe(0);
+
+    expect(
+      finished.map((name) => readFileSync(join(backupDir, name), "utf8")),
+    ).toEqual(finished.map((_, s) => `restore point ${s}`));
+    const files = readdirSync(backupDir).sort();
+    expect(files).toHaveLength(finished.length + 1);
+    // The new backup is the one a restore of the latest picks.
+    expect(finished).not.toContain(files.at(-1));
+    expect(files.at(-1)).toMatch(/^backup-.+\.sqlite\.gz$/);
+  }, 60_000);
+
+  test("a backup that fails leaves the finished backups alone", () => {
+    const backupDir = tmp();
+    // A finished backup ahead of the clock, so the run takes the second after
+    // it for its name, and no way to write an export under that name.
+    const finished = `backup-${stamp(-60_000)}.sqlite.gz`;
+    writeFileSync(join(backupDir, finished), "finished");
+    mkdirSync(join(backupDir, `backup-${stamp(-61_000)}.sqlite.tmp`));
+
+    const res = run(
+      [
+        "-e",
+        "const { runBackup } = await import('./server/backup.js'); await runBackup();",
+      ],
+      {
+        DATABASE_PATH: join(tmp(), "live.db"),
+        BACKUP_DIR: backupDir,
+        BACKUP_KEEP: "48",
+      },
+    );
+    expect(res.exitCode).not.toBe(0);
+    expect(res.stderr.toString()).toContain("[backup] failed");
+    expect(readdirSync(backupDir).filter((f) => f.endsWith(".gz"))).toEqual([
+      finished,
+    ]);
+    expect(readFileSync(join(backupDir, finished), "utf8")).toBe("finished");
+  }, 60_000);
 });
 
 describe("backup retention", () => {

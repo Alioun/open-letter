@@ -1,6 +1,41 @@
-import { db, nowIso } from "./connection.js";
+// Demo data for a local copy: 200 signers, four first signers, then one more
+// signer every few seconds. It writes straight into DATABASE_PATH, so it runs
+// only where that cannot be a letter people have signed:
+//   - never with NODE_ENV=production, whatever flag is given;
+//   - not into a database that holds signers it did not create, unless
+//     `--force` is given (`bun run db:seed --force`).
+// Its own signers all have an address at SEED_DOMAIN.
+import process from "node:process";
+import "./env.js";
 import cfg from "../config/letter.config.js";
 import { regionLabels } from "../config/region.js";
+
+const SEED_DOMAIN = "demo.local";
+
+function refuse(message) {
+  console.error(`Seeding refused: ${message}`);
+  process.exit(1);
+}
+
+// Before the import below, which opens the database.
+if (process.env.NODE_ENV === "production")
+  refuse(
+    "NODE_ENV is production. The demo seed adds signers and first signers that the public list shows, so it does not run against a production deployment.",
+  );
+
+const { db, nowIso } = await import("./connection.js");
+
+const { others } = await db
+  .query(
+    "SELECT COUNT(*) AS others FROM signers WHERE email IS NULL OR email NOT LIKE ?",
+  )
+  .get(`%@${SEED_DOMAIN}`);
+if (others > 0 && !process.argv.includes("--force")) {
+  await db.close();
+  refuse(
+    `this database holds ${others} signer(s) the seed did not create. Add demo data to it anyway with --force.`,
+  );
+}
 
 const VORNAMEN = [
   "Linnea","Jonas","Mahsa","Kerem","Sebastian","Anna-Lena","Mira","Tobias","Cem","Helena",
@@ -56,7 +91,7 @@ function pick(arr) { return arr[Math.floor(Math.random() * arr.length)]; }
 function makeSigner(minutesAgo) {
   const name = pick(VORNAMEN) + " " + pick(NACHNAMEN);
   const kv = Math.random() < 0.85 ? pick(REGIONS) : "";
-  const email = name.toLowerCase().replace(/\s+/g, ".").replace(/[äöüß]/g, c => ({ ä: "ae", ö: "oe", ü: "ue", ß: "ss" }[c] || c)) + "+" + Date.now() + Math.random().toString(36).slice(2, 6) + "@demo.local";
+  const email = name.toLowerCase().replace(/\s+/g, ".").replace(/[äöüß]/g, c => ({ ä: "ae", ö: "oe", ü: "ue", ß: "ss" }[c] || c)) + "+" + Date.now() + Math.random().toString(36).slice(2, 6) + "@" + SEED_DOMAIN;
   const createdAt = new Date(Date.now() - minutesAgo * 60 * 1000);
   const organisation = asksOrganisation && Math.random() < 0.5 ? pick(ORGANISATIONS) : "";
   const role = asksRole && Math.random() < 0.5 ? pick(ROLES) : "";
@@ -94,7 +129,7 @@ const pin = db.query(
    SELECT id, ? FROM signers WHERE email = ? ON CONFLICT DO NOTHING`,
 );
 for (const [i, f] of FIRST_SIGNERS.entries()) {
-  const email = `first-signer-${i + 1}@demo.local`;
+  const email = `first-signer-${i + 1}@${SEED_DOMAIN}`;
   const createdAt = new Date(Date.now() - (30 - i) * DAY_MS).toISOString();
   await insertSigner({ ...f, email, kv: "", showDetails: 1 }, createdAt);
   await db.query("UPDATE signers SET first_signer = 1 WHERE email = ?").run(email);

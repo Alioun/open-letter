@@ -18,6 +18,8 @@ writeFileSync(join(dir, "og.png"), "png bytes");
 writeFileSync(join(dir, ".hidden.png"), "hidden");
 writeFileSync(join(dir, "notes.txt"), "text");
 writeFileSync(join(dir, "drawing.svg"), "<svg/>");
+for (const inherited of ["constructor", "toString"])
+  writeFileSync(join(dir, `sample.${inherited}`), "not an image");
 writeFileSync(join(dir, "nested", "inner.png"), "inner");
 writeFileSync(join(root, "outside.png"), "outside");
 symlinkSync(join(root, "outside.png"), join(dir, "link.png"));
@@ -41,6 +43,8 @@ describe("images in public/", () => {
       "/.hidden.png",
       "/notes.txt",
       "/drawing.svg",
+      "/sample.constructor",
+      "/sample.toString",
       "/nested/inner.png",
       "/nested",
       "/../outside.png",

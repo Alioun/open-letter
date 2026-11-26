@@ -32,6 +32,7 @@ const ADDED_COLUMNS = [
     "show_signer_details",
     "INTEGER CHECK(show_signer_details IN (0, 1))",
   ],
+  ["signers", "mail_wait_until", "TEXT"],
   ["signers", "admin_consent_at", "TEXT"],
   ["signers", "admin_consent_note", "TEXT"],
   [

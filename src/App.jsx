@@ -27,7 +27,10 @@ import { renderPrivacy } from "../config/public-privacy.js";
 import { resolvePrivacy } from "../config/privacy.js";
 import { resolveInvite } from "../config/invite.js";
 import { LetterArticle, FaqContent } from "../config/content.jsx";
-import { SIGNER_DETAIL_LIMIT } from "../config/signer-details.js";
+import {
+  SIGNER_DETAIL_LIMIT,
+  signerRowSubtitle,
+} from "../config/signer-details.js";
 import { ZoomForm } from "./ZoomForm";
 import { KV_NONE, regionLabels } from "../config/region.js";
 import { fillText } from "../config/ui.js";
@@ -1648,6 +1651,7 @@ export default function App({
                   <p className="hint">
                     {fillText(cfg.ui.emailModal.delayedHint, {
                       hours: resolvePrivacy(cfg).confirmationLinkHours,
+                      waitHours: resolvePrivacy(cfg).emailJobRetentionHours,
                     })}
                   </p>
                 ) : (
@@ -1812,21 +1816,11 @@ const SignerRow = memo(function SignerRow({
   isNew,
 }) {
   const cfg = useCampaignConfig();
-  const region = regionLabels(cfg);
-  const showsDetails =
-    cfg.features.publicFirstSignerDetails || cfg.features.publicSignerDetails;
-  const details = showsDetails
-    ? [signerFunction, organisation].filter(Boolean).join(" · ")
-    : "";
-  // On a letter that shows function and organisation, a row without them
-  // names the region only if the letter asks for one.
-  const regionLine =
-    cfg.features.kreisverbandField || !showsDetails
-      ? kreisverband
-        ? region.rowPrefix + kreisverband
-        : region.none
-      : "";
-  const subtitle = details || regionLine;
+  const { text: subtitle, details } = signerRowSubtitle(
+    cfg,
+    regionLabels(cfg),
+    { kreisverband, signerFunction, organisation },
+  );
   const kvClass = details ? "kv kv-details" : "kv";
   return (
     <div className={"signer" + (isNew ? " new" : "")}>
