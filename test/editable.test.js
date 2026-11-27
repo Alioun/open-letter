@@ -10,7 +10,7 @@ import {
   parseCopyKey,
 } from "../config/editable.js";
 import { localizeConfig } from "../config/i18n.js";
-import { UI_DEFAULTS, fillText, deepMerge } from "../config/ui.js";
+import { uiDefaults, fillText, deepMerge } from "../config/ui.js";
 import { pageCopy } from "../server/pages.js";
 import * as q from "../server/db.js";
 
@@ -112,7 +112,9 @@ describe("editable fields", () => {
 
 describe("ui defaults", () => {
   test("are merged into the config and fill placeholders", () => {
-    expect(getPath(cfg, "ui.settings.save")).toBe(UI_DEFAULTS.settings.save);
+    expect(getPath(cfg, "ui.settings.save")).toBe(
+      uiDefaults(cfg.brand.lang).settings.save,
+    );
     expect(fillText("{a} und {b} {c}", { a: 1, b: "x" })).toBe("1 und x {c}");
     expect(
       deepMerge({ a: { b: 1, c: 2 }, l: [1] }, { a: { b: 3 }, l: [2] }),

@@ -6,7 +6,7 @@
 // deep-merged over the letter: objects merge key by key, arrays and strings
 // replace. With the flag off (the default) a letter has exactly one language,
 // `brand.lang`, and `languages` / `i18n` are ignored.
-import { UI_DEFAULTS, uiDefaults, deepMerge } from "./ui.js";
+import { uiDefaults, deepMerge } from "./ui.js";
 
 export function multiLanguage(cfg) {
   return Boolean(cfg?.features?.multiLanguage);
@@ -51,11 +51,13 @@ export function requestLang(cfg, req) {
 
 // The letter config as seen in `lang`, built from the letter as written
 // (without a merged `ui`): defaults(lang) < letter < i18n.<lang>. With the flag
-// off this is the letter with its `ui` block over the German table, exactly as
-// before languages existed.
+// off this is the letter with its `ui` block over the table for `brand.lang`.
 export function localizeConfig(letter, lang) {
   if (!multiLanguage(letter)) {
-    return { ...letter, ui: deepMerge(UI_DEFAULTS, letter.ui || {}) };
+    return {
+      ...letter,
+      ui: deepMerge(uiDefaults(letter.brand?.lang), letter.ui || {}),
+    };
   }
   const l = normalizeLang(letter, lang);
   const over = letter.i18n?.[l] || {};

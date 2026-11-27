@@ -88,14 +88,20 @@ describe("request language (X-Lang)", () => {
 });
 
 describe("config per language", () => {
-  test("flag off: letter ui over the German table, i18n ignored", () => {
+  test("flag off: letter ui over the table of brand.lang, i18n ignored", () => {
     const c = localizeConfig(single, "en");
     expect(c.hero.ctaPrimary).toBe("Unterschreiben");
     expect(c.ui.chrome.impressum).toBe("Impressum (Brief)");
     expect(c.ui.chrome.toTop).toBe(UI_DEFAULTS.chrome.toTop);
-    // An English brand.lang still gets the German table, as before.
     const en = localizeConfig({ brand: { lang: "en" } }, "en");
-    expect(en.ui.chrome.toTop).toBe(UI_DEFAULTS.chrome.toTop);
+    expect(en.ui.list.statTotal).toBe("Verified total");
+    expect(en.ui.successModal.body).toBe(uiDefaults("en").successModal.body);
+    // A language without a table, and a letter without brand.lang, get German.
+    const fr = localizeConfig({ brand: { lang: "fr" } }, "fr");
+    expect(fr.ui.list.statTotal).toBe(UI_DEFAULTS.list.statTotal);
+    expect(localizeConfig({}, "de").ui.list.statTotal).toBe(
+      UI_DEFAULTS.list.statTotal,
+    );
   });
 
   test("defaults(L) < letter < i18n.L, arrays replace", () => {

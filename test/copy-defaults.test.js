@@ -28,6 +28,10 @@ const EARLIER = {
     "Der Versand der Bestätigungs-E-Mails ist vorübergehend gestört. Wir arbeiten daran, damit du bald wieder unterzeichnen kannst. Wir bitten um etwas Geduld und danken für dein Verständnis!",
   "ui.emailModal.delayedHint":
     "Du musst nichts weiter tun. Die E-Mail kommt automatisch, sobald der Versand wieder läuft, und der Link ist ab dann {hours} Stunden gültig.",
+  // Earlier versions gave a letter with one language the German table.
+  "ui.list.statTotal": "Gesamt verifiziert",
+  "ui.successModal.body":
+    "Deine Unterschrift ist jetzt Teil des offenen Briefes. Teile ihn mit deinem Kreisverband. Wir wollen vor dem nächsten Parteitag bei {goal} stehen.",
 };
 const CURRENT = {
   "sign.fields.occupation.label": "Organisation",
@@ -38,6 +42,9 @@ const CURRENT = {
     "We’re not taking new signatures at the moment. Please try again later.",
   "ui.emailModal.delayedHint":
     "There's nothing else to do. The email arrives automatically once delivery works again, and the link is valid for {hours} hours from then. If it can't be sent within {waitHours} hours, your signature expires. Please sign again then.",
+  "ui.list.statTotal": "Verified total",
+  "ui.successModal.body":
+    "Your signature is now part of the open letter. Share it with people who should sign it too. Together we want to reach {goal} signatures.",
 };
 const EDITED = {
   "ui.signForm.badge": "Add your name",
@@ -77,7 +84,7 @@ describe("a text the team wrote before its default gained a placeholder", () => 
 
   test("gives way to a default of one sentence, and what it said is kept for the team", () => {
     const { text, changes } = upgraded("ui.list.mapChipAria", "Map: {name}");
-    expect(text).toBe("{name}: {count} Unterschriften, Details anzeigen");
+    expect(text).toBe("{name}: {count} signatures, show details");
     expect(changes).toEqual([
       {
         lang: DEFAULT_LANG,

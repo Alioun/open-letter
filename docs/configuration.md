@@ -38,7 +38,7 @@ A site stores a value for every text of its letter, including the ones nobody ed
 A database that last ran a version without that record cannot tell them apart. For it, a stored text counts as an old default in two cases:
 
 - The letter lists it under `previousDefaults`, by copy path: `previousDefaults: { "sign.fields.occupation.label": ["Occupation"] }`. In a letter with several languages, `i18n.<lang>.previousDefaults` lists them for that language.
-- It is an interface text (`ui.…`) and equals the platform's wording for it, the current one or an earlier one from `PREVIOUS_UI_DEFAULTS` in `config/ui.js`. That is what the site showed before the letter set its own text. For a letter with one language, the platform's wording is the German one. For a letter with several languages, the German wording counts too, because the letter may have had one language when the text was stored.
+- It is an interface text (`ui.…`) and equals the platform's wording for it, the current one or an earlier one from `PREVIOUS_UI_DEFAULTS` in `config/ui.js`. That is what the site showed before the letter set its own text. For a letter with one language, that was the German wording, because earlier versions gave every such letter the German table. For a letter with several languages, the German wording counts too, because the letter may have had one language when the text was stored.
 
 Such a text moves to the current default once, at the first start on this version. After that the record exists, and a text the team sets to an earlier wording stays.
 
@@ -133,7 +133,7 @@ To turn a feature off in your copy, delete its keys or set its flag to `false`. 
 
 ## Languages
 
-Without `features.multiLanguage`, the letter uses `brand.lang`. With the flag enabled, declare the languages and their overrides:
+Without `features.multiLanguage`, the letter has one language, `brand.lang`. Its interface texts come from that language's table in `config/ui.js`: English for `"en"`, German for `"de"` and for any language without a table. With the flag enabled, declare the languages and their overrides:
 
 ```js
 features: { multiLanguage: true },
@@ -170,7 +170,7 @@ Define localized templates under `i18n.<lang>.email.templates.<slug>`. Partial t
 
 The German campaign forms allow a template and subject for each additional language. A missing template uses the default template. A missing subject uses the language template's subject if available, then the default subject. Campaign overrides are stored in `campaigns.i18n` as `{"<lang>": {"templateId", "subject"}}`.
 
-When multilingual support is disabled, `languages` and `i18n` are ignored and the legacy German UI defaults apply.
+When multilingual support is disabled, `languages` and `i18n` are ignored.
 
 ## Runtime settings
 

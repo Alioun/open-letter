@@ -322,34 +322,13 @@ export default {
     collapsedSections: [],
   },
 
-  // Interface copy for the role, organisation and first-signer features,
-  // for a sign-up made while mail is delayed, and for a signing pause
-  // (SIGNING_PAUSED). Without features.multiLanguage the defaults are the
-  // German table in config/ui.js, so an English letter sets these itself.
+  // Interface copy that differs from the English table in config/ui.js,
+  // which brand.lang "en" selects. This letter's occupation field asks for
+  // an organisation.
   ui: {
     list: {
       filterOccupations: "Organisations",
       emptyOccupations: "No organisations given yet.",
-      firstSigner: "First signatory",
-    },
-    signForm: {
-      emailDelayed:
-        "Email delivery is limited right now. You can still sign: your signature is saved, and the confirmation link reaches you automatically once delivery works again.",
-      visibilityLegend: "What should appear in the public list?",
-      visibilityPrivate: "Keep my signature private",
-      visibilityName: "Show only my name",
-      pausedTitle: "Signing paused",
-      pausedMessage:
-        "We’re not taking new signatures at the moment. Please try again later.",
-    },
-    // {hours}: privacy.confirmationLinkHours. {waitHours}:
-    // privacy.emailJobRetentionHours.
-    emailModal: {
-      delayedTitle: "Signature saved",
-      delayedSent:
-        "Thank you, {name}. Your signature is saved. Email delivery is limited right now, so the confirmation link will arrive a little later at:",
-      delayedHint:
-        "There's nothing else to do. The email arrives automatically once delivery works again, and the link is valid for {hours} hours from then. If it can't be sent within {waitHours} hours, your signature expires. Please sign again then.",
     },
     settings: {
       occupationLabel: "Organisation",
