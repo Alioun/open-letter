@@ -81,6 +81,9 @@ export const UI_DEFAULTS = {
     filterOccupations: "Berufe",
     searchLabel: "Suche nach Name oder {region}",
     searchPlaceholder: "Suchen nach Name oder {region}…",
+    // Without the region field (features.kreisverbandField).
+    searchNameLabel: "Suche nach Name",
+    searchNamePlaceholder: "Nach Name suchen…",
     loadingMap: "Karte wird geladen…",
     emptyRegions: "Noch keine {regions}.",
     emptyOccupations: "Noch keine Berufe angegeben.",
@@ -363,6 +366,8 @@ const UI_EN = {
     filterOccupations: "Occupations",
     searchLabel: "Search by name or {region}",
     searchPlaceholder: "Search by name or {region}…",
+    searchNameLabel: "Search by name",
+    searchNamePlaceholder: "Search by name…",
     loadingMap: "Loading map…",
     emptyRegions: "No {regions} yet.",
     emptyOccupations: "No occupations given yet.",

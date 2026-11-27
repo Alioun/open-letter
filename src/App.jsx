@@ -951,7 +951,7 @@ export default function App({
 
       <div className="stats-row">
         <div className="stat">
-          <div className="v">{total.toLocaleString("de-DE")}</div>
+          <div className="v">{total.toLocaleString(locale)}</div>
           <div className="k">{cfg.ui.list.statTotal}</div>
         </div>
         <div className="stat">
@@ -1068,14 +1068,20 @@ export default function App({
         {!detailsView && !showKreisverband && !showMap && (
           <>
             <label htmlFor="signer-search" className="sr-only">
-              {fillText(cfg.ui.list.searchLabel, { region: region().name })}
+              {cfg.features.kreisverbandField
+                ? fillText(cfg.ui.list.searchLabel, { region: region().name })
+                : cfg.ui.list.searchNameLabel}
             </label>
             <input
               id="signer-search"
               className="search"
-              placeholder={fillText(cfg.ui.list.searchPlaceholder, {
-                region: region().name,
-              })}
+              placeholder={
+                cfg.features.kreisverbandField
+                  ? fillText(cfg.ui.list.searchPlaceholder, {
+                      region: region().name,
+                    })
+                  : cfg.ui.list.searchNamePlaceholder
+              }
               value={search}
               onChange={(e) => setSearch(e.target.value)}
             />
