@@ -157,7 +157,7 @@ export const UI_DEFAULTS = {
   successModal: {
     title: "Unterschrift gezählt",
     heading: "Solidarisch dabei.",
-    body: "Deine Unterschrift ist jetzt Teil des offenen Briefes. Teile ihn mit deinem Kreisverband. Wir wollen vor dem nächsten Parteitag bei {goal} stehen.",
+    body: "Deine Unterschrift ist jetzt Teil des offenen Briefes. Teile ihn mit Menschen, die ihn auch unterschreiben sollten. Gemeinsam wollen wir {goal} Unterschriften erreichen.",
     showMe: "Mich in der Liste zeigen",
   },
   deletedModal: {
@@ -431,7 +431,7 @@ const UI_EN = {
   successModal: {
     title: "Signature counted",
     heading: "You're in.",
-    body: "Your signature is now part of the open letter. Share it with your local branch - we want to reach {goal} before the next party congress.",
+    body: "Your signature is now part of the open letter. Share it with people who should sign it too. Together we want to reach {goal} signatures.",
     showMe: "Show me in the list",
   },
   deletedModal: {
@@ -560,6 +560,9 @@ export const UI_TRANSLATIONS = { en: UI_EN };
 // add an entry when a default changes while such sites may still exist.
 export const PREVIOUS_UI_DEFAULTS = {
   de: {
+    "ui.successModal.body": [
+      "Deine Unterschrift ist jetzt Teil des offenen Briefes. Teile ihn mit deinem Kreisverband. Wir wollen vor dem nächsten Parteitag bei {goal} stehen.",
+    ],
     "ui.signForm.pausedMessage": [
       "Der Versand der Bestätigungs-E-Mails ist vorübergehend gestört. Wir arbeiten daran, damit du bald wieder unterzeichnen kannst. Wir bitten um etwas Geduld und danken für dein Verständnis!",
     ],
@@ -568,6 +571,9 @@ export const PREVIOUS_UI_DEFAULTS = {
     ],
   },
   en: {
+    "ui.successModal.body": [
+      "Your signature is now part of the open letter. Share it with your local branch - we want to reach {goal} before the next party congress.",
+    ],
     "ui.signForm.pausedMessage": [
       "Confirmation emails are temporarily unavailable. We’re working to restore them so you can sign again soon.",
     ],
